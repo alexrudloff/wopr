@@ -67,11 +67,8 @@ wopr: ## Build bin/wopr from this checkout, with symbols for profiling
 clean: ## Remove bin/ and tmp/ (builds, eval results, profiles, benchmarks)
 	rm -rf bin tmp
 
-build: ## Compile every package (go build ./...), including the Go SDK example
+build: ## Compile every package (go build ./...)
 	go build -buildvcs=false ./...
-	@# The SDK example is the public embedding demo; name it so it cannot
-	@# silently drop out of ./... (a build tag or a nested go.mod) and rot.
-	go build -buildvcs=false -o /dev/null ./examples/sdk
 
 # install: build wopr binary → ~/.local/bin/wopr (or WOPR_BIN override)
 # with embedded git sha + macOS ad-hoc codesign.

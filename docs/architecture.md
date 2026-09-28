@@ -1,20 +1,19 @@
 # WOPR architecture
 
-This page maps WOPR's core, its routing and efficiency layer, the embedding SDK, and local state. Return to the [maintainer docs router](README.md) for focused references.
+This page maps WOPR's core, its routing and efficiency layer, and local state. Return to the [maintainer docs router](README.md) for focused references.
 
 ## Layer map
 
 ```text
 wopr binary
 ├── core
-│   ├── CLI/TUI/session/agent loop
+│   ├── CLI/TUI/session core (coding)/agent loop
 │   ├── providers and message conversion
 │   └── builtin tools
 ├── routing and efficiency
 │   ├── model routing (internal/codingagent/router)
 │   └── token-efficiency mechanisms (internal/codingagent/efficiency)
-├── SDK and docs
-│   ├── embedding API (coding)
+├── docs
 │   └── embedded reference documentation
 └── resources
     └── skills, prompt templates, themes, and context files
@@ -26,7 +25,7 @@ wopr binary
 |---|---|
 | `agent` | Agent loop, messages, tools, and Session primitives |
 | `ai` | Models, providers, authentication, and stream types |
-| `coding` | Embedding API: Services, Runtime, Sessions, and resource discovery |
+| `coding` | Session core: Services, Sessions, and resource discovery |
 | `cmd/wopr` | Command-line application and RPC surface |
 | `tui` | Terminal UI components and renderer |
 | `internal/codingagent` | Private command-line implementation, including the router and the system prompt |

@@ -2,7 +2,7 @@
 
 RPC mode runs WOPR as a headless JSON Lines process. A client writes commands to standard input and reads responses and events from standard output.
 
-Use the [WOPR Go SDK](sdk.md) when your Go application does not need a process boundary. Use RPC mode for another language, an IDE, or a separate process.
+Use RPC mode to drive WOPR from another program, an IDE, or a separate process.
 
 ## Start RPC mode
 

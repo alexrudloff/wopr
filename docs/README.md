@@ -9,7 +9,7 @@ load every document for an unrelated task.
 
 | If you are changing or deciding... | Read first | Then read |
 |---|---|---|
-| overall process/runtime boundaries and the embedding SDK | [Architecture](architecture.md) | `coding` package docs |
+| overall process/runtime boundaries | [Architecture](architecture.md) | `coding` package docs |
 | model routing | [Routing](routing.md) | `internal/codingagent/router` |
 | token efficiency | [Efficiency](efficiency.md) | `internal/codingagent/efficiency` |
 | security boundaries, assets, threats, or mitigations | [Threat model](threat-model.md) | |
@@ -31,4 +31,3 @@ load every document for an unrelated task.
 - User documentation, also embedded in the binary as the agent reference: `site/docs/`.
 - Project terms: [Project context](project/CONTEXT.md).
 - Source lineage and third-party material: [Acknowledgments](../README.md#acknowledgments) and [Notices](../NOTICE).
-- Embedding API: the `coding` package (`Services`, `Runtime`, `Session`).

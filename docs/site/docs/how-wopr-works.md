@@ -56,15 +56,14 @@ Every interface uses the same agent loop and the same sessions:
 | Print | `wopr -p "prompt"` | Runs the prompt and writes the final answer. |
 | JSON | `wopr --mode json "prompt"` | Runs the prompt and writes every event as JSON Lines. |
 | RPC | `wopr --mode rpc` | Reads JSON Lines commands on standard input and writes responses and events. |
-| Go SDK | `github.com/alexrudloff/wopr/coding` | Runs sessions inside a Go program. |
 
-WOPR's SDK is a Go module. See [CLI integration](cli-integration.md) and [Go SDK](sdk.md).
+See [CLI integration](cli-integration.md).
 
 ## Tools
 
 WOPR enables four built-in tools by default: `read`, `bash`, `edit` and `write`. `grep`, `find` and `ls` are available but off by default. On Windows, WOPR also offers a `powershell` tool. Use `--tools`, `--exclude-tools` or the `defaultTools` setting to change the active set.
 
-WOPR sends every active tool definition with each model request. A Go program that embeds WOPR can add its own tools through the [Go SDK](sdk.md).
+WOPR sends every active tool definition with each model request.
 
 ## Resources
 

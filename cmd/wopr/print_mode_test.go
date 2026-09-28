@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/ai/aitest"
 	"github.com/alexrudloff/wopr/coding"
@@ -18,7 +17,7 @@ import (
 
 // printModeTestHost builds a print-mode runtime whose session talks to
 // provider in fresh, isolated directories.
-func printModeTestHost(t *testing.T, provider ai.Provider, tools ...agent.AgentTool) printModeRuntime {
+func printModeTestHost(t *testing.T, provider ai.Provider) printModeRuntime {
 	t.Helper()
 	services, err := coding.NewServices(coding.ServicesOptions{CWD: t.TempDir(), AgentDir: t.TempDir()})
 	if err != nil {
@@ -32,9 +31,7 @@ func printModeTestHost(t *testing.T, provider ai.Provider, tools ...agent.AgentT
 				ProviderMeta: ai.ProviderMetadata{ProviderID: provider.ID()},
 				Capabilities: ai.ModelCapabilities{ContextWindow: 200000, MaxOutputTokens: 8192, SupportsToolUse: true},
 			},
-			SkipBuiltinTools: true,
-			ExtraTools:       tools,
-			SessionDir:       t.TempDir(),
+			SessionDir: t.TempDir(),
 		},
 	}
 }
@@ -84,19 +81,6 @@ func TestPrintModeJSONRun(t *testing.T) {
 	}
 }
 
-// printTestTool is a sequential tool that always succeeds.
-type printTestTool struct{}
-
-func (printTestTool) Name() string                           { return "print_test_tool" }
-func (printTestTool) Label() string                          { return "print test tool" }
-func (printTestTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeSequential }
-func (printTestTool) Schema() ai.ToolSchema {
-	return ai.ToolSchema{Name: "print_test_tool", Parameters: map[string]any{"type": "object"}}
-}
-func (printTestTool) Execute(context.Context, string, json.RawMessage, agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
-	return agent.AgentToolResult{Content: "tool output"}, nil
-}
-
 func fauxTextResponse(text string) aitest.Response {
 	return aitest.Response{Content: []aitest.Block{aitest.Text(text)}, StopReason: "stop"}
 }
@@ -109,11 +93,11 @@ func TestPrintModePrintsOnlyTheFinalMessage(t *testing.T) {
 	provider.SetResponses(
 		aitest.Response{Content: []aitest.Block{
 			aitest.Text("I'll run the tool first."),
-			aitest.ToolCall("print_test_tool", map[string]any{}, "print-call-1"),
+			aitest.ToolCall("ls", map[string]any{}, "print-call-1"),
 		}, StopReason: "toolUse"},
 		fauxTextResponse("final answer"),
 	)
-	result := runPrintModeForTest(t, printModeTestHost(t, provider, printTestTool{}), printModeOptions{
+	result := runPrintModeForTest(t, printModeTestHost(t, provider), printModeOptions{
 		Mode: "text", InitialMessage: "use the tool",
 	})
 	if result.err != nil {

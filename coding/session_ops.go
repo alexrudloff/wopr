@@ -126,8 +126,6 @@ func (s *Session) Clone() (*Session, error) {
 		Model:            s.Model(),
 		Tools:            s.tools,
 		SkipBuiltinTools: true,
-		BeforeToolCall:   s.callerHooks.beforeToolCall,
-		AfterToolCall:    s.callerHooks.afterToolCall,
 		SessionDir:       s.sessionDir,
 		NoSession:        s.noSession,
 		EventBufferSize:  s.callerHooks.eventBufferSize,

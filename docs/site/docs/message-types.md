@@ -1,6 +1,6 @@
 # Message types
 
-WOPR uses one message format in session files, in JSON and RPC events, and in the Go SDK. This page defines the messages and the content blocks inside them.
+WOPR uses one message format in session files, and in JSON and RPC events. This page defines the messages and the content blocks inside them.
 
 Every message has a `role` field that names its type. A message `timestamp` is a Unix time in milliseconds. Session entries use ISO 8601 timestamps instead. See [session file format](session-format.md).
 
@@ -254,4 +254,3 @@ WOPR builds this message from a `compaction` session entry. `tokensBefore` is th
 
 - [Session file format](session-format.md) shows how messages sit inside session entries.
 - [JSON event stream mode](json.md) and [RPC mode](rpc.md) carry these messages in events.
-- [Go SDK](sdk.md) reads and sends these types.

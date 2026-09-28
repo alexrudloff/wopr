@@ -181,8 +181,6 @@ type Session struct {
 }
 
 type callerHooks struct {
-	beforeToolCall  []agent.BeforeToolCallHook
-	afterToolCall   []agent.AfterToolCallHook
 	eventBufferSize int
 	transport       ai.Transport
 }
@@ -230,15 +228,6 @@ type SessionOptions struct {
 	// caller tools, so an excluded tool is non-callable, not just
 	// hidden from the prompt.
 	ExcludedTools map[string]struct{}
-
-	// BeforeToolCall hooks fire before any tool executes; can block
-	// or transform args. See agent.BeforeToolCallHook.
-	BeforeToolCall []agent.BeforeToolCallHook
-
-	// AfterToolCall hooks fire after each tool result. Each hook may
-	// return content/isError overrides and a terminate signal. Terminate
-	// stops the agent loop when every tool in the batch signals it.
-	AfterToolCall []agent.AfterToolCallHook
 
 	// ResumePath, when non-empty, loads an existing session JSONL
 	// from disk and rebuilds the agent's message history from
@@ -390,8 +379,6 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 		FollowUpMode:    agent.QueueMode(svcs.SettingsManager().GetFollowUpMode()),
 		EventCh:         rawEventCh,
 		EventDone:       closeDone,
-		BeforeToolCall:  opts.BeforeToolCall,
-		AfterToolCall:   append([]agent.AfterToolCallHook(nil), opts.AfterToolCall...),
 		Transport:       opts.Transport,
 		PreparePrompt: func(ctx context.Context, messages []agent.AgentMessage) ([]agent.AgentMessage, error) {
 			return sess.preparePrompt(ctx, messages)
@@ -506,8 +493,6 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 		events:        eventCh,
 		closeDone:     closeDone,
 		callerHooks: callerHooks{
-			beforeToolCall:  slices.Clone(opts.BeforeToolCall),
-			afterToolCall:   slices.Clone(opts.AfterToolCall),
 			eventBufferSize: opts.EventBufferSize,
 			transport:       opts.Transport,
 		},

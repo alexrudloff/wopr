@@ -30,4 +30,3 @@ User settings live in `~/.wopr/agent/settings.json`. Project settings live in
 - [Skills](skills.md) for reusable instructions.
 - [Prompt templates](prompt-templates.md) for reusable prompts.
 - [Config](configuration.md) for paths.
-- [SDK](sdk.md) to embed WOPR in a Go program.

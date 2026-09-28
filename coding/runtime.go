@@ -3,7 +3,6 @@ package coding
 import (
 	"fmt"
 
-	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 )
 
@@ -31,29 +30,22 @@ type SessionStartOptions struct {
 	PinModel bool
 
 	// ActiveBuiltinTools, when non-nil, restricts which built-in coding tools
-	// are active (extra tools are unaffected). nil means all
+	// are active (other tools are unaffected). nil means all
 	// built-in tools. The CLI default is [read, bash, edit, write], so grep/find/ls are
 	// registered but inactive unless requested via --tools.
 	ActiveBuiltinTools map[string]struct{}
 
 	// ExcludedTools is a denylist of tool names removed from the final tool
-	// set after allow/active filtering. Gates built-in and caller tools alike.
+	// set after allow/active filtering. Gates every tool.
 	ExcludedTools map[string]struct{}
 
 	// NoTools selects which tools to drop when no explicit allowlist is provided.
 	//   - "all": expose no tools
-	//   - "builtin": omit built-in coding tools but keep extra tools
+	//   - "builtin": omit built-in coding tools but keep the rest
 	NoTools string
 
-	// SkipBuiltinTools, when true, omits the built-in coding tools while still
-	// allowing extra tools.
+	// SkipBuiltinTools, when true, omits the built-in coding tools.
 	SkipBuiltinTools bool
-
-	// BeforeToolCall hooks run before each tool call and may block.
-	BeforeToolCall []agent.BeforeToolCallHook
-
-	// ExtraTools are caller-supplied tools added to the built-in set.
-	ExtraTools []agent.AgentTool
 
 	// ResumePath, when non-empty, loads an existing JSONL.
 	ResumePath string
@@ -75,11 +67,6 @@ func StartSession(svcs *Services, opts SessionStartOptions) (*Session, error) {
 	if svcs == nil {
 		return nil, fmt.Errorf("coding: StartSession: Services is required")
 	}
-	var tools []agent.AgentTool
-	if len(opts.ExtraTools) > 0 {
-		tools = append(tools, opts.ExtraTools...)
-	}
-
 	var allowedTools map[string]struct{}
 	if opts.AllowedTools != nil {
 		allowedTools = opts.AllowedTools
@@ -93,13 +80,11 @@ func StartSession(svcs *Services, opts SessionStartOptions) (*Session, error) {
 		ThinkingLevel:        opts.ThinkingLevel,
 		SystemPrompt:         opts.SystemPrompt,
 		SystemPromptSections: opts.SystemPromptSections,
-		Tools:                tools,
 		AllowedTools:         allowedTools,
 		ActiveBuiltinTools:   opts.ActiveBuiltinTools,
 		ExcludedTools:        opts.ExcludedTools,
 		SkipBuiltinTools:     skipBuiltinTools,
 		PinModel:             opts.PinModel,
-		BeforeToolCall:       opts.BeforeToolCall,
 		ResumePath:           opts.ResumePath,
 		SessionDir:           opts.SessionDir,
 		SessionID:            opts.SessionID,

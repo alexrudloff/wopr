@@ -12,7 +12,7 @@ Two settings control this. `shellPath` chooses the Bash executable. `shellComman
 | You type `!command` or `!!command` in the editor | The same Bash executable |
 | An RPC client sends the `bash` command | The same Bash executable |
 | The model calls the `powershell` tool on Windows | PowerShell |
-| An MCP server or an SDK tool runs its own shell | Whatever that tool runs |
+| An MCP server runs its own shell | Whatever that tool runs |
 
 WOPR starts Bash as `bash -c "<command>"`. It resolves the executable in this order:
 
@@ -85,7 +85,7 @@ Write aliases in Bash syntax. Do not load `~/.zshrc` into Bash. Zsh options, fun
 
 ### The prefix works for `!` but not for another tool
 
-`shellCommandPrefix` applies to WOPR's built-in Bash execution only. An MCP server or SDK tool that runs its own shell sets up its own environment. Read that tool's documentation.
+`shellCommandPrefix` applies to WOPR's built-in Bash execution only. An MCP server that runs its own shell sets up its own environment. Read that tool's documentation.
 
 ### `shopt: command not found`
 

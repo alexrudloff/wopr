@@ -1,4 +1,4 @@
-// Services, Runtime, and Session form the public embedding API. Services owns
+// Services, Runtime, and Session form wopr's session core. Services owns
 // shared configuration and credentials. Runtime creates and owns sessions. A
 // Session owns one mutable conversation and its JSONL transcript.
 package coding
@@ -19,8 +19,7 @@ import (
 )
 
 // Settings is the merged user-settings view. Global settings are overlaid by
-// project settings. The alias keeps the embedding API identical to the runtime
-// representation.
+// project settings.
 type Settings = icodingagent.Settings
 
 // SettingsManager is the live settings reader (re-exported alias). Use
@@ -70,7 +69,7 @@ type ServicesOptions struct {
 	AgentDir string
 
 	// ProjectTrusted controls whether project-local settings are loaded. nil
-	// preserves the SDK default of trusted project settings.
+	// means trusted.
 	ProjectTrusted *bool
 }
 

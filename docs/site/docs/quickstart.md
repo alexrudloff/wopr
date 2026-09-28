@@ -242,4 +242,3 @@ wopr docs path
 - [Using WOPR](usage.md)
 - [WOPR concepts](concepts.md)
 - [Skills](skills.md)
-- [Go SDK](sdk.md)

@@ -24,7 +24,7 @@ no upstream to match. Change behavior when it makes wopr better.
 |---|---|
 | `agent/` | Agent loop, messages, events, tool execution. |
 | `ai/` | Providers, model catalog, authentication, streaming. |
-| `coding/` | Session, SDK, resource discovery. |
+| `coding/` | Session core, resource discovery. |
 | `tui/` | Terminal components, rendering, input. |
 | `cmd/wopr/` | The CLI and RPC surface. |
 | `internal/` | Private implementation, including the router, efficiency mechanisms, and system prompt. |

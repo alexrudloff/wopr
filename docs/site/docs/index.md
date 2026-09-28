@@ -28,7 +28,7 @@ Read the one row that matches the task, then follow only its direct links.
 | change or look up a key | [Keybindings](keybindings.md) | [Terminal setup](terminal-setup.md) |
 | write reusable prompts | [Prompt templates](prompt-templates.md) | [Skills](skills.md) |
 | change colors | [Themes](themes.md) | [Settings](settings.md) |
-| embed WOPR in a Go program | [SDK](sdk.md) | [RPC mode](rpc.md) |
+| drive WOPR from another program | [RPC mode](rpc.md) | [CLI integration](cli-integration.md) |
 | add a provider or model endpoint | [Custom providers](custom-provider.md) | [Models](models.md) |
 | map entities, paths, and the command that inspects each | [Knowledge graph](knowledge-graph.md) | [Concepts](concepts.md) |
 | compare WOPR's benchmark results | [Benchmarks](evals.md) | [Routing and subagents](routing.md) |
@@ -44,14 +44,13 @@ Read the one row that matches the task, then follow only its direct links.
 
 ## Customize and extend WOPR
 
-Skills, prompt templates, and themes customize WOPR without code. A Go program can embed WOPR and add its own tools through the Go SDK.
+Skills, prompt templates, themes, and MCP servers customize WOPR without code. To change how WOPR works, change its source.
 
 Read:
 
 - [Skills](skills.md)
 - [Prompt templates](prompt-templates.md)
 - [Themes](themes.md)
-- [Go SDK](sdk.md)
 
 ## Project facts
 
@@ -79,4 +78,4 @@ The system prompt points here instead of carrying this advice in every request. 
 
 Configuring WOPR: add skills, prompt templates, and themes under `~/.wopr/agent` or a trusted project's `.wopr/` directory, or list their paths in settings. Use `wopr config` to enable or disable discovered resources. Read [Concepts](concepts.md) before advising.
 
-Extending WOPR: WOPR has no plugin or extension system. Add skills, prompt templates, themes, or MCP servers, or embed WOPR in a Go program with the [SDK](sdk.md) to add tools.
+Extending WOPR: WOPR has no plugin or extension system. Add skills, prompt templates, themes, or MCP servers; for anything else, change the source.

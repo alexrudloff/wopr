@@ -145,13 +145,12 @@ func docsSection(root string) string {
 		root = defaultDocsPath()
 	}
 	// wopr additive (D22): the docs section points at the materialized WOPR documentation bundle.
-	return "WOPR documentation (read only when the user asks about wopr itself, its SDK, themes, skills, or TUI):\n" +
+	return "WOPR documentation (read only when the user asks about wopr itself, its themes, skills, or TUI):\n" +
 		"- Main documentation: " + filepath.Join(root, "index.md") + "\n" +
 		"- Additional docs: " + root + "\n" +
-		"- Examples: https://github.com/alexrudloff/wopr/tree/main/examples (SDK)\n" +
-		"- When reading wopr docs or examples, resolve docs/... under Additional docs and examples/... under Examples, not the current working directory\n" +
-		"- When asked about: themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), SDK integrations (docs/sdk.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), environment variables (docs/environment-variables.md)\n" +
-		"- When working on wopr topics, read the docs and examples, and follow .md cross-references before implementing\n" +
+		"- When reading wopr docs, resolve docs/... under Additional docs, not the current working directory\n" +
+		"- When asked about: themes (docs/themes.md), skills (docs/skills.md), prompt templates (docs/prompt-templates.md), TUI components (docs/tui.md), keybindings (docs/keybindings.md), custom providers (docs/custom-provider.md), adding models (docs/models.md), environment variables (docs/environment-variables.md)\n" +
+		"- When working on wopr topics, read the docs, and follow .md cross-references before implementing\n" +
 		"- Always read wopr .md files completely and follow links to related docs (e.g., tui.md for TUI API details)"
 }
 

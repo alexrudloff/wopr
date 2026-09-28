@@ -4,8 +4,6 @@ Run `wopr` with no options in a terminal to open the interactive terminal UI. Sc
 
 Every mode uses the same agent loop, sessions, tools and resources. The mode decides how input reaches WOPR, what WOPR writes to standard output, and whether the process stays up for more commands. The options that select the model, tools, resources and session storage work the same way in every mode. See [command line](cli.md).
 
-The [Go SDK](sdk.md) is not a CLI mode. It runs sessions inside a Go program without a separate process.
-
 ## Choose a mode
 
 | Mode | Start it with | Output | Lifetime | Use it when |
@@ -78,13 +76,7 @@ Commands can change the model, read the session state, manage sessions, and run 
 
 Close standard input to stop WOPR. See [RPC mode](rpc.md) for framing and events.
 
-Programs use the JSON Lines protocol directly; a Go program can embed the [Go SDK](sdk.md) instead. [RPC mode](rpc.md) includes a minimal Python client.
-
-## Build your own agent on WOPR
-
-The command name `wopr` and the `~/.wopr` directory are part of the binary.
-
-To ship an agent with its own name, tools and defaults, embed WOPR in a Go program with the [Go SDK](sdk.md) and pass your tools to its Sessions.
+Programs use the JSON Lines protocol directly. [RPC mode](rpc.md) includes a minimal Python client.
 
 ## Related
 
@@ -92,5 +84,4 @@ To ship an agent with its own name, tools and defaults, embed WOPR in a Go progr
 - [JSON event stream mode](json.md) describes the event records.
 - [RPC mode](rpc.md) describes the RPC protocol.
 - [RPC commands](rpc-commands.md) lists every RPC command.
-- [Go SDK](sdk.md) runs sessions inside a Go program.
 - [Message types](message-types.md) defines the messages inside events.

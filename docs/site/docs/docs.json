@@ -26,7 +26,6 @@
     "routing.md": "wopr-authored",
     "rpc-commands.md": "adapted",
     "rpc.md": "adapted",
-    "sdk.md": "wopr-authored",
     "security.md": "wopr-authored",
     "session-format.md": "adapted",
     "sessions.md": "adapted",
@@ -160,10 +159,6 @@
             {
               "title": "Integrate with the CLI",
               "path": "cli-integration.md"
-            },
-            {
-              "title": "Use the SDK",
-              "path": "sdk.md"
             }
           ]
         }
@@ -342,8 +337,12 @@
       "to": "concepts.md"
     },
     {
+      "from": "sdk.md",
+      "to": "cli-integration.md"
+    },
+    {
       "from": "derivative-harnesses.md",
-      "to": "sdk.md"
+      "to": "cli-integration.md"
     }
   ]
 }
