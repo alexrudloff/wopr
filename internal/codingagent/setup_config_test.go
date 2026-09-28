@@ -56,7 +56,7 @@ func TestSetupMergeKeepsExistingConfig(t *testing.T) {
 	if ids := []string{local.Models[0].ID, local.Models[len(local.Models)-1].ID}; len(local.Models) != 2 || ids[0] != "deepseek-v4-flash" || ids[1] != "deepseek-v4-pro" {
 		t.Errorf("local models = %+v, want the existing one then deepseek-v4-pro", local.Models)
 	}
-	if got := cfg.Providers["lan"]; got.BaseURL != lan.BaseURL || len(got.Models) != 1 || *got.Models[0].ThinkingLevelMap["high"] != "xhigh" {
+	if got := cfg.Providers["lan"]; got.BaseURL != lan.BaseURL || len(got.Models) != 1 || *got.Models[0].ThinkingLevelMap["xhigh"] != "xhigh" {
 		t.Errorf("lan provider = %+v", got)
 	}
 	if _, ok := cfg.Providers["openrouter"]; ok {

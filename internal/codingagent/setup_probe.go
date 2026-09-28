@@ -353,7 +353,8 @@ func probeEndpointModel(ctx context.Context, ep setupEndpoint, model string, ste
 
 // thinkingLevelMapFor maps the levels a server refused: minimal is dropped,
 // and low, medium, or high go to the nearest accepted level above (else
-// below), as with a server that takes xhigh but not high. Off maps to null
+// below). An accepted xhigh is a level of its own, so a refused level whose
+// nearest is xhigh is dropped rather than duplicating it. Off maps to null
 // when "none" is refused, so thinking-off omits the field.
 func thinkingLevelMapFor(accepted []string) ai.ThinkingLevelMap {
 	efforts := slices.DeleteFunc(slices.Clone(accepted), func(l string) bool { return l == "none" })
@@ -363,6 +364,10 @@ func thinkingLevelMapFor(accepted []string) ai.ThinkingLevelMap {
 	out := ai.ThinkingLevelMap{}
 	if !slices.Contains(accepted, "none") {
 		out[ai.ThinkingOff] = nil
+	}
+	xhigh := slices.Contains(accepted, "xhigh")
+	if xhigh {
+		out[ai.ThinkingXHigh] = new("xhigh")
 	}
 	levels := probeLevels[1:5] // minimal, low, medium, high
 	for i, level := range levels {
@@ -387,6 +392,9 @@ func thinkingLevelMapFor(accepted []string) ai.ThinkingLevelMap {
 					break
 				}
 			}
+		}
+		if target != nil && *target == "xhigh" && xhigh {
+			target = nil
 		}
 		out[ai.ThinkingLevel(level)] = target
 	}
