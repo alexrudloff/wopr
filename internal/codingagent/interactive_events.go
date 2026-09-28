@@ -195,6 +195,16 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		if m.evCurrentBlock != nil && e.Message.Assistant != nil {
 			m.updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
 			m.lastAssistantText = strings.TrimSpace(m.evCurrentBlock.Text())
+			m.failedReply, m.failedBlock = nil, nil
+			switch {
+			case e.WillRetry:
+				// The retry indicator reports the attempt; only the final
+				// failure is shown.
+				m.evCurrentBlock.SetTerminalError("", "")
+				m.retryProvider = e.Message.Assistant.Provider
+			case e.Message.Assistant.StopReason == "error":
+				m.failedReply, m.failedBlock = e.Message.Assistant, m.evCurrentBlock
+			}
 		}
 		if e.Message.Assistant != nil {
 			if e.Message.Assistant.Usage != nil {
@@ -205,10 +215,10 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 					m.appendChatBlock(tui.NewText("\033[33m" + notice + "\033[0m"))
 				}
 			}
-			if (e.Message.Assistant.StopReason == "error" || e.Message.Assistant.StopReason == "aborted") && e.Message.Assistant.ErrorMessage != "" {
+			if !e.WillRetry && (e.Message.Assistant.StopReason == "error" || e.Message.Assistant.StopReason == "aborted") && e.Message.Assistant.ErrorMessage != "" {
 				statusText, _ := formatProviderErrorForDisplay(string(e.Message.Assistant.StopReason), e.Message.Assistant.ErrorMessage)
-				if text, ok := networkFailureText(m.providerName(e.Message.Assistant.Provider), e.Message.Assistant.ErrorMessage); ok {
-					statusText = text
+				if what, ok := networkFailure(e.Message.Assistant.ErrorMessage); ok {
+					statusText = cmp.Or(m.providerName(e.Message.Assistant.Provider), "The model server") + " " + what
 				}
 				m.statusLine.Flash(statusText)
 			}
@@ -225,7 +235,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 			if e.Message.Assistant.StopReason == "error" {
 				errMsg = "Error"
 			}
-			errMsg = cmp.Or(m.assistantErrorText(e.Message.Assistant), errMsg)
+			errMsg = cmp.Or(m.assistantErrorText(e.Message.Assistant, 1), errMsg)
 			for _, comp := range m.toolByID {
 				comp.SetResult(errMsg, true, 0)
 			}
@@ -397,7 +407,11 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		m.tuiInst.Render()
 
 	case agent.AutoRetryStartEvent:
-		m.showRetryStatusIndicator(e.Attempt, e.MaxAttempts, e.DelayMs)
+		reason := ""
+		if what, ok := networkFailure(e.ErrorMessage); ok {
+			reason = cmp.Or(m.providerName(m.retryProvider), "The model server") + " " + what
+		}
+		m.showRetryStatusIndicator(e.Attempt, e.MaxAttempts, e.DelayMs, reason)
 		m.tuiInst.Render()
 
 	case agent.RouteEvent:
@@ -416,15 +430,21 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		m.clearStatusIndicator("retry")
 		// Only a final failure, including a
 		// cancelled retry, is shown, as a persistent transcript error.
-		if !e.Success {
-			finalError := cmp.Or(e.FinalError, "Unknown error")
-			m.showError(fmt.Sprintf("Retry failed after %d attempts: %s", e.Attempt, finalError))
+		switch {
+		case e.Success:
+		case e.FinalError == "Retry cancelled":
+			m.showFlash("Retry cancelled")
+		case m.failedBlock != nil:
+			// The last attempt's reply shows the failure, now with the count.
+			m.failedBlock.SetTerminalError("error", m.assistantErrorText(m.failedReply, e.Attempt+1))
+		default:
+			m.showError(fmt.Sprintf("Failed after %d attempts: %s", e.Attempt+1, cmp.Or(e.FinalError, "Unknown error")))
 		}
 		m.tuiInst.Render()
 
 	case agent.SummarizationRetryScheduledEvent:
 		m.showError(e.ErrorMessage)
-		m.showRetryStatusIndicator(e.Attempt, e.MaxAttempts, e.DelayMs)
+		m.showRetryStatusIndicator(e.Attempt, e.MaxAttempts, e.DelayMs, "")
 		m.tuiInst.Render()
 
 	case agent.SummarizationRetryAttemptStartEvent:

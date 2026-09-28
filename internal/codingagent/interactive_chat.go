@@ -49,7 +49,7 @@ func (m *InteractiveMode) updateAssistantMessageBlock(block *tui.AssistantMessag
 	}
 	block.SetContent(segments)
 	block.SetHasToolCalls(hasToolCalls)
-	block.SetTerminalError(string(message.StopReason), m.assistantErrorText(message))
+	block.SetTerminalError(string(message.StopReason), m.assistantErrorText(message, 1))
 }
 
 // assistantMarkdownTransform builds the display-only transform for assistant text or thinking with its distinct messageType and this block's live streaming state, mode, and theme.

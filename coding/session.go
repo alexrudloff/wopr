@@ -1755,6 +1755,8 @@ func (s *Session) forwardAgentEvent(ev agent.AgentEvent) (open bool) {
 	if end, ok := ev.(agent.MessageEndEvent); ok && end.Message.Assistant != nil {
 		s.lastAssistantEnd = s.popAssistantEnd()
 		retryEnded = s.lastAssistantEnd.retryEnded
+		end.WillRetry = s.lastAssistantEnd.willRetry
+		ev = end
 	}
 	if end, ok := ev.(agent.ToolExecutionEndEvent); ok {
 		s.recordToolOutcome(end)

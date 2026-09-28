@@ -62,12 +62,18 @@ func (m *InteractiveMode) showBranchSummaryStatusIndicator() {
 
 // showRetryStatusIndicator owns one countdown until replacement, disposal, or shutdown.
 // The owner loop applies its queued labels; disposal joins the worker even if it is waiting for queue space.
-func (m *InteractiveMode) showRetryStatusIndicator(attempt, maxAttempts, delayMs int) {
+// attempt counts retries, so the attempt about to run is attempt+1 of
+// maxAttempts+1; reason, when set, says why the last one failed.
+func (m *InteractiveMode) showRetryStatusIndicator(attempt, maxAttempts, delayMs int, reason string) {
 	m.clearStatusIndicator("")
 	remaining := int((delayMs + 999) / 1000)
 	cancelHint := m.statusCancelHint()
 	message := func(seconds int) string {
-		return fmt.Sprintf("Retrying (%d/%d) in %ds... %s", attempt, maxAttempts, seconds, cancelHint)
+		label := fmt.Sprintf("Attempt %d of %d in %ds", attempt+1, maxAttempts+1, seconds)
+		if reason != "" {
+			label += " · " + reason
+		}
+		return label + "... " + cancelHint
 	}
 	m.setStatusContainerLabel(message(remaining))
 	stop := make(chan struct{})

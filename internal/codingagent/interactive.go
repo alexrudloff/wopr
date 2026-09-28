@@ -284,6 +284,12 @@ type InteractiveMode struct {
 	// on the main goroutine.
 	eventCh        <-chan agent.AgentEvent
 	evCurrentBlock *tui.AssistantMessageBlock
+	// failedReply and failedBlock are the last reply that failed for good,
+	// which a final retry failure annotates with the attempt count;
+	// retryProvider is the provider of a reply about to be retried.
+	failedReply   *agent.AssistantMessage
+	failedBlock   *tui.AssistantMessageBlock
+	retryProvider string
 
 	// branchSummaryOrder tracks rendered BranchSummaryComponents so
 	// Ctrl+O expand/collapse applies to them alongside tool components.

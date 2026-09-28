@@ -277,7 +277,12 @@ type MessageUpdateEvent struct {
 	Message               AgentMessage
 	AssistantMessageEvent ai.AssistantMessageEvent
 }
-type MessageEndEvent struct{ Message AgentMessage }
+type MessageEndEvent struct {
+	Message AgentMessage
+	// WillRetry reports that the session retries this failed reply
+	// automatically, so the failure is not final.
+	WillRetry bool
+}
 type ToolExecutionStartEvent struct {
 	ToolCallID string
 	ToolName   string

@@ -578,31 +578,37 @@ var networkFailures = []struct{ match, what string }{
 	{"broken pipe", "stopped responding (connection closed)"},
 }
 
-// networkFailureText rewrites a network failure as a sentence naming the
-// provider and suggesting what to do; ok is false for any other error.
-func networkFailureText(provider, raw string) (text string, ok bool) {
+// networkFailure names a network failure, e.g. "isn't reachable
+// (connection refused)"; ok is false for any other error.
+func networkFailure(raw string) (what string, ok bool) {
 	lower := strings.ToLower(raw)
 	if !strings.Contains(lower, "network error") {
 		return "", false
 	}
-	what := "stopped responding (network error)"
 	for _, f := range networkFailures {
 		if strings.Contains(lower, f.match) {
-			what = f.what
-			break
+			return f.what, true
 		}
 	}
-	return cmp.Or(provider, "The model server") + " " + what + ". Try again, or switch models with /model or Tab.", true
+	return "stopped responding (network error)", true
 }
 
-// assistantErrorText is the error a failed reply shows: a readable sentence
-// for network failures, else the provider's own message.
-func (m *InteractiveMode) assistantErrorText(message *agent.AssistantMessage) string {
+// assistantErrorText is the error a failed reply shows: a sentence naming
+// the model's server for a network failure, else the provider's own
+// message, with the attempt count when retries ran.
+func (m *InteractiveMode) assistantErrorText(message *agent.AssistantMessage, attempts int) string {
 	if message == nil {
 		return ""
 	}
-	if text, ok := networkFailureText(m.providerName(message.Provider), message.ErrorMessage); ok {
-		return text
+	after := ""
+	if attempts > 1 {
+		after = fmt.Sprintf(" after %d attempts", attempts)
+	}
+	if what, ok := networkFailure(message.ErrorMessage); ok {
+		return cmp.Or(m.providerName(message.Provider), "The model server") + " " + what + after + ". Try again, or switch models with /model or Tab."
+	}
+	if after != "" {
+		return message.ErrorMessage + " (" + strings.TrimPrefix(after, " ") + ")"
 	}
 	return message.ErrorMessage
 }
