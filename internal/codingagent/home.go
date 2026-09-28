@@ -428,7 +428,7 @@ func userDisplayName() string {
 
 // homeTips are the tips shown under the home prompt. {text} is highlighted,
 // {key:action} is replaced with the action's key, {war:text} is drawn in the
-// war red, and {model} names the strongest signed-in model.
+// war red, and {model} names the top of the user's model order.
 var homeTips = []string{
 	"{ctrl+x g} starts {war:GLOBAL THERMONUCLEAR WAR}: a new session on {model} at max thinking",
 	"Press {key:app.commandPalette} to see all available actions and commands",
@@ -543,31 +543,24 @@ func (m *InteractiveMode) sessionRouter() *router.Router {
 	return nil
 }
 
-// strongestModel is the most capable subscription model with working
-// credentials: the model a Global Thermonuclear War session runs on.
+// strongestModel is the top of the user's model order among the models set
+// up in /setup, whatever they cost: the model a Global Thermonuclear War
+// session runs on. Without an order it is the first configured model.
 func (m *InteractiveMode) strongestModel() (spec, name string) {
-	r := m.sessionRouter()
-	if r == nil {
+	models := m.configuredModels()
+	if len(models) == 0 {
 		return "", ""
 	}
-	if m.authedProviders == nil {
-		m.authedProviders = AuthenticatedProviders(m.opts.AgentDir)
-	}
-	var best router.ModelRef
-	for _, tier := range r.Config().Tiers {
-		if tier.Cost != router.CostSubscription {
-			continue
-		}
-		for _, ref := range tier.Models {
-			if m.authedProviders[ref.Provider] && ref.Capability > best.Capability {
-				best = ref
+	if r := m.sessionRouter(); r != nil {
+		for _, ranked := range r.Config().Ranking {
+			for _, c := range models {
+				if c.spec == ranked {
+					return c.spec, c.name
+				}
 			}
 		}
 	}
-	if best.Model == "" {
-		return "", ""
-	}
-	return best.Provider + "/" + best.Model, m.modelName(best.Provider, best.Model)
+	return models[0].spec, models[0].name
 }
 
 // globalThermonuclearWar starts a new session on the strongest model at its
@@ -575,7 +568,7 @@ func (m *InteractiveMode) strongestModel() (spec, name string) {
 func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
 	spec, name := m.strongestModel()
 	if spec == "" {
-		m.showToast("warning", "", "No subscription model is signed in.")
+		m.showToast("warning", "", "No models are set up. Run /setup to connect one.")
 		return
 	}
 	if !m.homeVisible() {
