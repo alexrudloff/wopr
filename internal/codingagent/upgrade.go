@@ -18,6 +18,8 @@ func (m *InteractiveMode) upgradeCommand(string) error {
 		return nil
 	}
 	source := m.opts.ReleaseSource()
+	// The update notice is stale once the upgrade starts.
+	m.dismissToast()
 	progress := &setupProgress{title: "Upgrading " + AppName, autoClose: true}
 	var result SelfUpdateResult
 	var upgradeErr error

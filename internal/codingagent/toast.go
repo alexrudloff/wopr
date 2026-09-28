@@ -73,15 +73,28 @@ func (m *InteractiveMode) showToast(variant, title, message string) {
 }
 
 // showToastQueued shows a notice after the toast already showing, if any,
-// instead of replacing it.
-func (m *InteractiveMode) showToastQueued(variant, title, message string) {
+// instead of replacing it. A queued notice is dropped when still, if set,
+// reports it no longer applies.
+func (m *InteractiveMode) showToastQueued(variant, title, message string, still func() bool) {
+	if still != nil && !still() {
+		return
+	}
 	if m.toastHandle == nil || !time.Now().Before(m.toastUntil) {
 		m.showToast(variant, title, message)
 		return
 	}
 	time.AfterFunc(time.Until(m.toastUntil)+100*time.Millisecond, func() {
-		m.postUITask(func() { m.showToastQueued(variant, title, message) })
+		m.postUITask(func() { m.showToastQueued(variant, title, message, still) })
 	})
+}
+
+// dismissToast closes the toast showing now, if any.
+func (m *InteractiveMode) dismissToast() {
+	if m.toastHandle != nil {
+		m.toastHandle.Close()
+		m.toastHandle = nil
+		m.tuiInst.RequestRender()
+	}
 }
 
 // showFlash shows a brief notice (a mode or level change, a copy

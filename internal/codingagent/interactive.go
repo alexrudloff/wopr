@@ -1033,7 +1033,7 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 	if m.opts.SettingsManager != nil && m.opts.AppVersion != "" {
 		allEntries := ParseChangelog(wopr.Changelog)
 		if newEntries := recordChangelogVersion(m.opts.SettingsManager, m.opts.AppVersion, allEntries); len(newEntries) > 0 && m.opts.ResumePath != "" {
-			m.showToastQueued("info", fmt.Sprintf("Updated to %s %s", AppName, m.opts.AppVersion), "Run /changelog to see what's new.")
+			m.showToastQueued("info", fmt.Sprintf("Updated to %s %s", AppName, m.opts.AppVersion), "Run /changelog to see what's new.", nil)
 		} else if len(newEntries) > 0 {
 			var body strings.Builder
 			for i, newEntrie := range slices.Backward(newEntries) {
@@ -1058,7 +1058,7 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 			// instead of touching the tree from this goroutine, which races
 			// the loop's editor/tree access (invalidatable.dirty and the
 			// editor's unsynchronized fields).
-			m.postUITask(func() { m.showToastQueued("warning", "", warning) })
+			m.postUITask(func() { m.showToastQueued("warning", "", warning, nil) })
 		}
 	}()
 
@@ -1082,7 +1082,8 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 			}
 			m.postUITask(func() {
 				m.availableUpdate = update.LatestVersion
-				m.showToastQueued("info", fmt.Sprintf("%s %s is available", AppName, update.LatestVersion), "Run "+update.Command+" to install it.")
+				m.showToastQueued("info", fmt.Sprintf("%s %s is available", AppName, update.LatestVersion), "Run "+update.Command+" to install it.",
+					func() bool { return m.availableUpdate != "" })
 			})
 		}()
 	}

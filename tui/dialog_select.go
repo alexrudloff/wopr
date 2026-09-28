@@ -486,7 +486,13 @@ func (d *DialogSelect) optionRow(option DialogOption, active, flat bool, width i
 		body = "\x1b[1m" + body + SGRBoldDimReset
 	}
 	if option.Description != "" && option.Description != option.Category {
-		body += th.FgText(mutedToken, " "+option.Description)
+		description := th.FgText(mutedToken, option.Description)
+		if active {
+			// The selected row has one text color; faint sets the
+			// description apart from the bold title.
+			description = "\x1b[2m" + description + SGRBoldDimReset
+		}
+		body += "  " + description
 	}
 	body = widthx.TruncateToWidth(body, titleRoom, "…", false)
 	left := marker + body
