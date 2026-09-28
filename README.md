@@ -7,8 +7,11 @@ model routing, for the terminal. One Go binary.
 
 ## Why wopr
 
-Most coding agents run one model and leave the rest to you. wopr decides for
-you, and it's built to spend fewer tokens doing it.
+wopr is for people with a mix of models: a couple running locally, and
+subscriptions to more than one cloud provider. It is a lightweight agent loop
+like Pi's with a fullscreen interface like opencode's, NVIDIA's token-efficiency
+research built in, and no plugin architecture. If you want it to work
+differently, change the source.
 
 - **Model routing, built in.** Connect your local models, subscriptions, and
   API keys, put them in order, and wopr picks the model for each prompt and
