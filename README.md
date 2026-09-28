@@ -5,32 +5,74 @@
 WOPR, the War Operation Plan Response: an opinionated coding agent with built-in
 model routing, for the terminal. One Go binary.
 
-## What it does
+## Why wopr
 
-- **Routes every prompt, when you want it to.** Off by default: you pick the
-  model. Turn routing on in `/setup`: **Basic** picks a model from your order
-  and each model's window, speed, and cost with fixed rules; **Jev** has a
-  TypeSafe Jev endpoint score each task (Basic takes over whenever Jev can't
-  answer). Either way the router picks across your local models,
-  subscriptions, and API providers. The mode sets what it optimizes: **auto** (balanced),
-  **speed**, **quality**, **cost**, or **uncensored**. Pick a model to pin it
-  as the orchestrator; subagents keep routing. See
-  [docs/routing.md](docs/routing.md).
-- **Delegates to subagents.** The orchestrator hands read-only investigations
-  to routed subagents, in the foreground or the background, verifies their
-  quotes against the files, and keeps a work queue that survives resume.
+Most coding agents run one model and leave the rest to you. wopr decides for
+you, and it's built to spend fewer tokens doing it.
+
+- **Model routing, built in.** Connect your local models, subscriptions, and
+  API keys, put them in order, and wopr picks the model for each prompt and
+  each subagent. **Basic** routing uses fixed rules: your order, each model's
+  window, measured speed, and cost. **Jev** routing has a TypeSafe Jev endpoint
+  score every prompt, with Basic taking over whenever Jev can't answer. Modes
+  set what to optimize: **auto**, **speed**, **quality**, **cost** (local and
+  subscriptions first, never pay-per-token), or **uncensored**. Off by
+  default; turn it on in `/setup`.
+- **Token efficiency, on by default.** The mechanisms below cut what each
+  request carries, and wopr tunes them per model from how each of your models
+  actually behaves.
+- **Quota aware.** With more than one subscription, wopr balances work between
+  similarly ranked models on different plans before either runs out.
+- **Context sized per model.** Compaction fits each model's window, including
+  the window you set yourself, and wopr compacts to fit a smaller routed model
+  when that model is the better pick.
+- **Subagents that are checked.** Read-only investigations go to routed
+  subagents, in the foreground or background. wopr verifies every line they
+  quote against the files and escalates once when an answer can't be trusted.
   `/goal` keeps working until an independent auditor agrees it's done.
-- **Cuts context.** Large tool results leave the context but stay recallable,
-  old output is pruned when the cache is cold anyway, noisy command output is
-  compacted, and compaction happens when it pays for itself. See
-  [docs/efficiency.md](docs/efficiency.md).
 - **Writes less code.** An always-on minimal-code discipline (reuse, stdlib,
   platform, one line, then the minimum). `/review`, `/audit`, and `/debt`
   report bugs, over-engineering, and `simplify:` debt.
-- **Fullscreen terminal UI.** Sidebar with context, routing, live agents,
-  usage, speed per model, and the queue; command palette on `ctrl+p`; themes
-  compatible with opencode theme files. MCP servers, web fetch and search,
-  and hashline anchored edits for small local models.
+- **One Go binary.** Fullscreen terminal UI with a sidebar for context,
+  routing, live agents, subscription usage, and speed per model; command
+  palette on `ctrl+p`; opencode-compatible themes; MCP servers; web fetch and
+  search. Signed releases and `/upgrade`.
+
+## Efficiency
+
+All on by default. Turn any of them off in `efficiency.json`; details in
+[docs/efficiency.md](docs/efficiency.md).
+
+| Mechanism | What it does |
+|---|---|
+| Action fusion | `edit` and `write` can run a command (tests, build) in the same step, saving a round trip |
+| Observation pack | Tool results over 10 KB leave the context after two sends; `obs_recall` pages them back |
+| Evidence reducer | Long build and test logs are summarized by your cheapest model; a summary is kept only if every quote in it is exact |
+| Online compaction | Compacts at plan-step boundaries when that costs less than carrying the context forward |
+| Tool-output half-life | On small-window models, older tool results shrink to excerpts |
+| Stall nudge | When the model repeats itself or stops making progress, it is told to change approach |
+| Test-rerun cap | A test run that already passed isn't repeated until a file changes |
+| Lazy tools | Rarely used tools load only when the model asks for them |
+| apply_patch | GPT and Codex models get the patch format they were trained on |
+| Quota balance | Spreads work across subscriptions before one gets tight |
+| Per-model learning | Tunes the cutoffs above for each of your models from real sessions |
+
+## Compared with Pi and opencode
+
+[Pi](https://github.com/earendil-works/pi) is a deliberately minimal agent you
+extend yourself. [opencode](https://opencode.ai) is a full-featured agent with
+a polished terminal UI. wopr takes opencode's interface, keeps Pi's small
+core, and adds the parts neither ships out of the box:
+
+| | Pi | opencode | wopr |
+|---|---|---|---|
+| Picks a model per prompt across local, subscription, and API providers | no | no | yes |
+| Token efficiency beyond compaction, on by default | no (SoL-Pi is an opt-in extension) | pruning of old tool output | eleven mechanisms, tuned per model |
+| Subscription quota balancing | no | no | yes |
+| Subagents with quote verification | via extensions | subagents, unverified | yes |
+| Compacts to fit a smaller routed model | no | no | yes |
+| Fullscreen TUI | no (inline) | yes | yes |
+| Runtime | TypeScript (Node) | TypeScript (Bun) | one Go binary |
 
 ## Install
 
@@ -61,13 +103,12 @@ Everything lives under `~/.wopr/agent/` (override with `WOPR_HOME`):
 | File | Purpose |
 |---|---|
 | `models.json` | Your own endpoints (local and LAN servers) |
-| `router.json` | Your models in order; the Jev endpoint that turns routing on; tiers, capabilities, and policy |
+| `router.json` | Your models in order, routing (off, Basic, or Jev), the Jev endpoint, and policy |
 | `router-speed.json` | Learned per-model speeds (written by wopr) |
-| `efficiency.json` | Which efficiency mechanisms are on |
+| `efficiency.json` | Turns efficiency mechanisms off (all on by default) |
 
 Log in to subscriptions from inside wopr with `/login openai-codex` and
-`/login anthropic`. `/router status` shows every model, its capability, its
-learned speed, and why the last prompt went where it did.
+`/login anthropic`. `/router status` shows every model, its learned speed, the efficiency mechanisms, and why the last prompt went where it did.
 
 ## License
 
