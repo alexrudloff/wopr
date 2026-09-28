@@ -2,7 +2,6 @@ package codingagent
 
 import (
 	"cmp"
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -111,15 +110,6 @@ func (m *InteractiveMode) mermaidRenderingMode() string {
 func (m *InteractiveMode) appendChatBlock(comp tui.Component) {
 	m.chatContainer.Add(tui.NewSpacer(1))
 	m.chatContainer.Add(comp)
-}
-
-// binaryUpdateNoticeBody builds the heading+instruction line for the
-// self-update notification: bold-warning "Update Available", newline, muted
-// instruction with the accent update command.
-func binaryUpdateNoticeBody(t *tui.Theme, latestVersion, command string) string {
-	const bold, reset = "\x1b[1m", "\x1b[0m"
-	return bold + t.Warning + "Update Available" + reset +
-		"\n" + t.Muted + fmt.Sprintf("New version %s is available. Run ", latestVersion) + reset + t.Accent + command + reset
 }
 
 // updateTerminalTitle sets the title from the session name and the cwd.

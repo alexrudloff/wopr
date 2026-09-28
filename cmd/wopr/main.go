@@ -733,6 +733,7 @@ func main() {
 			defer cancel()
 			return codingagent.CheckForBinaryUpdate(ctx, codingagent.DefaultReleaseSource(&http.Client{Timeout: 6 * time.Second}), Version)
 		},
+		ReleaseSource:              newReleaseSource,
 		ResourceSourceInfoProvider: resourceSourceInfoProvider(cwd, agentDir, services.SettingsManager(), flags),
 		ReloadResourceProvider:     reloadResourceSnapshotProvider(cwd, agentDir, services.SettingsManager(), resourceFlags, projectTrusted),
 		Verbose:                    flags.Verbose,
@@ -761,6 +762,11 @@ func main() {
 			exitProcess(1)
 		}
 		fatalf("error: %v", err)
+	}
+	if session, ok := interactive.RestartRequested(); ok {
+		if err := restartInto(session); err != nil {
+			fatalf("restart: %v (start %s again to use the new version)", err, codingagent.AppName)
+		}
 	}
 }
 

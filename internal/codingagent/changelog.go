@@ -127,7 +127,8 @@ func GetNewEntries(entries []ChangelogEntry, sinceVersion string) []ChangelogEnt
 
 // recordChangelogVersion updates the recorded changelog version and returns the
 // entries to show as the "What's New" banner. A fresh install (no recorded
-// version) records the version and shows nothing. A version bump with new
+// version) records the version and shows nothing, and so does a recorded
+// version newer than this one (a downgrade). A version bump with new
 // changelog entries records the version and returns them. A version bump with
 // no new entries neither records nor shows anything.
 func recordChangelogVersion(sm *SettingsManager, appVersion string, allEntries []ChangelogEntry) []ChangelogEntry {
@@ -137,6 +138,10 @@ func recordChangelogVersion(sm *SettingsManager, appVersion string, allEntries [
 		return nil
 	}
 	if lastSeen == appVersion {
+		return nil
+	}
+	if CompareVersions(lastSeen, appVersion) > 0 {
+		_ = sm.SetLastChangelogVersion(appVersion)
 		return nil
 	}
 	newEntries := GetNewEntries(allEntries, lastSeen)

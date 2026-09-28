@@ -511,9 +511,16 @@ func (f *homeFooter) Render(width int) []string {
 		dir += ":" + snap.gitBranch
 	}
 	version := "WOPR " + version.Version
+	right := th.FgText("textMuted", version)
+	if latest := f.m.availableUpdate; latest != "" {
+		// A newer release stays named here after its toast is gone.
+		note := latest + " available: /upgrade"
+		version += " · " + note
+		right += th.FgText("textMuted", " · ") + th.FgText("accent", note)
+	}
 	inner := max(1, width-4)
 	dir = truncateLeft(dir, max(1, inner-len(version)-2))
-	return []string{"", "  " + spread(th.FgText("textMuted", dir), th.FgText("textMuted", version), inner), ""}
+	return []string{"", "  " + spread(th.FgText("textMuted", dir), right, inner), ""}
 }
 
 // thinkingMeterBars is the filled bars per thinking level; off and unknown

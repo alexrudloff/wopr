@@ -47,6 +47,7 @@ func BuiltinSlashCommands() []BuiltinSlashCommand {
 		{Name: "copy", Description: "Copy last agent message to clipboard", run: (*InteractiveMode).copyCommand, headless: headlessCopy},
 		{Name: "name", Description: "Set session display name", run: (*InteractiveMode).nameCommand, headless: headlessName},
 		{Name: "session", Description: "Show session info and stats", run: (*InteractiveMode).sessionCommand, headless: headlessSession},
+		{Name: "upgrade", Description: "Upgrade " + AppName + " to the latest release", run: (*InteractiveMode).upgradeCommand},
 		{Name: "changelog", Description: "Show changelog entries", run: func(m *InteractiveMode, _ string) error { m.appendMarkdown(changelogText()); return nil }, headless: func(sc *SlashContext) error { sc.Append(changelogText()); return nil }},
 		{Name: "hotkeys", Description: "Show all keyboard shortcuts", run: (*InteractiveMode).hotkeysCommand, headless: func(sc *SlashContext) error { sc.Append(hotkeysText(defaultHotkeyLines)); return nil }},
 		{Name: "fork", Description: "Create a new fork from a previous user message", run: (*InteractiveMode).forkCommand, headless: headlessFork},

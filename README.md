@@ -88,8 +88,9 @@ make install          # builds and installs ~/.local/bin/wopr
 ```
 
 Archives for macOS, Linux, and Windows are on
-[GitHub Releases](https://github.com/alexrudloff/wopr/releases). `wopr update`
-installs the latest release after verifying its signed `SHA256SUMS`.
+[GitHub Releases](https://github.com/alexrudloff/wopr/releases). `/upgrade`
+(or `wopr update`) installs the latest release after verifying its signed
+`SHA256SUMS`.
 
 ```bash
 wopr                  # start in the current directory
@@ -106,6 +107,7 @@ Everything lives under `~/.wopr/agent/` (override with `WOPR_HOME`):
 | `router.json` | Your models in order, routing (off, Basic, or Jev), the Jev endpoint, and policy |
 | `router-speed.json` | Learned per-model speeds (written by wopr) |
 | `efficiency.json` | Turns efficiency mechanisms off (all on by default) |
+| `efficiency-learned.json` | Per-model efficiency values learned from your sessions (written by wopr; delete to reset) |
 
 Log in to subscriptions from inside wopr with `/login openai-codex` and
 `/login anthropic`. `/router status` shows every model, its learned speed, the efficiency mechanisms, and why the last prompt went where it did.

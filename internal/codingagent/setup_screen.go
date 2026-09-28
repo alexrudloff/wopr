@@ -270,9 +270,10 @@ func (p *setupProgress) Render(width int) []string {
 	return append(out, "")
 }
 
-// runProgress shows p while work runs in the background. work reports row
-// changes through update, which applies them on the UI loop; it must stop
-// when ctx ends. runProgress returns false when the user went back.
+// runProgress shows p while work runs in the background, on the setup
+// screen or else in a dialog. work reports row changes through update, which
+// applies them on the UI loop; it must stop when ctx ends. runProgress
+// returns false when the user went back.
 func (m *InteractiveMode) runProgress(p *setupProgress, work func(ctx context.Context, update func(func()))) bool {
 	ctx, cancel := context.WithCancel(m.runCtxOrBackground())
 	defer cancel()
@@ -319,10 +320,13 @@ func (m *InteractiveMode) runProgress(p *setupProgress, work func(ctx context.Co
 	}()
 	md := modalOf(p)
 	md.wake, md.tasks = wake, tasks
-	if !m.runSetupModal(md) {
-		return false
+	ok := false
+	if m.setup != nil {
+		ok = m.runSetupModal(md)
+	} else {
+		ok = m.runDialog(md, dialogMedium)
 	}
-	return !p.back
+	return ok && !p.back
 }
 
 // runCtxOrBackground is the run's context, or a background one before Run.

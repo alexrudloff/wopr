@@ -38,8 +38,10 @@ curl -fsSL https://raw.githubusercontent.com/alexrudloff/wopr/main/install.sh | 
 
 Set `WOPR_VERSION=0.1.0` to install a specific release and `WOPR_INSTALL_DIR`
 to install elsewhere. On Windows, download the `.zip` archive from the release
-page. `wopr update` replaces a release binary with the latest release after it
-verifies the release's Ed25519-signed `SHA256SUMS` and the archive's SHA-256.
+page. `/upgrade` in WOPR (or `wopr update` in a shell) replaces a release
+binary with the latest release after it verifies the release's Ed25519-signed
+`SHA256SUMS` and the archive's SHA-256. WOPR tells you at startup when a newer
+release is out.
 
 ## Install with Go
 

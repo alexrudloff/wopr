@@ -27,6 +27,7 @@ The dispatcher is exhaustive: every built-in command is listed here. Prompt temp
 | `/copy` | Copy the last agent message to clipboard. |
 | `/name <text>` | Set the session display name. |
 | `/session` | Show session info and stats. |
+| `/upgrade` | Upgrade WOPR to the latest release after verifying its signature, then restart into it (reopening this session) or later. |
 | `/changelog` | Show changelog entries. |
 | `/hotkeys` | List keyboard shortcuts. |
 | `/quit` | Exit WOPR. Asks first while background agents run. |

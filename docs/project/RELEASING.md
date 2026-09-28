@@ -24,18 +24,22 @@ How each consumer checks it:
   resolves the latest tag from the `releases/latest` redirect, checks the
   archive against `SHA256SUMS`, and installs `wopr` to `~/.local/bin`. It does
   not check the signature.
-- `wopr update` resolves the latest tag the same way (no GitHub API quota),
-  verifies `SHA256SUMS.sig` against the public key compiled into the binary
-  (`internal/codingagent/release_key.go`), checks the archive's SHA-256, and
-  only then replaces the executable. The startup update notice uses the same
-  redirect and is suppressed by `WOPR_OFFLINE=1`.
+- `wopr update` and `/upgrade` resolve the latest tag the same way (no GitHub
+  API quota), verify `SHA256SUMS.sig` against the public key compiled into the
+  binary (`internal/codingagent/release_key.go`), check the archive's SHA-256,
+  and only then replace the executable. `/upgrade` then offers to restart
+  into the new version, reopening the session. The startup check uses the same
+  redirect, names a newer release in a toast and the home screen footer, and
+  is suppressed by `WOPR_OFFLINE=1`. The first start of a new version shows
+  its `CHANGELOG.md` section once ("What's New"), so every release needs one.
 - `go install github.com/alexrudloff/wopr/cmd/wopr@v0.3.0` builds from the
   module proxy.
 
 ## Cut a release
 
 1. On `main`, set `const Version` in `coding/version/version.go` to the new
-   version (for example `0.3.0`), commit, and merge. The version is a constant,
+   version (for example `0.3.0`), add its `## [0.3.0] - <date>` section to
+   `CHANGELOG.md`, commit, and merge. The version is a constant,
    not a linker flag, so `go install` builds report it too; the workflow fails
    when the tag and the constant differ.
 2. Make sure `make check` passes on that commit.
@@ -52,7 +56,7 @@ How each consumer checks it:
    signs `SHA256SUMS`, verifies the signature against the key embedded in the
    source, attests provenance, and creates the release with generated notes. A
    tag with a pre-release suffix (`v0.3.0-rc.1`) becomes a GitHub pre-release,
-   which `releases/latest`, `install.sh`, and `wopr update` skip.
+   which `releases/latest`, `install.sh`, `wopr update`, and `/upgrade` skip.
 5. Check the result from a clean machine:
 
    ```bash

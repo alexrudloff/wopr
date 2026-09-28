@@ -99,8 +99,14 @@ type InteractiveMode struct {
 	// on it. Guarded by queueMu; nil while no run is active.
 	turnSettled chan struct{}
 
-	requestExit  atomic.Bool // /quit / /exit sets this; input loop notices and returns. Atomic: may be set off the owner loop.
-	fatalRuntime atomic.Bool // fatal session replacement errors exit 1 after the input loop restores the terminal.
+	requestExit atomic.Bool // /quit / /exit sets this; input loop notices and returns. Atomic: may be set off the owner loop.
+	// restartRequested asks the caller to re-exec the upgraded binary on
+	// restartSession after Run returns.
+	restartRequested bool
+	restartSession   string
+	// availableUpdate is a newer release the startup check found.
+	availableUpdate string
+	fatalRuntime    atomic.Bool // fatal session replacement errors exit 1 after the input loop restores the terminal.
 
 	// suspended is true while the session is parked by SIGTSTP. SIGINT is
 	// ignored then.
@@ -664,8 +670,11 @@ type InteractiveOptions struct {
 
 	// BinaryUpdateChecker, if set, is invoked asynchronously at startup and
 	// returns a newer-release notice for the wopr binary itself, or nil. The
-	// notice names the command that applies it (e.g. `wopr update self`).
+	// notice names the command that applies it (/upgrade).
 	BinaryUpdateChecker func() *BinaryUpdate
+
+	// ReleaseSource is where /upgrade reads releases; nil disables /upgrade.
+	ReleaseSource func() ReleaseSource
 
 	// Llama is the built-in llama.cpp provider: /llama manages its router
 	// models, /login configures it, and startup refreshes its catalog.
@@ -1018,11 +1027,14 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 		m.restoreSidebar()
 	}
 
-	// Show "what's new" on fresh sessions (no prior messages) when the
-	// binary version differs from the last recorded version.
-	if m.opts.SettingsManager != nil && m.opts.AppVersion != "" && m.opts.ResumePath == "" {
+	// Show "what's new" when the binary version differs from the last
+	// recorded version: in full on a fresh session, as a toast pointing to
+	// /changelog on a resumed one (a restart after /upgrade).
+	if m.opts.SettingsManager != nil && m.opts.AppVersion != "" {
 		allEntries := ParseChangelog(wopr.Changelog)
-		if newEntries := recordChangelogVersion(m.opts.SettingsManager, m.opts.AppVersion, allEntries); len(newEntries) > 0 {
+		if newEntries := recordChangelogVersion(m.opts.SettingsManager, m.opts.AppVersion, allEntries); len(newEntries) > 0 && m.opts.ResumePath != "" {
+			m.showToastQueued("info", fmt.Sprintf("Updated to %s %s", AppName, m.opts.AppVersion), "Run /changelog to see what's new.")
+		} else if len(newEntries) > 0 {
 			var body strings.Builder
 			for i, newEntrie := range slices.Backward(newEntries) {
 				body.WriteString(newEntrie.Content)
@@ -1046,7 +1058,7 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 			// instead of touching the tree from this goroutine, which races
 			// the loop's editor/tree access (invalidatable.dirty and the
 			// editor's unsynchronized fields).
-			m.postUITask(func() { m.showWarning(warning) })
+			m.postUITask(func() { m.showToastQueued("warning", "", warning) })
 		}
 	}()
 
@@ -1068,11 +1080,9 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 			if update == nil {
 				return
 			}
-			t := tui.ActiveTheme()
-			heading := binaryUpdateNoticeBody(t, update.LatestVersion, update.Command)
-			blocks := []tui.Component{tui.NewText(heading)}
 			m.postUITask(func() {
-				m.appendBorderedNotice(blocks...)
+				m.availableUpdate = update.LatestVersion
+				m.showToastQueued("info", fmt.Sprintf("%s %s is available", AppName, update.LatestVersion), "Run "+update.Command+" to install it.")
 			})
 		}()
 	}

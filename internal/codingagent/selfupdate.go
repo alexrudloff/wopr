@@ -52,7 +52,7 @@ const maxReleaseMetadataBytes = 1 << 20
 type BinaryUpdate struct {
 	CurrentVersion string
 	LatestVersion  string
-	Command        string // the command that applies it: "wopr update"
+	Command        string // the command that applies it: "/upgrade"
 }
 
 // ReleaseSource reads wopr releases from GitHub: the releases/latest redirect
@@ -399,6 +399,73 @@ func extractReleaseBinary(archivePath, member, dir string) (string, error) {
 	}
 }
 
+// SelfUpdateResult is the outcome of UpdateSelf.
+type SelfUpdateResult struct {
+	Latest string
+	// UpToDate means nothing was installed because current is the latest.
+	UpToDate bool
+	// ExePath is the replaced executable when an update was installed.
+	ExePath string
+}
+
+// SelfUpdateRefused reports an installation wopr does not replace in place;
+// the message is the remediation to show verbatim.
+type SelfUpdateRefused struct{ Message string }
+
+func (e *SelfUpdateRefused) Error() string { return e.Message }
+
+// Self-update stages reported to UpdateSelf's step callback.
+const (
+	UpdateStageCheck    = "check"
+	UpdateStageVerify   = "verify"
+	UpdateStageDownload = "download"
+)
+
+// UpdateSelf resolves the latest release and, when it is newer than current
+// (or force is set), verifies its signed SHA256SUMS and replaces the running
+// standalone binary. step, when set, is called as each stage starts. An
+// installation wopr must not replace returns *SelfUpdateRefused.
+func UpdateSelf(ctx context.Context, source ReleaseSource, current string, force bool, step func(stage, version string)) (SelfUpdateResult, error) {
+	report := func(stage, version string) {
+		if step != nil {
+			step(stage, version)
+		}
+	}
+	report(UpdateStageCheck, "")
+	latest, err := source.LatestVersion(ctx)
+	if err != nil {
+		return SelfUpdateResult{}, fmt.Errorf("could not resolve the latest %s release: %w\n%s", AppName, err, SelfUpdateFallback())
+	}
+	result := SelfUpdateResult{Latest: latest}
+	// The version check runs before the installation tier, so an installation
+	// that is already current succeeds even when wopr cannot update it.
+	if !force && CompareVersions(current, latest) >= 0 {
+		result.UpToDate = true
+		return result, nil
+	}
+	applied := ApplySelfUpdateTier(func(exePath string) error {
+		report(UpdateStageVerify, latest)
+		archive, err := source.ResolveArchive(ctx, latest)
+		if err != nil {
+			return fmt.Errorf("%w\n%s", err, SelfUpdateFallback())
+		}
+		report(UpdateStageDownload, latest)
+		if err := source.InstallArchive(ctx, archive, exePath); err != nil {
+			return fmt.Errorf("%w\n%s", err, SelfUpdateFallback())
+		}
+		result.ExePath = exePath
+		return nil
+	})
+	switch applied.Action {
+	case "standalone-updated":
+		return result, nil
+	case "refused":
+		return result, &SelfUpdateRefused{Message: applied.Message}
+	default:
+		return result, errors.New(applied.Message)
+	}
+}
+
 // SelfUpdateFallback is the manual path shown when self-update cannot run.
 func SelfUpdateFallback() string {
 	return fmt.Sprintf("Install the latest release with `curl -fsSL %s | sh`, download it from %s, "+
@@ -423,7 +490,7 @@ func CheckForBinaryUpdate(ctx context.Context, source ReleaseSource, currentVers
 	if err != nil || CompareVersions(currentVersion, latest) >= 0 {
 		return nil
 	}
-	return &BinaryUpdate{CurrentVersion: currentVersion, LatestVersion: latest, Command: AppName + " update"}
+	return &BinaryUpdate{CurrentVersion: currentVersion, LatestVersion: latest, Command: "/upgrade"}
 }
 
 // CompareVersions compares strict semantic versions. Returns -1 if a<b, 1 if

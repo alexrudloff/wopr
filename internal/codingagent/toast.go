@@ -72,6 +72,18 @@ func (m *InteractiveMode) showToast(variant, title, message string) {
 	})
 }
 
+// showToastQueued shows a notice after the toast already showing, if any,
+// instead of replacing it.
+func (m *InteractiveMode) showToastQueued(variant, title, message string) {
+	if m.toastHandle == nil || !time.Now().Before(m.toastUntil) {
+		m.showToast(variant, title, message)
+		return
+	}
+	time.AfterFunc(time.Until(m.toastUntil)+100*time.Millisecond, func() {
+		m.postUITask(func() { m.showToastQueued(variant, title, message) })
+	})
+}
+
 // showFlash shows a brief notice (a mode or level change, a copy
 // confirmation) as a toast, so the transcript keeps only the conversation.
 func (m *InteractiveMode) showFlash(message string) {

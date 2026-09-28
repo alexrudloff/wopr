@@ -142,6 +142,7 @@ func (m *InteractiveMode) openCommandPalette(ctx context.Context) {
 		{title: "Disconnect provider", category: "System", run: slash("/logout")},
 		{title: "Keyboard shortcuts", category: "System", run: slash("/hotkeys")},
 		{title: "Reload resources", category: "System", run: slash("/reload")},
+		{title: "Upgrade " + AppName, category: "System", run: slash("/upgrade")},
 		{title: "Changelog", category: "System", run: slash("/changelog")},
 		{title: "Exit the app", category: "System", key: leader("q"), run: slash("/quit")},
 	}

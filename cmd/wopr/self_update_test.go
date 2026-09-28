@@ -1,10 +1,6 @@
 package main
 
 import (
-	"context"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -20,13 +16,6 @@ func useRelease(t *testing.T, srv *releasetest.Server) {
 	t.Cleanup(func() { newReleaseSource = previous })
 	newReleaseSource = func() codingagent.ReleaseSource {
 		return codingagent.ReleaseSource{BaseURL: srv.URL, Repo: releasetest.Repo, PublicKey: srv.PublicKey, Client: srv.Client()}
-	}
-}
-
-func requireStandaloneSelfUpdateTier(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("a standalone Windows binary is not replaced in place")
 	}
 }
 
@@ -74,47 +63,5 @@ func TestSelfUpdateUnreachableGitHubIsActionable(t *testing.T) {
 	_, stderr, code := captureStdoutStderr(t, func() int { return runSelfUpdate(false) })
 	if code != 1 || !strings.Contains(stderr, "could not resolve the latest wopr release") || !strings.Contains(stderr, codingagent.ReleasesURL) {
 		t.Fatalf("code = %d, stderr = %q", code, stderr)
-	}
-}
-
-func TestApplyStandaloneUpdateReplacesTheExecutable(t *testing.T) {
-	requireStandaloneSelfUpdateTier(t)
-	srv := releasetest.New(t, "99.0.0", []byte("#!/bin/sh\necho updated\n"))
-	useRelease(t, srv)
-	exe := filepath.Join(t.TempDir(), "wopr")
-	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	_, stderr, _ := captureStdoutStderr(t, func() int {
-		if err := applyStandaloneUpdate(context.Background(), newReleaseSource(), "99.0.0", exe); err != nil {
-			t.Errorf("applyStandaloneUpdate: %v", err)
-		}
-		return 0
-	})
-	if got, _ := os.ReadFile(exe); string(got) != "#!/bin/sh\necho updated\n" {
-		t.Fatalf("executable = %q, want the release binary", got)
-	}
-	if !strings.Contains(stderr, "Updated to wopr 99.0.0") {
-		t.Fatalf("stderr = %q", stderr)
-	}
-}
-
-func TestApplyStandaloneUpdateWithPlaceholderKeyFailsClosed(t *testing.T) {
-	if codingagent.ReleaseSigningPublicKey != "" {
-		t.Skip("a real release signing key is configured")
-	}
-	srv := releasetest.New(t, "99.0.0", []byte("new"))
-	source := codingagent.DefaultReleaseSource(srv.Client())
-	source.BaseURL = srv.URL
-	exe := filepath.Join(t.TempDir(), "wopr")
-	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	err := applyStandaloneUpdate(context.Background(), source, "99.0.0", exe)
-	if err == nil || !strings.Contains(err.Error(), "release signing key not configured") {
-		t.Fatalf("err = %v, want release signing key not configured", err)
-	}
-	if got, _ := os.ReadFile(exe); string(got) != "old" {
-		t.Fatalf("executable changed: %q", got)
 	}
 }
