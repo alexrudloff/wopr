@@ -98,16 +98,17 @@ type KindPolicy struct {
 
 // JevConfig configures the classifier call.
 type JevConfig struct {
-	// Endpoint is the decisions endpoint (for example OpenRouter's decisions
-	// API, which accepts the Jev request shape). Without one, routing is
-	// off.
+	// Endpoint is the decisions endpoint or its base URL (TypeSafe's
+	// https://api.typesafe.ai, OpenRouter's https://openrouter.ai/api, or a
+	// proxy); see NormalizeJevEndpoint. Without one, routing is off.
 	Endpoint string `json:"endpoint,omitempty"`
-	// Model is the Jev model id on that endpoint. Pin a version: thresholds
-	// are tuned against one model.
+	// Model is the Jev model id, as TypeSafe names it (jev-1.13); OpenRouter
+	// ids are derived. Pin a version: thresholds are tuned against one model.
 	Model string `json:"model,omitempty"`
-	// APIKeyProvider names the WOPR provider whose API key authenticates the
-	// endpoint. "none" sends no Authorization header (a self-hosted gateway
-	// that holds the upstream key itself).
+	// APIKeyProvider picks the key: unset uses the key saved for Jev, then
+	// the environment (see ResolveJevKey); "none" sends no Authorization
+	// header (a proxy that holds the upstream key itself); another id uses
+	// that provider's key.
 	APIKeyProvider string `json:"apiKeyProvider,omitempty"`
 	// TimeoutMs is the per-attempt timeout (default 1300).
 	TimeoutMs int `json:"timeoutMs,omitempty"`

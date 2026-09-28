@@ -115,6 +115,8 @@ const (
 )
 
 func newJevClient(cfg JevConfig, apiKey func() string) *jevClient {
+	cfg.Endpoint = NormalizeJevEndpoint(cfg.Endpoint)
+	cfg.Model = requestModel(cfg.Endpoint, cfg.Model)
 	return &jevClient{cfg: cfg, apiKey: apiKey, now: time.Now, http: &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}}
 }
 
@@ -142,10 +144,44 @@ type httpStatusError struct {
 }
 
 func (e *httpStatusError) Error() string {
-	if strings.TrimSpace(e.body) == "" {
-		return fmt.Sprintf("router: jev HTTP %d", e.status)
+	switch e.status {
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return fmt.Sprintf("router: Jev rejected the API key (HTTP %d)", e.status)
+	case http.StatusPaymentRequired:
+		return "router: Jev needs credits on this account (HTTP 402)"
+	case http.StatusTooManyRequests:
+		return "router: Jev rate limit reached (HTTP 429)"
+	case 529:
+		return "router: Jev is overloaded (HTTP 529)"
 	}
-	return fmt.Sprintf("router: jev HTTP %d: %s", e.status, text.Clip(e.body, 300))
+	if msg := e.message(); msg != "" {
+		return fmt.Sprintf("router: Jev HTTP %d: %s", e.status, text.Clip(msg, 300))
+	}
+	return fmt.Sprintf("router: Jev HTTP %d", e.status)
+}
+
+// message is the error body's message field, else the body itself.
+func (e *httpStatusError) message() string {
+	var parsed struct {
+		Error any `json:"error"`
+	}
+	if json.Unmarshal([]byte(e.body), &parsed) == nil {
+		switch v := parsed.Error.(type) {
+		case string:
+			return v
+		case map[string]any:
+			if m, ok := v["message"].(string); ok {
+				return m
+			}
+		}
+	}
+	return strings.TrimSpace(e.body)
+}
+
+// isAuthError reports whether err is Jev refusing the key.
+func isAuthError(err error) bool {
+	var status *httpStatusError
+	return errors.As(err, &status) && (status.status == http.StatusUnauthorized || status.status == http.StatusForbidden)
 }
 
 // post sends req with retry and breaker handling.
@@ -153,12 +189,8 @@ func (c *jevClient) post(ctx context.Context, req jevRequest) (jevResponse, erro
 	if c.breakerRemaining() > 0 {
 		return jevResponse{}, errJevOpen
 	}
-	key := ""
-	needsKey := c.cfg.APIKeyProvider != "none"
-	if needsKey {
-		key = strings.TrimSpace(c.apiKey())
-	}
-	if needsKey && key == "" {
+	key := strings.TrimSpace(c.apiKey())
+	if key == "" && namedKeyProvider(c.cfg) {
 		return jevResponse{}, errNoJevKey
 	}
 	body, err := json.Marshal(req)
@@ -209,8 +241,8 @@ func (c *jevClient) once(ctx context.Context, body []byte, key string) (jevRespo
 	if key != "" {
 		httpReq.Header.Set("Authorization", "Bearer "+key)
 	}
-	httpReq.Header.Set("HTTP-Referer", "https://github.com/alexrudloff/WOPR")
-	httpReq.Header.Set("X-Title", "harness router")
+	httpReq.Header.Set("HTTP-Referer", "https://github.com/alexrudloff/wopr")
+	httpReq.Header.Set("X-Title", "wopr")
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
 		return jevResponse{}, fmt.Errorf("router: jev request: %w", err)

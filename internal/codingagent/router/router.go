@@ -221,12 +221,7 @@ func New(cfg Config, host Host) *Router {
 		speed:  loadSpeedBook(cfg.statsDir),
 	}
 	if cfg.EngineName() == EngineJev && cfg.Jev.Active() {
-		r.jev = newJevClient(cfg.Jev, func() string {
-			if cfg.Jev.APIKeyProvider == "none" {
-				return ""
-			}
-			return host.APIKey(cfg.Jev.APIKeyProvider)
-		})
+		r.jev = newJevClient(cfg.Jev, func() string { return ResolveJevKey(cfg.Jev, host.APIKey) })
 	}
 	return r
 }
@@ -396,6 +391,9 @@ func (r *Router) jevAnswered(err error) {
 	case !r.paused:
 		r.paused = true
 		r.pauseNotice = "Jev unreachable (" + strings.TrimPrefix(err.Error(), "router: ") + ") — routing by Basic rules until it answers."
+		if isAuthError(err) {
+			r.pauseNotice = "Jev rejected the API key — routing by Basic rules. Set the key in /setup → Model routing."
+		}
 	}
 }
 

@@ -572,6 +572,10 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 		if !plan.Jev.Disabled {
 			delete(merged, "disabled")
 		}
+		if plan.Jev.APIKeyProvider == "" {
+			// Unset picks the key automatically; drop an old "none".
+			delete(merged, "apiKeyProvider")
+		}
 		out, err := compactJSON(merged)
 		if err != nil {
 			return "", err

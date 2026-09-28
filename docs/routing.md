@@ -270,9 +270,21 @@ Jev routes when router.json has `"engine": "jev"` and names a `jev.endpoint`
 and `jev.model` (set in `/setup` → Model routing, which tests them first). A
 configuration from before engines existed that enables routing with Jev
 configured is read as Jev. Pin a model version: thresholds are
-tuned against one model. Each attempt has a `timeoutMs` budget (default 1300) with `retries` (default
+tuned against one model.
+
+Every Jev endpoint takes the same request (`POST …/v1/systemone`, Bearer
+key, `{model, state, questions}`), so TypeSafe (`https://api.typesafe.ai`),
+OpenRouter (`https://openrouter.ai/api`), and proxies all work;
+`NormalizeJevEndpoint` accepts a base URL or the full URL. On OpenRouter the
+model id gets its author prefix (`typesafe/jev-1.13`, `~typesafe/jev-latest`),
+and the `usage.cost` it returns is counted as Jev's cost. The key comes from
+`ResolveJevKey`: a key saved in `/setup` (credential `typesafe` in
+auth.json), then `TYPESAFE_API_KEY`, and for OpenRouter the OpenRouter key;
+with none, no Authorization header is sent. `apiKeyProvider: "none"` never
+sends one. Each attempt has a `timeoutMs` budget (default 1300) with `retries` (default
 1) retry. Repeated failures open a circuit breaker for 30 seconds, and a 401,
-402, or 403 opens it for 5 minutes, so later turns fail fast and the Basic
+402, or 403 opens it for 5 minutes (a 401 or 403 says "Jev rejected the API
+key"), so later turns fail fast and the Basic
 rules route them. `/router status` shows Jev unreachable while the breaker is
 open.
 
@@ -325,7 +337,7 @@ authenticated (`/login`). A router.json like /setup writes:
 {
   "enabled": true,
   "engine": "jev",
-  "jev": { "endpoint": "https://jev.example/v1/decisions", "model": "jev-x.y", "apiKeyProvider": "none" },
+  "jev": { "endpoint": "https://api.typesafe.ai/v1/systemone", "model": "jev-1.13" },
   "ranking": [ "anthropic/claude-opus-5-5", "openai-codex/gpt-6-sol", "local/qwen-coder" ],
   "tiers": [
     { "name": "local", "cost": "free-local", "probeUrl": "http://127.0.0.1:8000/v1/models",

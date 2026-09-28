@@ -83,6 +83,9 @@ func (t *TextInput) Done() bool { return t.done }
 // Cancelled reports whether the user pressed Esc.
 func (t *TextInput) Cancelled() bool { return t.cancel }
 
+// SetPlaceholder replaces the text shown while the input is empty.
+func (t *TextInput) SetPlaceholder(s string) { t.placeholder = s }
+
 // Text returns the current input text.
 func (t *TextInput) Text() string { return t.value }
 

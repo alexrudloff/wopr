@@ -19,9 +19,19 @@ In `/setup`, open **Model routing** and set **Routing** (←/→) to:
   about each model (its window, measured speed, and cost class). Nothing
   else to set up.
 - **Jev**: Jev classifies each prompt and subagent brief. Enter the Jev
-  endpoint (for example `http://…/v1/systemone`) and model (for example
-  `jev-1.13`); **Save** asks Jev to classify a sample prompt and keeps the
-  choice only if it answers.
+  endpoint, an API key, and the model (for example `jev-1.13`); **Save** asks
+  Jev to classify a sample prompt and keeps the choice only if it answers.
+  The endpoint can be a base URL or the full `https://…/v1/systemone` URL:
+
+  | Where Jev runs | Endpoint | API key |
+  |---|---|---|
+  | TypeSafe | `https://api.typesafe.ai` | your TypeSafe key, or `TYPESAFE_API_KEY` |
+  | OpenRouter | `https://openrouter.ai/api` | your OpenRouter key: the one you connected in `/setup` or `OPENROUTER_API_KEY` is used when the field is blank |
+  | A proxy or self-hosted endpoint | its URL, for example `http://proxy.lan:8001` | blank if the proxy holds the key |
+
+  A typed key is saved in `auth.json`, never in router.json. Use TypeSafe's
+  model ids everywhere; on OpenRouter wopr sends `typesafe/jev-1.13` (and
+  `~typesafe/jev-latest` for `jev-latest`).
 - **Off**: wopr runs the model you pick.
 
 With Basic or Jev, the screen holds **Put your models in order**: your models, strongest first. New models
@@ -198,7 +208,8 @@ and a task brief with a hit runs only on your own hardware.
 | `engine` | `jev` when a Jev endpoint is set, else `basic` | What routes: `basic` or `jev`. |
 | `ranking` | unset | Models strongest first, as `/setup` keeps them; their `capability` values are derived from it. |
 | `jev.disabled` | `false` | Stop using Jev and keep the endpoint: the Basic rules route. |
-| `jev.endpoint`, `jev.model` | unset | The Jev classifier; without both, the Basic rules route. |
+| `jev.endpoint`, `jev.model` | unset | The Jev classifier; without both, the Basic rules route. The endpoint may be a base URL (`https://api.typesafe.ai`, `https://openrouter.ai/api`) or be the full `https://…/v1/systemone` URL. |
+| `jev.apiKeyProvider` | unset | Unset: the key saved in `/setup`, then `TYPESAFE_API_KEY` (OpenRouter endpoints: then your OpenRouter key or `OPENROUTER_API_KEY`); no key found sends none. `none`: never send a key. Another provider id: that provider's key. |
 | `jev.timeoutMs`, `jev.retries` | `1300`, `1` | Per-attempt timeout and retries. |
 | `stickyIdleMinutes` | `10` | Idle time after which the orchestrator may change model. |
 | `tiers[].models[].uncensored` | `false` | Model allowed in uncensored mode. |

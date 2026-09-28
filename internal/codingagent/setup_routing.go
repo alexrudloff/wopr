@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 	"time"
@@ -45,13 +46,16 @@ type routingView struct {
 	suggestions []routingSuggestion
 	kept        []string
 	endpoint    *tui.TextInput
+	jevKey      *tui.TextInput
 	jevModel    *tui.TextInput
-	testNote    string
-	err         string
-	focus       int
-	maxHeight   int
-	done        bool
-	action      string
+	// keys says which Jev keys exist, for the key field's placeholder.
+	keys      jevKeys
+	testNote  string
+	err       string
+	focus     int
+	maxHeight int
+	done      bool
+	action    string
 	// moving is the model picked up to move, and moveFrom where it was.
 	moving   string
 	moveFrom int
@@ -70,6 +74,7 @@ var engineLabels = map[string]string{engineOff: "Off", router.EngineBasic: "Basi
 const (
 	itemEngine = iota
 	itemEndpoint
+	itemJevKey
 	itemJevModel
 	itemSuggestMove
 	itemSuggestKeep
@@ -104,7 +109,7 @@ func (v *routingView) choose(delta int) {
 func (v *routingView) items() []routingItem {
 	out := []routingItem{{kind: itemEngine}}
 	if v.engine == router.EngineJev {
-		out = append(out, routingItem{kind: itemEndpoint}, routingItem{kind: itemJevModel})
+		out = append(out, routingItem{kind: itemEndpoint}, routingItem{kind: itemJevKey}, routingItem{kind: itemJevModel})
 	}
 	if v.routes() {
 		for i := range v.suggestions {
@@ -218,14 +223,17 @@ func (v *routingView) HandleInput(data string) {
 		case tui.MatchesKeyID(data, "enter"):
 			v.focus++
 		}
-	case itemEndpoint, itemJevModel:
+	case itemEndpoint, itemJevKey, itemJevModel:
 		if tui.MatchesKeyID(data, "enter") {
 			v.focus++
 			return
 		}
-		if item.kind == itemJevModel {
+		switch item.kind {
+		case itemJevModel:
 			v.jevModel.HandleInput(data)
-		} else {
+		case itemJevKey:
+			v.jevKey.HandleInput(data)
+		default:
 			v.endpoint.HandleInput(data)
 		}
 	case itemRow:
@@ -333,7 +341,9 @@ func (v *routingView) Render(width int) []string {
 	}
 	if v.engine == router.EngineJev {
 		top = append(top, "")
+		v.jevKey.SetPlaceholder(v.keys.placeholder(v.endpoint.Text()))
 		top = append(top, field("Jev endpoint", focus.kind == itemEndpoint, input(v.endpoint, focus.kind == itemEndpoint, max(10, inner-14))))
+		top = append(top, field("API key", focus.kind == itemJevKey, input(v.jevKey, focus.kind == itemJevKey, max(10, inner-14))))
 		top = append(top, field("Jev model", focus.kind == itemJevModel, input(v.jevModel, focus.kind == itemJevModel, max(10, inner-14))))
 		if v.testNote != "" {
 			for _, line := range widthx.WrapTextWithAnsi(v.testNote, max(10, inner-14)) {
@@ -412,7 +422,7 @@ func (v *routingView) Render(width int) []string {
 		if v.moving != "" {
 			keys = "↑↓ move · space drop · esc cancel"
 		}
-	case itemEndpoint, itemJevModel:
+	case itemEndpoint, itemJevKey, itemJevModel:
 		keys = "Save checks Jev answers first"
 	}
 	var row []string
@@ -481,10 +491,13 @@ func (w *setupWizard) routingScreen() {
 		}
 	}
 	prompt := ""
-	v.endpoint = tui.NewInput(tui.InputOptions{Prompt: &prompt, Placeholder: "e.g. http://…/v1/systemone"})
+	v.endpoint = tui.NewInput(tui.InputOptions{Prompt: &prompt, Placeholder: "https://api.typesafe.ai"})
 	v.endpoint.SetText(jev.Endpoint)
-	v.jevModel = tui.NewInput(tui.InputOptions{Prompt: &prompt, Placeholder: "e.g. jev-1.13"})
+	v.jevKey = tui.NewInput(tui.InputOptions{Prompt: &prompt})
+	v.jevKey.Mask = true
+	v.jevModel = tui.NewInput(tui.InputOptions{Prompt: &prompt, Placeholder: "jev-1.13"})
 	v.jevModel.SetText(jev.Model)
+	v.keys = w.jevKeys(jev)
 	switch {
 	case len(v.suggestions) > 0:
 		v.focusOn(func(item routingItem) bool { return item.kind == itemSuggestMove })
@@ -520,11 +533,30 @@ func (w *setupWizard) routingScreen() {
 		}
 		plan := routerPlan{Enabled: new(true), Engine: v.engine}
 		if v.engine == router.EngineJev {
-			endpoint, model := strings.TrimSpace(v.endpoint.Text()), strings.TrimSpace(v.jevModel.Text())
-			next := router.JevConfig{Endpoint: endpoint, Model: model, APIKeyProvider: cmp.Or(jev.APIKeyProvider, "none")}
-			changed := endpoint != jev.Endpoint || model != jev.Model
-			if (changed || was != router.EngineJev) && !w.testJev(v, next) {
+			endpoint, model := router.NormalizeJevEndpoint(v.endpoint.Text()), strings.TrimSpace(v.jevModel.Text())
+			key := strings.TrimSpace(v.jevKey.Text())
+			next := router.JevConfig{Endpoint: endpoint, Model: model, APIKeyProvider: jev.APIKeyProvider}
+			if key != "" || endpoint != jev.Endpoint {
+				// A typed key is saved for Jev; a new endpoint picks its
+				// key automatically.
+				next.APIKeyProvider = ""
+			}
+			changed := endpoint != jev.Endpoint || model != jev.Model || next.APIKeyProvider != jev.APIKeyProvider
+			if (changed || key != "" || was != router.EngineJev) && !w.testJev(v, next, key) {
 				continue
+			}
+			if key != "" {
+				if err := w.setStoredKey(router.JevKeyProvider, key, "replace"); err != nil {
+					v.err = "Could not save the key: " + err.Error()
+					continue
+				}
+				v.jevKey.SetText("")
+				v.keys.saved = true
+			}
+			v.endpoint.SetText(endpoint)
+			v.keys.endpoint = endpoint
+			if next.APIKeyProvider == "" {
+				v.keys.none, v.keys.provider = false, ""
 			}
 			if changed {
 				plan.Jev = &next
@@ -544,7 +576,7 @@ func (w *setupWizard) routingScreen() {
 
 // testJev asks Jev to classify a sample prompt with cfg and reports how it
 // went on the screen; true means it answered.
-func (w *setupWizard) testJev(v *routingView, cfg router.JevConfig) bool {
+func (w *setupWizard) testJev(v *routingView, cfg router.JevConfig, key string) bool {
 	if cfg.Endpoint == "" || cfg.Model == "" {
 		v.err = "Enter the Jev endpoint and model first."
 		v.focusOn(func(item routingItem) bool {
@@ -557,7 +589,10 @@ func (w *setupWizard) testJev(v *routingView, cfg router.JevConfig) bool {
 	progress := &setupProgress{title: "Testing Jev", rows: []progressRow{{label: "classifying a sample prompt", state: rowRunning}}, autoClose: true}
 	w.m.runProgress(progress, func(ctx context.Context, update func(func())) {
 		start := time.Now()
-		_, err := router.TestJev(ctx, cfg, w.providerKey(cfg.APIKeyProvider))
+		if key == "" {
+			key = router.ResolveJevKey(cfg, w.providerKey)
+		}
+		_, err := router.TestJev(ctx, cfg, key)
 		update(func() { testErr, took = err, time.Since(start) })
 	})
 	switch {
@@ -566,7 +601,7 @@ func (w *setupWizard) testJev(v *routingView, cfg router.JevConfig) bool {
 		return false
 	case testErr != nil:
 		v.testNote = ""
-		v.err = "Jev didn't answer: " + testErr.Error()
+		v.err = "Jev didn't answer: " + strings.TrimPrefix(testErr.Error(), "router: ")
 		return false
 	}
 	v.testNote = fmt.Sprintf("Jev answered in %s.", took.Round(time.Millisecond))
@@ -639,4 +674,50 @@ func (w *setupWizard) saveRouting(v *routingView, models map[string]*setupModel,
 	}
 	w.reload()
 	return nil
+}
+
+// jevKeys records which keys could authenticate Jev, so the key field can
+// say which one a blank field uses.
+type jevKeys struct {
+	endpoint   string // the saved endpoint, which provider and none apply to
+	saved      bool   // a key saved for Jev
+	provider   string // the provider named by apiKeyProvider, if any
+	none       bool   // apiKeyProvider "none": never send a key
+	openRouter bool   // an OpenRouter key, stored or in the environment
+	env        bool   // TYPESAFE_API_KEY is set
+}
+
+func (w *setupWizard) jevKeys(jev router.JevConfig) jevKeys {
+	k := jevKeys{
+		endpoint:   jev.Endpoint,
+		saved:      w.storedCredential(router.JevKeyProvider),
+		openRouter: w.providerKey("openrouter") != "",
+		env:        strings.TrimSpace(os.Getenv("TYPESAFE_API_KEY")) != "",
+	}
+	switch jev.APIKeyProvider {
+	case "", router.JevKeyProvider:
+	case "none":
+		k.none = true
+	default:
+		k.provider = w.m.providerName(jev.APIKeyProvider)
+	}
+	return k
+}
+
+// placeholder describes what a blank key field sends to endpoint.
+func (k jevKeys) placeholder(endpoint string) string {
+	same := router.NormalizeJevEndpoint(endpoint) == k.endpoint
+	switch {
+	case same && k.none:
+		return "none sent (optional)"
+	case same && k.provider != "":
+		return "using your " + k.provider + " key"
+	case k.saved:
+		return "saved (type to replace)"
+	case router.IsOpenRouterEndpoint(endpoint) && k.openRouter:
+		return "using your OpenRouter key"
+	case !router.IsOpenRouterEndpoint(endpoint) && k.env:
+		return "using TYPESAFE_API_KEY"
+	}
+	return "optional: blank sends none"
 }
