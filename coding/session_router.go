@@ -71,7 +71,7 @@ func (h routerHost) ModelInfo(provider, model string) (router.ModelInfo, bool) {
 	}
 	return router.ModelInfo{
 		DisplayName:     m.DisplayName,
-		ContextWindow:   m.Capabilities.ContextWindow,
+		ContextWindow:   h.s.effectiveWindow(m),
 		MaxOutputTokens: m.Capabilities.MaxOutputTokens,
 		MaxThinking:     m.Capabilities.MaxThinking,
 	}, true

@@ -2,6 +2,7 @@ package efficiency
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -48,6 +49,8 @@ type Observation struct {
 	Bytes       int
 	Lines       int
 	Tokens      int
+	// Excerpt is the placeholder's head-and-tail budget in bytes.
+	Excerpt int
 }
 
 // Pack projects large tool results into placeholders for one session.
@@ -57,13 +60,23 @@ type Pack struct {
 	sent   map[string]int
 	stored map[string]bool
 	ledger *ledger
+	// excerpt keeps each observation's placeholder budget once it has been
+	// replaced, so its placeholder stays byte-stable for the prompt cache.
+	excerpt map[string]int
 	// Notify reports the first measured saving for an observation.
 	Notify func(mechanism, saving string, tokens int)
+	// Params returns the numbers for the model serving the request; nil
+	// means the globals.
+	Params func() PackParams
+	// OnPlaced and OnCut report the first time an observation is replaced
+	// by its placeholder or cut by half-life.
+	OnPlaced func(id string)
+	OnCut    func(id string)
 }
 
 // NewPack creates a pack archiving under root (the session runtime root).
 func NewPack(root string) *Pack {
-	return &Pack{root: root, sent: map[string]int{}, stored: map[string]bool{}, ledger: newLedger(filepath.Join(root, "observation-pack", "ledger.jsonl"))}
+	return &Pack{root: root, sent: map[string]int{}, stored: map[string]bool{}, excerpt: map[string]int{}, ledger: newLedger(filepath.Join(root, "observation-pack", "ledger.jsonl"))}
 }
 
 // Root returns the archive root.
@@ -111,16 +124,36 @@ func pureText(m *agent.ToolResultMessage) bool {
 	return true
 }
 
+func (p *Pack) params() PackParams {
+	if p.Params == nil {
+		return DefaultPackParams()
+	}
+	return p.Params()
+}
+
 // NewObservation returns the observation for a tool result, or nil when it
-// is too small or holds a reducer receipt.
+// is too small or holds a reducer receipt. A result the pack already tracks
+// stays tracked when the threshold rises, so it is never re-inflated.
 func (p *Pack) NewObservation(m *agent.ToolResultMessage) *Observation {
 	text := m.Text()
-	if ContainsReceipt(text) || len(text) <= ThresholdBytes {
+	if ContainsReceipt(text) || len(text) <= packThresholdMin {
 		return nil
 	}
 	contentHash := SHA256(text)
 	id := "obs_" + SHA256(m.ToolName + "\x00" + m.ToolCallID + "\x00" + contentHash)[:24]
+	params := p.params()
+	p.mu.Lock()
+	_, tracked := p.sent[id]
+	excerpt, fixed := p.excerpt[id]
+	p.mu.Unlock()
+	if len(text) <= params.Threshold && !tracked {
+		return nil
+	}
+	if !fixed {
+		excerpt = params.Excerpt
+	}
 	return &Observation{
+		Excerpt:     excerpt,
 		ID:          id,
 		ContentHash: contentHash,
 		FilePath:    ObservationPath(p.root, id),
@@ -216,8 +249,9 @@ func completeLineExcerpt(text string, budget int, fromEnd bool) string {
 
 // Placeholder is the stable replacement text.
 func Placeholder(o *Observation) string {
-	headBudget := PlaceholderExcerptBytes / 2
-	tailBudget := PlaceholderExcerptBytes - headBudget
+	budget := cmp.Or(o.Excerpt, PlaceholderExcerptBytes)
+	headBudget := budget / 2
+	tailBudget := budget - headBudget
 	return strings.Join([]string{
 		fmt.Sprintf("[large tool result replaced after its first %d provider requests]", FullSends),
 		"id: " + o.ID,
@@ -288,9 +322,15 @@ func (p *Pack) Project(messages []agent.AgentMessage) []agent.AgentMessage {
 		p.ledger.append(map[string]any{"event": "placeholder", "id": observation.ID, "request": requestIndex, "sendNumber": previous + 1, "tool": observation.ToolName, "originalBytes": observation.Bytes, "originalLines": observation.Lines, "originalTokens": observation.Tokens, "placeholderBytes": len(placeholder), "placeholderTokens": placeholderTokens, "removedTokens": removed})
 		first := previous == FullSends
 		p.sent[observation.ID] = previous + 1
+		if _, ok := p.excerpt[observation.ID]; !ok {
+			p.excerpt[observation.ID] = observation.Excerpt
+		}
 		p.mu.Unlock()
 		if first && p.Notify != nil {
 			p.Notify("Observation Pack", fmt.Sprintf("%d context tokens avoided", removed), removed)
+		}
+		if first && p.OnPlaced != nil {
+			p.OnPlaced(observation.ID)
 		}
 		if !copied {
 			projected = append([]agent.AgentMessage(nil), messages...)
@@ -359,6 +399,9 @@ func (p *Pack) ProjectHalfLife(messages []agent.AgentMessage, keep int) []agent.
 		id, err := p.Archive(result.ToolName, result.ToolCallID, text)
 		if err != nil {
 			continue
+		}
+		if p.OnCut != nil {
+			p.OnCut(id)
 		}
 		stub := strings.Join([]string{
 			fmt.Sprintf("[older tool output cut to an excerpt: %d bytes, %d lines; the full text is %s, read it with obs_recall {\"id\":\"%s\",\"offset\":0}, or re-run the tool if the state may have changed]", len(text), countLines(text), id, id),

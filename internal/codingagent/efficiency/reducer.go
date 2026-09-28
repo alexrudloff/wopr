@@ -48,6 +48,13 @@ type Reducer struct {
 	journal  *ledger
 	// Notify reports bytes removed from future prompts.
 	Notify func(mechanism, saving string, tokens int)
+	// MinBytes returns the smallest log to reduce for the model serving
+	// the conversation; nil means ReducerMinBytes.
+	MinBytes func() int
+	// OnVerdict reports whether a reducer model's receipt verified, and
+	// OnApplied the archive path of each receipt applied.
+	OnVerdict func(provider, model string, ok bool)
+	OnApplied func(path string)
 }
 
 // NewReducer creates a reducer archiving under root.
@@ -222,7 +229,11 @@ func (r *Reducer) Reduce(ctx context.Context, toolCallID, toolName string, args 
 		return nil
 	}
 	body := c.body
-	if len(body) < ReducerMinBytes {
+	minBytes := ReducerMinBytes
+	if r.MinBytes != nil {
+		minBytes = r.MinBytes()
+	}
+	if len(body) < minBytes {
 		return nil
 	}
 	if len([]rune(body)) > ReducerMaxChars {
@@ -262,6 +273,9 @@ func (r *Reducer) Reduce(ctx context.Context, toolCallID, toolName string, args 
 		return nil
 	}
 	receipt, reason := ValidateReceipt(response.Text, archive, body, result.IsError)
+	if r.OnVerdict != nil {
+		r.OnVerdict(response.Provider, response.Model, receipt != nil)
+	}
 	if receipt == nil {
 		fallback(reason, map[string]any{"outputHead": text.Clip(response.Text, 600)})
 		return nil
@@ -272,6 +286,9 @@ func (r *Reducer) Reduce(ctx context.Context, toolCallID, toolName string, args 
 		return nil
 	}
 	r.journal.append(map[string]any{"kind": "applied", "toolCallId": toolCallID, "commandSha256": SHA256(c.command), "sourceSha256": archive.Hash, "sourceBytes": archive.Bytes, "receiptSha256": SHA256(text), "receiptBytes": len(text), "evidenceCount": len(receipt.Evidence), "uncertain": receipt.Uncertain})
+	if r.OnApplied != nil {
+		r.OnApplied(archive.Path)
+	}
 	if r.Notify != nil {
 		r.Notify("Evidence Reducer", formatBytesSaved(archive.Bytes-len(text)), max(0, archive.Bytes-len(text))/4)
 	}

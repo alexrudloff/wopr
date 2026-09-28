@@ -411,7 +411,7 @@ func (s *Session) compactionSettingsFor(model *ai.Model) compaction.CompactionSe
 	provider, modelID, window, maxOutput := "", "", 0, 0
 	if model != nil {
 		provider, modelID = providerID(model), model.ID
-		window, maxOutput = model.Capabilities.ContextWindow, model.Capabilities.MaxOutputTokens
+		window, maxOutput = s.effectiveWindow(model), model.Capabilities.MaxOutputTokens
 	}
 	cfg := s.services.SettingsManager().GetModelCompactionSettings(provider, modelID)
 	return compaction.CompactionSettings{

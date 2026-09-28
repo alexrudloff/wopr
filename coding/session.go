@@ -930,6 +930,7 @@ func (s *Session) Close() error {
 	s.AbortBranchSummary()
 	s.closeCacheWarming()
 	s.closeMCP()
+	s.learner().Close()
 	s.closeOnce.Do(func() {
 		close(s.closeDone)
 	})
@@ -2283,7 +2284,7 @@ func (s *Session) checkCompaction(ctx context.Context, assistantMsg *agent.Assis
 	default:
 		contextTokens = directContextTokens
 	}
-	if compaction.ShouldCompact(contextTokens, contextWindow, settings) {
+	if compaction.ShouldCompact(contextTokens, s.effectiveWindow(model), settings) {
 		return s.autoCompactAndDecide(ctx, "threshold", false), nil
 	}
 	return false, nil

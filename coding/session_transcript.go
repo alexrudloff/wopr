@@ -132,6 +132,7 @@ func (s *Session) prepareRequest(ctx context.Context, _ agent.PrepareRequestCont
 		s.reqStart, s.reqTTFT = time.Now(), 0
 	}
 	s.efficiencyRecordRequest(projected)
+	s.learnRequest(model, projected)
 	thinking = s.boostedThinking(model, thinking)
 	s.requestModel.Store(model)
 	return &agent.AgentRequestUpdate{Context: projected, Model: model, ThinkingLevel: &thinking}
@@ -147,11 +148,12 @@ func (s *Session) prepareNextTurn(ctx context.Context, turn agent.PrepareNextTur
 		projection := s.inner.BuildSessionProjection()
 		tokens := compaction.EstimateProjectedContextTokens(projection, s.currentBranch()).Tokens
 		settings := s.compactionSettings()
-		if compaction.ShouldCompact(tokens, model.Capabilities.ContextWindow, settings) && s.pruneBeforeCompaction() {
+		window := s.effectiveWindow(model)
+		if compaction.ShouldCompact(tokens, window, settings) && s.pruneBeforeCompaction() {
 			// Pruning may bring the context back under the threshold.
 			tokens = compaction.EstimateProjectedContextTokens(s.inner.BuildSessionProjection(), s.currentBranch()).Tokens
 		}
-		if compaction.ShouldCompact(tokens, model.Capabilities.ContextWindow, settings) {
+		if compaction.ShouldCompact(tokens, window, settings) {
 			s.runAutoCompaction(ctx, "threshold", false)
 		} else {
 			s.pruneMaybeOffer(tokens, model.Capabilities.ContextWindow)

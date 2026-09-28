@@ -148,6 +148,23 @@ More keys in `efficiency.json`, each on by default:
   under 10% moves a warm orchestrator at the next turn. The route reason
   says so: `quota: Claude 5h 82% used → ChatGPT wk 41% used`. A pinned tier
   is left alone.
+- `learn`: every model starts from the numbers above and is tuned from real
+  sessions, in small bounded steps, once a knob has enough events since it
+  last moved (8, or 5 compactions). Values are per provider/model in
+  `~/.wopr/agent/efficiency-learned.json`; delete the file to reset every
+  model. `/harness` lists the values that differ from the defaults.
+
+  | Signal | Knob | Step | Range |
+  |---|---|---|---|
+  | Placeholders recalled with `obs_recall` within 6 requests: over 40% / under 10% | ObservationPack threshold and excerpt | ×1.25 / ×0.8 | 4–32 KB, 512 B–4 KB |
+  | Half-life cuts recalled: over 30% / under 5% | results kept whole | +1 / −1 | 2–12 |
+  | Receipts whose raw log the model reads back: over 30% / under 5% | smallest log reduced | ×1.5 / ×0.75 | 2–64 KB |
+  | A reducer model's receipts failing verification over 50% | that model is skipped as reducer, tried every 10th time | | |
+  | Files read before a compaction read again within 6 requests: over 50% / under 20% of compactions | window share (compaction point and routing fit) | +5 / −5 points | 50–100% of the window |
+  | Stall nudges at least twice as frequent from a tenth of the window up (20+ requests, 3+ stalls there) | window share | down to that tenth | 50–100% |
+
+  The window share never exceeds the window you set; routing checks fit
+  and compaction triggers against the learned share of it.
 
 ## Minimal-code discipline
 

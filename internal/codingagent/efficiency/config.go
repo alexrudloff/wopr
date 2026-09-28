@@ -48,6 +48,9 @@ type Config struct {
 	// ApplyPatch declares the apply_patch tool in place of edit to OpenAI
 	// GPT and Codex models, whose training uses that patch format.
 	ApplyPatch bool `json:"applyPatch"`
+	// Learn tunes the numbers above per model from real sessions (see
+	// Learner).
+	Learn bool `json:"learn"`
 	// QuotaBalance moves routed work to a similarly ranked model on another
 	// subscription plan when the top pick's plan gets tight.
 	QuotaBalance bool `json:"quotaBalance"`
@@ -68,6 +71,7 @@ func DefaultConfig() Config {
 		LazyTools:                 true,
 		ApplyPatch:                true,
 		QuotaBalance:              true,
+		Learn:                     true,
 	}
 }
 
@@ -96,7 +100,7 @@ func Load(agentDir string) (Config, error) {
 		"version": true, "actionFusion": true, "observationPack": true, "evidencePreservingReducer": true,
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
-		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true, "applyPatch": true, "quotaBalance": true,
+		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true, "applyPatch": true, "quotaBalance": true, "learn": true,
 	}
 	for key := range raw {
 		if !known[key] {

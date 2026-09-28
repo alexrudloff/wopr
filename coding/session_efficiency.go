@@ -24,6 +24,7 @@ type sessionEfficiency struct {
 	pack      *efficiency.Pack
 	reducer   *efficiency.Reducer
 	compact   *efficiency.Manager
+	learner   *efficiency.Learner
 	// boundaryReason marks the compaction this session selected at a plan
 	// boundary so RecordCompaction can carry its cache debt.
 	boundaryReason string
@@ -38,7 +39,11 @@ func (s *Session) initEfficiency() {
 		state.loadError = err.Error()
 		state.cfg = efficiency.DefaultConfig()
 	}
+	state.learner = efficiency.LoadLearner(s.services.AgentDir(), state.cfg.Learn)
 	s.efficiency = state
+	if state.learner.On() {
+		s.agent.AddAfterToolCallHook(s.learnAfterToolCall)
+	}
 	if !state.cfg.Enabled() {
 		return
 	}
@@ -62,6 +67,9 @@ func (s *Session) initEfficiency() {
 	if state.cfg.ObservationPack && state.root != "" {
 		state.pack = efficiency.NewPack(state.root)
 		state.pack.Notify = notify
+		state.pack.Params = func() efficiency.PackParams { return state.learner.PackParams(modelSpec(s.activeModel())) }
+		state.pack.OnPlaced = func(id string) { state.learner.Placed(modelSpec(s.activeModel()), id) }
+		state.pack.OnCut = func(id string) { state.learner.Cut(modelSpec(s.activeModel()), id) }
 		recall := efficiency.NewRecallTool(state.pack)
 		recall.Notify = notify
 		extra = append(extra, recall)
@@ -69,6 +77,9 @@ func (s *Session) initEfficiency() {
 	if state.cfg.EvidencePreservingReducer && state.root != "" {
 		state.reducer = efficiency.NewReducer(state.root, s.reducerCompleter())
 		state.reducer.Notify = notify
+		state.reducer.MinBytes = func() int { return state.learner.ReducerMinBytes(modelSpec(s.activeModel())) }
+		state.reducer.OnVerdict = func(provider, model string, ok bool) { state.learner.ReducerVerdict(provider+"/"+model, ok) }
+		state.reducer.OnApplied = func(path string) { state.learner.ReceiptApplied(modelSpec(s.activeModel()), path) }
 		s.agent.AddAfterToolCallHook(s.efficiencyAfterToolCall)
 	}
 	if state.cfg.OnlineContextCompact {
@@ -112,6 +123,10 @@ func (s *Session) EfficiencyStatus() string {
 	fmt.Fprintf(&b, "- Action Fusion: %s\n- Observation Pack: %s\n- Evidence-Preserving Reducer: %s\n- Online Context Compact: %s (cache write/read ratio %.1f)\n",
 		onOff(st.cfg.ActionFusion), onOff(st.cfg.ObservationPack), onOff(st.cfg.EvidencePreservingReducer), onOff(st.cfg.OnlineContextCompact), st.cfg.CacheWriteReadRatio)
 	fmt.Fprintf(&b, "- Quota balance: %s\n", onOff(st.cfg.QuotaBalance))
+	fmt.Fprintf(&b, "- Learning: %s\n", onOff(st.cfg.Learn))
+	for _, line := range st.learner.Summary() {
+		fmt.Fprintf(&b, "  - %s\n", line)
+	}
 	if st.root != "" {
 		fmt.Fprintf(&b, "- archives: %s\n", st.root)
 	} else if st.cfg.ObservationPack || st.cfg.EvidencePreservingReducer {
@@ -137,7 +152,7 @@ func (s *Session) efficiencyProject(messages []agent.AgentMessage) []agent.Agent
 	messages = s.efficiency.pack.Project(messages)
 	if s.efficiency.cfg.ToolOutputHalfLife {
 		if model := s.activeModel(); model != nil {
-			messages = s.efficiency.pack.ProjectHalfLife(messages, efficiency.HalfLifeKeep(model.Capabilities.ContextWindow))
+			messages = s.efficiency.pack.ProjectHalfLife(messages, s.efficiency.learner.HalfLifeKeep(modelSpec(model), model.Capabilities.ContextWindow))
 		}
 	}
 	return messages
@@ -168,6 +183,7 @@ func (s *Session) recordCompaction(reason string) {
 	if s.efficiency != nil && s.efficiency.compact != nil {
 		s.efficiency.compact.RecordCompaction(reason == s.efficiency.boundaryReason)
 	}
+	s.learner().Compacted(modelSpec(s.activeModel()))
 	s.pruneCold()
 }
 
@@ -207,7 +223,7 @@ func (s *Session) reducerCompleter() efficiency.ReducerCompleter {
 			}
 			model = built
 		}
-		if model == nil || s.objectiveGate(model) != nil {
+		if model == nil || s.objectiveGate(model) != nil || !s.learner().ReducerUsable(modelSpec(model)) {
 			return efficiency.ReducerResponse{}, efficiency.ErrReducerUnavailable
 		}
 		callCtx, cancel := context.WithTimeout(ctx, timeout)
@@ -304,10 +320,7 @@ func (c efficiencyCompactor) SystemPromptTokens() int {
 }
 
 func (c efficiencyCompactor) ContextWindow() int {
-	if model := c.s.activeModel(); model != nil {
-		return model.Capabilities.ContextWindow
-	}
-	return 0
+	return c.s.effectiveWindow(c.s.activeModel())
 }
 
 func (c efficiencyCompactor) OpenItems() int {
@@ -356,4 +369,52 @@ func (st efficiencyStore) LoadState() (efficiency.OnlineState, bool) {
 		return state, true
 	}
 	return efficiency.OnlineState{}, false
+}
+
+// modelSpec is provider/model, the key of learned values.
+func modelSpec(m *ai.Model) string {
+	if m == nil {
+		return ""
+	}
+	return providerID(m) + "/" + m.ID
+}
+
+// learner is the session's efficiency learner, or nil before it loads.
+func (s *Session) learner() *efficiency.Learner {
+	if s.efficiency == nil {
+		return nil
+	}
+	return s.efficiency.learner
+}
+
+// effectiveWindow is the window routing and compaction give model: its
+// configured window, or less once learning finds it stalls earlier.
+func (s *Session) effectiveWindow(model *ai.Model) int {
+	if model == nil {
+		return 0
+	}
+	return s.learner().EffectiveWindow(modelSpec(model), model.Capabilities.ContextWindow)
+}
+
+// learnRequest records a provider request for the learner.
+func (s *Session) learnRequest(model *ai.Model, messages []agent.AgentMessage) {
+	if l := s.learner(); l.On() && model != nil {
+		l.Tick(modelSpec(model), compaction.EstimateMessagesTokens(messages), model.Capabilities.ContextWindow)
+	}
+}
+
+// learnAfterToolCall shows the learner each tool call: recalls, readbacks
+// of reduced logs, and file reads.
+func (s *Session) learnAfterToolCall(_ context.Context, _, toolName string, args json.RawMessage, _ agent.AgentToolResult) agent.AfterToolCallResult {
+	l := s.learner()
+	if toolName == "obs_recall" {
+		var in struct {
+			ID string `json:"id"`
+		}
+		if json.Unmarshal(args, &in) == nil {
+			l.Recalled(in.ID)
+		}
+	}
+	l.ToolCall(toolName, string(args))
+	return agent.AfterToolCallResult{}
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+	"github.com/alexrudloff/wopr/internal/codingagent/compaction"
 )
 
 // Stall detection: a small model that repeats the same tool call, or reads
@@ -92,6 +93,9 @@ func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage 
 	}
 	s.stall.nudged[key] = true
 	s.stall.count++
+	if model := s.activeModel(); model != nil {
+		s.learner().Stalled(modelSpec(model), compaction.EstimateMessagesTokens(context), model.Capabilities.ContextWindow)
+	}
 	return []agent.AgentMessage{{Custom: map[string]any{
 		"role":       agent.RoleCustom,
 		"customType": stallMessageType,
