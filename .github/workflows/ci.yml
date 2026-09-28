@@ -1,9 +1,10 @@
 name: CI
 
-# Pull requests carry the full verification; a squash merge lands exactly the
-# tested tree, so pushes to main do not run it again. A weekly run keeps main's
-# health and the CI badge current.
+# Every push to main and every pull request runs the full verification; a
+# weekly run keeps main's health current.
 on:
+  push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: '41 6 * * 1'
