@@ -25,7 +25,7 @@ import (
 // temporary HOME.
 
 const (
-	installVersion  = "0.2.0"
+	installVersion  = "0.1.0"
 	installReleases = "https://github.com/alexrudloff/wopr/releases"
 )
 

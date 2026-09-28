@@ -36,7 +36,7 @@ SHA-256 against the release's `SHA256SUMS`, and installs `wopr` to
 curl -fsSL https://raw.githubusercontent.com/alexrudloff/wopr/main/install.sh | sh
 ```
 
-Set `WOPR_VERSION=0.2.0` to install a specific release and `WOPR_INSTALL_DIR`
+Set `WOPR_VERSION=0.1.0` to install a specific release and `WOPR_INSTALL_DIR`
 to install elsewhere. On Windows, download the `.zip` archive from the release
 page. `wopr update` replaces a release binary with the latest release after it
 verifies the release's Ed25519-signed `SHA256SUMS` and the archive's SHA-256.
@@ -52,7 +52,7 @@ go install github.com/alexrudloff/wopr/cmd/wopr@latest
 Use an exact version for a reproducible installation:
 
 ```bash
-go install github.com/alexrudloff/wopr/cmd/wopr@v0.2.0
+go install github.com/alexrudloff/wopr/cmd/wopr@v0.1.0
 ```
 
 Go writes the `wopr` executable to `GOBIN`. When `GOBIN` is empty, Go uses the
@@ -71,7 +71,7 @@ Update a Go installation by running `go install` again with a newer exact
 version or with `@latest`. `wopr update` also works: it replaces the executable
 with the signed release binary.
 
-Each release tags the root module (for example `v0.2.0`).
+Each release tags the root module (for example `v0.1.0`).
 
 ## Start WOPR
 

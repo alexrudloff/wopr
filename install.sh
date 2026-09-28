@@ -12,7 +12,7 @@
 # replaces the binary.
 #
 # Environment:
-#   WOPR_VERSION        install this version (for example 0.2.0) instead of the latest
+#   WOPR_VERSION        install this version (for example 0.1.0) instead of the latest
 #   WOPR_INSTALL_DIR    install directory (default: $HOME/.local/bin)
 #   WOPR_RELEASES       releases URL (default: https://github.com/alexrudloff/wopr/releases)
 #

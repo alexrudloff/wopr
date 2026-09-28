@@ -7,4 +7,4 @@ package codingagent
 // It is empty until the maintainer generates the release key pair; see
 // docs/project/RELEASING.md ("One-time signing key setup"). While it is empty,
 // self-update fails closed with "release signing key not configured".
-const ReleaseSigningPublicKey = ""
+const ReleaseSigningPublicKey = "NARUZGcG7SoXSjtVV3MyFZOtvv8wM6j60305trWYHRM="
