@@ -33,7 +33,7 @@ func (m *InteractiveMode) newAssistantMessageBlock() *tui.AssistantMessageBlock 
 }
 
 // updateAssistantMessageBlock applies the authoritative content snapshot and terminal state on both live events and session redraws. Tool calls are invisible boundaries between thinking runs.
-func updateAssistantMessageBlock(block *tui.AssistantMessageBlock, message *agent.AssistantMessage) {
+func (m *InteractiveMode) updateAssistantMessageBlock(block *tui.AssistantMessageBlock, message *agent.AssistantMessage) {
 	segments := make([]tui.AssistantSegment, 0, len(message.Content))
 	hasToolCalls := false
 	for _, content := range message.Content {
@@ -49,7 +49,7 @@ func updateAssistantMessageBlock(block *tui.AssistantMessageBlock, message *agen
 	}
 	block.SetContent(segments)
 	block.SetHasToolCalls(hasToolCalls)
-	block.SetTerminalError(string(message.StopReason), message.ErrorMessage)
+	block.SetTerminalError(string(message.StopReason), m.assistantErrorText(message))
 }
 
 // assistantMarkdownTransform builds the display-only transform for assistant text or thinking with its distinct messageType and this block's live streaming state, mode, and theme.

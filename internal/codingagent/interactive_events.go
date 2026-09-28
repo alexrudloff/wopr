@@ -113,7 +113,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		if e.Message.Assistant != nil {
 			// One block per assistant message: handles thinking + text.
 			m.evCurrentBlock = m.newAssistantMessageBlock()
-			updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
+			m.updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
 			m.appendToChat(m.evCurrentBlock)
 			m.assistantBlocks = append(m.assistantBlocks, m.evCurrentBlock)
 			m.tuiInst.RequestRender()
@@ -121,7 +121,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 
 	case agent.MessageUpdateEvent:
 		if m.evCurrentBlock != nil && e.Message.Assistant != nil {
-			updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
+			m.updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
 			m.tuiInst.RequestRender()
 		}
 		var toolIndex int
@@ -193,7 +193,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 	case agent.MessageEndEvent:
 		defer m.refreshFooterContextUsage()
 		if m.evCurrentBlock != nil && e.Message.Assistant != nil {
-			updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
+			m.updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
 			m.lastAssistantText = strings.TrimSpace(m.evCurrentBlock.Text())
 		}
 		if e.Message.Assistant != nil {
@@ -207,6 +207,9 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 			}
 			if (e.Message.Assistant.StopReason == "error" || e.Message.Assistant.StopReason == "aborted") && e.Message.Assistant.ErrorMessage != "" {
 				statusText, _ := formatProviderErrorForDisplay(string(e.Message.Assistant.StopReason), e.Message.Assistant.ErrorMessage)
+				if text, ok := networkFailureText(m.providerName(e.Message.Assistant.Provider), e.Message.Assistant.ErrorMessage); ok {
+					statusText = text
+				}
 				m.statusLine.Flash(statusText)
 			}
 		}
@@ -222,7 +225,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 			if e.Message.Assistant.StopReason == "error" {
 				errMsg = "Error"
 			}
-			errMsg = cmp.Or(e.Message.Assistant.ErrorMessage, errMsg)
+			errMsg = cmp.Or(m.assistantErrorText(e.Message.Assistant), errMsg)
 			for _, comp := range m.toolByID {
 				comp.SetResult(errMsg, true, 0)
 			}

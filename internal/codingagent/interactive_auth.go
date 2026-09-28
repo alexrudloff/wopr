@@ -1,6 +1,7 @@
 package codingagent
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/tui"
 )
@@ -560,6 +562,49 @@ func formatProviderErrorForDisplay(stopReason, raw string) (statusText, chatText
 		chatText = chatText[:357] + "..."
 	}
 	return statusText, chatText
+}
+
+// networkFailures name the network failures a user can act on, matched in
+// the "network error: …" text the provider transport reports.
+var networkFailures = []struct{ match, what string }{
+	{"connection refused", "isn't reachable (connection refused)"},
+	{"no such host", "isn't reachable (host not found)"},
+	{"i/o timeout", "didn't answer (timed out)"},
+	{"handshake timeout", "didn't answer (timed out)"},
+	{"stream interrupted", "stopped responding (connection closed)"},
+	{"closed network connection", "stopped responding (connection closed)"},
+	{"connection reset", "stopped responding (connection reset)"},
+	{"unexpected eof", "stopped responding (connection closed)"},
+	{"broken pipe", "stopped responding (connection closed)"},
+}
+
+// networkFailureText rewrites a network failure as a sentence naming the
+// provider and suggesting what to do; ok is false for any other error.
+func networkFailureText(provider, raw string) (text string, ok bool) {
+	lower := strings.ToLower(raw)
+	if !strings.Contains(lower, "network error") {
+		return "", false
+	}
+	what := "stopped responding (network error)"
+	for _, f := range networkFailures {
+		if strings.Contains(lower, f.match) {
+			what = f.what
+			break
+		}
+	}
+	return cmp.Or(provider, "The model server") + " " + what + ". Try again, or switch models with /model or Tab.", true
+}
+
+// assistantErrorText is the error a failed reply shows: a readable sentence
+// for network failures, else the provider's own message.
+func (m *InteractiveMode) assistantErrorText(message *agent.AssistantMessage) string {
+	if message == nil {
+		return ""
+	}
+	if text, ok := networkFailureText(m.providerName(message.Provider), message.ErrorMessage); ok {
+		return text
+	}
+	return message.ErrorMessage
 }
 
 func compactProviderError(raw string) string {

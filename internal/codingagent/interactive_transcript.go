@@ -219,7 +219,7 @@ func (m *InteractiveMode) renderSessionEntries() {
 			// AssistantMessage.Thinking accumulator is not serialized, so it
 			// is empty for every message read back from the session file.
 			block := m.newAssistantMessageBlock()
-			updateAssistantMessageBlock(block, msg.Assistant)
+			m.updateAssistantMessageBlock(block, msg.Assistant)
 			m.chatContainer.Add(block)
 			m.assistantBlocks = append(m.assistantBlocks, block)
 			// Tool-use blocks.
