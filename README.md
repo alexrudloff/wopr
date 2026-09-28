@@ -125,4 +125,4 @@ wopr started from [PiG](https://github.com/MichaelKinsy/PiG), a Go port of the
 [Pi](https://github.com/earendil-works/pi) coding agent. Its efficiency
 mechanisms come from NVIDIA's [SoL-Pi](https://github.com/NVlabs/SoL-Pi), and its
 minimal-code discipline from [Ponytail](https://ponytail.dev/). The terminal
-interface is heavily inspired by [opencode](https://opencode.ai). Thank you.
+interface is heavily inspired by [opencode](https://opencode.ai). Thanks :)
