@@ -58,42 +58,37 @@ func modeSpec(value string) (router.Objective, bool) {
 	return router.ParseObjective(value)
 }
 
-// nextModelMode is where Tab moves: through the routing modes in order,
-// then the configured models in order, and from the last back to the first
-// mode. Without routing there are no modes and Tab cycles the models. auto
+// stepModelMode is where Tab (step 1) and shift+tab (step -1) move: through
+// the routing modes in order, then the configured models in order, wrapping
+// around. Without routing there are no modes and it cycles the models. auto
 // reports that the router picks the orchestrator under mode; otherwise
 // current is the pinned model. It returns a mode name or a model spec.
-func nextModelMode(auto bool, mode, current string, modes, models []string) string {
-	if len(modes) == 0 {
-		if len(models) == 0 {
-			return current
-		}
-		return models[(slices.Index(models, current)+1)%len(models)]
-	}
-	if auto {
-		i := slices.Index(modes, mode)
-		switch {
-		case i >= 0 && i < len(modes)-1:
-			return modes[i+1]
-		case i >= 0 && len(models) > 0:
-			return models[0]
-		}
-		return modes[0]
+func stepModelMode(step int, auto bool, mode, current string, modes, models []string) string {
+	stops := append(slices.Clone(modes), models...)
+	if len(stops) == 0 {
+		return current
 	}
 	i := slices.Index(models, current)
-	switch {
-	case len(models) == 0 || i == len(models)-1:
-		return modes[0]
-	case i < 0:
-		return models[0]
+	if i >= 0 {
+		i += len(modes)
 	}
-	return models[i+1]
+	if auto && len(modes) > 0 {
+		i = slices.Index(modes, mode)
+	}
+	if i < 0 {
+		// A model outside the list: start at the first or last model.
+		if len(models) > 0 && step > 0 {
+			return models[0]
+		}
+		return stops[len(stops)-1]
+	}
+	return stops[((i+step)%len(stops)+len(stops))%len(stops)]
 }
 
-// cycleModelMode moves to the next stop Tab offers: the routing modes (only
-// while routing is on), then the configured models, which run with the
-// auto mode for subagents.
-func (m *InteractiveMode) cycleModelMode(ctx context.Context) {
+// cycleModelMode moves step stops through what Tab offers: the routing modes
+// (only while routing is on), then the configured models, which run with the
+// auto mode for subagents. Tab steps forward, shift+tab back.
+func (m *InteractiveMode) cycleModelMode(ctx context.Context, step int) {
 	r := m.sessionRouter()
 	if r == nil {
 		return
@@ -112,7 +107,7 @@ func (m *InteractiveMode) cycleModelMode(ctx context.Context) {
 	// A model that no longer switches (signed out, server gone) is skipped,
 	// so Tab never sticks on it.
 	for range len(models) + 1 {
-		next := nextModelMode(auto, mode, current, modes, models)
+		next := stepModelMode(step, auto, mode, current, modes, models)
 		if o, ok := modeSpec(next); ok {
 			m.selectRoutingMode(o, false)
 			return

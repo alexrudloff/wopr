@@ -97,7 +97,7 @@ mode; see [Basic rules](#basic-rules) for Basic.
 
 Choose a mode in `/model` (the Modes section comes first in each picker),
 or cycle the orchestrator's with Tab on an empty prompt (auto, cost, speed,
-quality, uncensored, then your configured models). A mode picked for the orchestrator (Tab, the Orchestrator picker, or
+quality, uncensored, then your configured models; Shift+Tab goes back). A mode picked for the orchestrator (Tab, the Orchestrator picker, or
 `/model <mode>`) is the subagents' mode too. A model picked for the
 orchestrator changes only the orchestrator; the subagents keep their
 choice. `/model` → Subagents splits them, and that choice stays until a

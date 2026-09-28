@@ -386,10 +386,16 @@ func (m *InteractiveMode) handleKey(ctx context.Context, data string) error {
 	if m.handleLeaderKey(ctx, data) {
 		return nil
 	}
-	// Tab on an empty prompt cycles auto and the recent models.
-	if m.editor.Text() == "" && !m.editor.AutocompleteOpen() && tui.MatchesKeyID(data, "tab") {
-		m.cycleModelMode(ctx)
-		return nil
+	// Tab on an empty prompt cycles the modes and models; shift+tab goes back.
+	if m.editor.Text() == "" && !m.editor.AutocompleteOpen() {
+		switch {
+		case tui.MatchesKeyID(data, "tab"):
+			m.cycleModelMode(ctx, 1)
+			return nil
+		case tui.MatchesKeyID(data, "shift+tab"):
+			m.cycleModelMode(ctx, -1)
+			return nil
+		}
 	}
 
 	action := keyAction(data, m.keybindings)
