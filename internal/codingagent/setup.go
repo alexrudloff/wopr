@@ -66,8 +66,12 @@ func (m *InteractiveMode) setupCommand(string) error {
 	return nil
 }
 
-// runSetupModal feeds md on the setup screen until it is done.
+// runSetupModal feeds md on the setup screen until it is done, or in a
+// dialog when the setup screen isn't open (/upgrade's progress).
 func (m *InteractiveMode) runSetupModal(md modal) bool {
+	if m.setup == nil {
+		return m.runDialog(md, dialogMedium)
+	}
 	previous := m.setup.body
 	m.setup.body = md.component
 	defer func() { m.setup.body = previous }()
