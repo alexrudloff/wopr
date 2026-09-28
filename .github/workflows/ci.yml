@@ -1,0 +1,204 @@
+name: CI
+
+# Pull requests carry the full verification; a squash merge lands exactly the
+# tested tree, so pushes to main do not run it again. A weekly run keeps main's
+# health and the CI badge current.
+on:
+  pull_request:
+  schedule:
+    - cron: '41 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Go comes from go.mod.
+
+jobs:
+  changes:
+    name: Changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      product: ${{ steps.classify.outputs.product }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the change
+        id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Only a pull request that changes nothing but project prose and
+          # repository settings skips the product suites; the docs job below
+          # still checks those files. Everything else, and every scheduled or
+          # manual run, verifies the product.
+          product=true
+          if [ "$EVENT" = pull_request ]; then
+            product=false
+            while IFS= read -r path; do
+              case "$path" in
+                README.md|CHANGELOG.md|media/*) ;;
+                *) product=true; echo "product change: $path" ;;
+              esac
+            done < <(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          fi
+          echo "product=$product" >> "$GITHUB_OUTPUT"
+          echo "product=$product"
+
+  docs:
+    name: Project documents
+    needs: [changes]
+    if: needs.changes.outputs.product == 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check the README, changelog and repository settings
+        run: |
+          go test ./tests/ci-images/ ./tests/docs-drift/
+
+  linux:
+    name: Linux / ${{ matrix.shard }}
+    needs: [changes]
+    if: needs.changes.outputs.product == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [build, test-fast, test-cli, race, integration, docs]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install test tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes tmux fd-find ripgrep
+      - name: Verify toolchain identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOVERSION)" = "$(awk '$1 == "toolchain" { print $2; exit }' go.mod)"
+      - name: Run WOPR verification shard
+        env:
+          CI: '1'
+          SHARD: ${{ matrix.shard }}
+        run: make "ci-$SHARD"
+
+  verify:
+    name: Linux verification
+    needs: [changes, linux]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every Linux shard
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          PRODUCT: ${{ needs.changes.outputs.product }}
+          RESULT: ${{ needs.linux.result }}
+        # Shards are skipped only when the change classifier succeeded and
+        # found no product change.
+        run: test "$RESULT" = success || { test "$CHANGES" = success && test "$PRODUCT" = false && test "$RESULT" = skipped; }
+
+  windows:
+    name: Windows native paths
+    needs: [changes]
+    if: needs.changes.outputs.product == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install native test tools
+        shell: pwsh
+        run: |
+          choco install fd ripgrep --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw "Native test tool installation failed" }
+          # Chocolatey puts shims on PATH that find the real binary relative to
+          # their own location, so a copied or linked shim cannot run. Put the
+          # real binaries first, as users install them.
+          foreach ($tool in @('fd', 'ripgrep')) {
+            $exe = Get-ChildItem "$env:ChocolateyInstall\lib\$tool" -Recurse -Include fd.exe, rg.exe | Select-Object -First 1
+            if (-not $exe) { throw "$tool binary not found under Chocolatey lib" }
+            Add-Content -Path $env:GITHUB_PATH -Value $exe.DirectoryName
+          }
+          fd --version
+          if ($LASTEXITCODE -ne 0) { throw "fd is not available" }
+          rg --version
+          if ($LASTEXITCODE -ne 0) { throw "ripgrep is not available" }
+      - name: Build and test native Windows paths
+        shell: pwsh
+        run: |
+          $acceptanceRoot = Join-Path $env:RUNNER_TEMP 'wopr native acceptance'
+          New-Item -ItemType Directory -Force -Path $acceptanceRoot | Out-Null
+          $env:WOPR_HOME = Join-Path $acceptanceRoot 'config with spaces'
+          $env:WOPR_CODING_AGENT_DIR = Join-Path $env:WOPR_HOME 'agent'
+          go build -trimpath -o bin/wopr.exe ./cmd/wopr
+          if ($LASTEXITCODE -ne 0) { throw "Windows build failed" }
+          & .\bin\wopr.exe --help | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "wopr.exe --help failed" }
+          & .\bin\wopr.exe --version
+          if ($LASTEXITCODE -ne 0) { throw "wopr.exe --version failed" }
+          $env:WOPR_TEST_FAUX = '1'
+          $printOutput = & .\bin\wopr.exe --model test-faux/faux-1 --no-session --print 'What is 20+22?'
+          if ($LASTEXITCODE -ne 0 -or $printOutput -notmatch '42') { throw "Windows print smoke failed: $printOutput" }
+          '{"id":"state","type":"get_state"}' | & .\bin\wopr.exe --mode rpc --model test-faux/faux-1 --no-session | Out-File -Encoding utf8 (Join-Path $acceptanceRoot 'rpc.jsonl')
+          if ($LASTEXITCODE -ne 0) { throw "Windows RPC smoke failed" }
+          if ((Get-Content -Raw (Join-Path $acceptanceRoot 'rpc.jsonl')) -notmatch '"type":"response"') { throw "Windows RPC response missing" }
+          go test ./ai ./internal/codingagent/tools ./tui
+          if ($LASTEXITCODE -ne 0) { throw "Windows tests failed" }
+
+  macos:
+    name: macOS native
+    needs: [changes]
+    if: needs.changes.outputs.product == 'true'
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Install native test tools
+        shell: bash
+        run: brew install fd ripgrep
+      - name: Build and test native macOS paths
+        run: |
+          set -euo pipefail
+          go build -trimpath -o bin/wopr ./cmd/wopr
+          ./bin/wopr --version
+          go test ./ai ./internal/codingagent/tools ./tui

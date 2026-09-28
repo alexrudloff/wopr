@@ -1,0 +1,70 @@
+bin/
+/out/
+/build/
+/dist/
+/coverage/
+/evidence/
+node_modules/
+**/target/
+**/__pycache__/
+**/*.py[cod]
+**/.cache/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/coverage.xml
+*.test
+*.out
+*.prof
+*.pprof
+*.trace
+*.log
+*.pid
+*.sock
+
+# Developer-specific environment and editor state.
+.envrc
+.direnv/
+.env
+.env.*
+!.env.example
+*.local
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Common local credential files. Committed non-secret fixtures require an
+# explicit exception next to the owning fixture below.
+/*.npmrc
+/.netrc
+/.pypirc
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+credentials.json
+secrets.json
+
+# Local test artefacts, eval runs, and tmux captures.
+tmp/
+.wopr-faux-tool-started
+.wopr-live-parallel-*
+
+# Credentials a test or a WOPR_HOME override could write into the checkout.
+auth.json
+
+# Local reference checkouts; read-only material, not vendored.
+.upstream/
+
+# Stray local builds of the wopr binary (make install writes ~/.local/bin/wopr).
+/wopr
+/wopr.exe
+
+# Agent worktrees.
+.claude/worktrees/

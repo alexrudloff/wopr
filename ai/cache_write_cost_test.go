@@ -1,0 +1,94 @@
+package ai
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+// Both cases must reach provider parsing and pricing, not just CalculateCost on constructed Usage.
+func TestAnthropicStreamCacheWrite1hCost(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		breakdown string
+		wantLong  int
+		wantCost  float64
+	}{
+		{
+			name:      "mixed short and long writes",
+			breakdown: `,"cache_creation":{"ephemeral_5m_input_tokens":600000,"ephemeral_1h_input_tokens":400000}`,
+			wantLong:  400_000,
+			wantCost:  7.75,
+		},
+		{name: "missing breakdown uses short rate", wantLong: 0, wantCost: 6.25},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sse := fmt.Sprintf(`event: message_start
+data: {"type":"message_start","message":{"id":"msg_test","usage":{"input_tokens":100,"output_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":1000000%s}}}
+
+`, tc.breakdown)
+			// message_delta intentionally omits cache_creation: the start event's breakdown must survive.
+			sse += `event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":100,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":1000000}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, sse)
+			}))
+			defer server.Close()
+			provider := NewAnthropicProvider(AnthropicConfig{APIKey: "test-key", Model: "claude-opus-4-8", BaseURL: server.URL})
+			defer func() { _ = provider.Close() }()
+			stream, err := provider.Stream(t.Context(), NormalizeContext(Context{Messages: []Message{UserMessage{Content: UserText("hi")}}}), StreamOptions{
+				// The pinned case uses input=$5/M and short cache writes=$6.25/M; long writes cost 2x input.
+				ModelCost: ModelCost{Input: 5, CacheWrite: 6.25},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertStreamCacheWriteCost(t, stream, tc.wantLong, tc.wantCost)
+		})
+	}
+}
+
+func assertStreamCacheWriteCost(t *testing.T, stream *AssistantMessageEventStream, wantLong int, wantCost float64) {
+	t.Helper()
+	result := stream.Result()
+	if result.StopReason != StopReasonStop || result.ErrorMessage != "" {
+		t.Fatalf("stream failed: stop=%q error=%q", result.StopReason, result.ErrorMessage)
+	}
+	usage := result.Usage
+	if usage.CacheWrite != 1_000_000 || usage.CacheWrite1h == nil || *usage.CacheWrite1h != wantLong {
+		t.Fatalf("usage = %#v; want cacheWrite=1000000, cacheWrite1h=%d", usage, wantLong)
+	}
+	if math.Abs(usage.Cost.CacheWrite-wantCost) > 1e-10 {
+		t.Fatalf("cache write cost = %.12f, want %.12f", usage.Cost.CacheWrite, wantCost)
+	}
+	if usage.Input != 100 || usage.Output != 5 || usage.CacheRead != 0 || usage.TotalTokens != 1_000_105 {
+		t.Fatalf("usage = %#v; want input=100 output=5 cacheRead=0 total=1000105", usage)
+	}
+	var terminal AssistantMessageEvent
+	for event := range stream.Events(context.Background()) {
+		terminal = event
+	}
+	done, ok := terminal.(DoneEvent)
+	if !ok || done.Message != result {
+		t.Fatalf("terminal event = %#v, want DoneEvent with the priced result", terminal)
+	}
+}

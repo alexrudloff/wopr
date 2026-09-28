@@ -1,0 +1,84 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "wopr": "https://github.com/alexrudloff/wopr/terms#",
+    "relations": "wopr:relation"
+  },
+  "@graph": [
+    {
+      "@id": "wopr:wopr",
+      "@type": "DefinedTerm",
+      "name": "WOPR",
+      "description": "The Go implementation; executable wopr.",
+      "wopr:kind": "project",
+      "wopr:where": "coding/version/version.go",
+      "wopr:inspect": "wopr verify"
+    },
+    {
+      "@id": "wopr:session",
+      "@type": "DefinedTerm",
+      "name": "Session",
+      "description": "Append-only JSONL tree of entries for one conversation.",
+      "wopr:kind": "runtime",
+      "wopr:where": "~/.wopr/agent/sessions",
+      "wopr:inspect": "/tree, /session"
+    },
+    {
+      "@id": "wopr:model_runtime",
+      "@type": "DefinedTerm",
+      "name": "Model Runtime",
+      "description": "Session-owned model lookup, auth, completion, and streaming used by every mode.",
+      "wopr:kind": "runtime",
+      "wopr:where": "coding/",
+      "wopr:inspect": "/model, wopr --list-models"
+    },
+    {
+      "@id": "wopr:provider",
+      "@type": "DefinedTerm",
+      "name": "Provider",
+      "description": "Turns a Transcript into one Event Stream for one API.",
+      "wopr:kind": "runtime",
+      "wopr:where": "ai/",
+      "wopr:inspect": "wopr --list-models"
+    },
+    {
+      "@id": "wopr:mode",
+      "@type": "DefinedTerm",
+      "name": "Mode",
+      "description": "Interactive TUI, print, JSON event stream, or RPC over stdin/stdout.",
+      "wopr:kind": "runtime",
+      "wopr:where": "cmd/wopr",
+      "wopr:inspect": "wopr --mode rpc"
+    },
+    {
+      "@id": "wopr:resource",
+      "@type": "DefinedTerm",
+      "name": "Resource",
+      "description": "One capability: skill, prompt template, theme, or context file.",
+      "wopr:kind": "concept",
+      "wopr:where": "~/.wopr/agent, .wopr/ in a project",
+      "wopr:inspect": "wopr status --json"
+    },
+    {
+      "@type": "wopr:Relation",
+      "wopr:from": "wopr:session",
+      "wopr:relation": "owns",
+      "wopr:to": "wopr:model_runtime",
+      "description": "one per Session"
+    },
+    {
+      "@type": "wopr:Relation",
+      "wopr:from": "wopr:model_runtime",
+      "wopr:relation": "streams_through",
+      "wopr:to": "wopr:provider",
+      "description": "one Provider per request"
+    },
+    {
+      "@type": "wopr:Relation",
+      "wopr:from": "wopr:mode",
+      "wopr:relation": "drives",
+      "wopr:to": "wopr:session",
+      "description": "TUI, print, JSON, RPC share one Session path"
+    }
+  ]
+}

@@ -1,0 +1,135 @@
+{
+  "kind": "live",
+  "generated": "2026-09-27T13:38:32Z",
+  "host": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpus": 18,
+    "go": "go1.27.1"
+  },
+  "version": "0.2.0",
+  "runs": 1,
+  "tasks": [
+    "add-json-flag",
+    "fix-off-by-one",
+    "rename-function",
+    "slow-build"
+  ],
+  "results": [
+    {
+      "config": "cluster/latest",
+      "task": "add-json-flag",
+      "run": 0,
+      "passed": true,
+      "exit": 0,
+      "timed_out": false,
+      "tampered": false,
+      "wall_s": 23.78,
+      "cpu_s": 0.24,
+      "rss_mib": 40.6,
+      "metrics": {
+        "turns": 4,
+        "tool_calls": 3,
+        "polling_calls": 0,
+        "input_tokens": 16227,
+        "output_tokens": 888,
+        "cost_usd": 0,
+        "models": {
+          "cluster/latest": 4
+        }
+      },
+      "check_output": "----------------------------------------------------------------------\nRan 3 tests in 0.060s\n\nOK\n"
+    },
+    {
+      "config": "cluster/latest",
+      "task": "fix-off-by-one",
+      "run": 0,
+      "passed": true,
+      "exit": 0,
+      "timed_out": false,
+      "tampered": false,
+      "wall_s": 16.99,
+      "cpu_s": 0.15,
+      "rss_mib": 41.6,
+      "metrics": {
+        "turns": 5,
+        "tool_calls": 4,
+        "polling_calls": 0,
+        "input_tokens": 20222,
+        "output_tokens": 668,
+        "cost_usd": 0,
+        "models": {
+          "cluster/latest": 5
+        }
+      },
+      "check_output": "----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n"
+    },
+    {
+      "config": "cluster/latest",
+      "task": "rename-function",
+      "run": 0,
+      "passed": true,
+      "exit": 0,
+      "timed_out": false,
+      "tampered": false,
+      "wall_s": 27.79,
+      "cpu_s": 0.19,
+      "rss_mib": 41.2,
+      "metrics": {
+        "turns": 7,
+        "tool_calls": 9,
+        "polling_calls": 0,
+        "input_tokens": 30465,
+        "output_tokens": 1057,
+        "cost_usd": 0,
+        "models": {
+          "cluster/latest": 7
+        }
+      },
+      "check_output": "----------------------------------------------------------------------\nRan 3 tests in 0.000s\n\nOK\n"
+    },
+    {
+      "config": "cluster/latest",
+      "task": "slow-build",
+      "run": 0,
+      "passed": true,
+      "exit": 0,
+      "timed_out": false,
+      "tampered": false,
+      "wall_s": 28.14,
+      "cpu_s": 0.09,
+      "rss_mib": 40.4,
+      "metrics": {
+        "turns": 3,
+        "tool_calls": 2,
+        "polling_calls": 0,
+        "input_tokens": 10411,
+        "output_tokens": 259,
+        "cost_usd": 0,
+        "models": {
+          "cluster/latest": 3
+        }
+      }
+    }
+  ],
+  "summary": [
+    {
+      "config": "cluster/latest",
+      "passed": 4,
+      "attempts": 4,
+      "pass_rate": 100,
+      "pass_rate_sem": 0,
+      "cost_usd": 0,
+      "cost_per_task": 0,
+      "cost_per_pass": 0,
+      "input_tokens_per_task": 19331.25,
+      "output_tokens_per_task": 718,
+      "turns_per_task": 4.75,
+      "polling_calls_per_task": 0,
+      "wall_s_median": 25.79,
+      "models": {
+        "cluster/latest": 19
+      }
+    }
+  ]
+}

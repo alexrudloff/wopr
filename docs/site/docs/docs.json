@@ -1,0 +1,349 @@
+{
+  "provenance": {
+    "cli-integration.md": "adapted",
+    "cli.md": "adapted",
+    "compaction.md": "adapted",
+    "concepts.md": "wopr-authored",
+    "configuration.md": "adapted",
+    "containerization.md": "wopr-authored",
+    "custom-provider.md": "adapted",
+    "development.md": "wopr-authored",
+    "environment-variables.md": "adapted",
+    "evals.md": "wopr-authored",
+    "how-wopr-works.md": "adapted",
+    "index.md": "wopr-authored",
+    "install-troubleshooting.md": "wopr-authored",
+    "json.md": "adapted",
+    "keybindings.md": "adapted",
+    "knowledge-graph.md": "wopr-authored",
+    "llama-cpp.md": "adapted",
+    "mcp.md": "wopr-authored",
+    "message-types.md": "adapted",
+    "models.md": "adapted",
+    "prompt-templates.md": "adapted",
+    "providers.md": "adapted",
+    "quickstart.md": "wopr-authored",
+    "routing.md": "wopr-authored",
+    "rpc-commands.md": "adapted",
+    "rpc.md": "adapted",
+    "sdk.md": "wopr-authored",
+    "security.md": "wopr-authored",
+    "session-format.md": "adapted",
+    "sessions.md": "adapted",
+    "settings.md": "adapted",
+    "shell-aliases.md": "adapted",
+    "skills.md": "adapted",
+    "slash-commands.md": "adapted",
+    "terminal-setup.md": "adapted",
+    "termux.md": "adapted",
+    "themes.md": "adapted",
+    "tmux.md": "adapted",
+    "tui.md": "adapted",
+    "usage.md": "adapted",
+    "web.md": "wopr-authored",
+    "windows.md": "adapted"
+  },
+  "navigation": [
+    {
+      "title": "Get Started",
+      "items": [
+        {
+          "title": "Overview",
+          "path": "index.md"
+        },
+        {
+          "title": "Quickstart",
+          "path": "quickstart.md"
+        },
+        {
+          "title": "How WOPR Works",
+          "path": "how-wopr-works.md"
+        }
+      ]
+    },
+    {
+      "title": "Guides",
+      "items": [
+        {
+          "title": "Run WOPR",
+          "items": [
+            {
+              "title": "Use WOPR in the Terminal",
+              "path": "usage.md"
+            },
+            {
+              "title": "Choose a Model",
+              "path": "models.md"
+            },
+            {
+              "title": "Route Models and Delegate to Subagents",
+              "path": "routing.md"
+            },
+            {
+              "title": "Manage Sessions and Context",
+              "path": "sessions.md"
+            },
+            {
+              "title": "Run WOPR Safely",
+              "path": "security.md"
+            },
+            {
+              "title": "Isolate WOPR",
+              "path": "containerization.md"
+            },
+            {
+              "title": "Run Local Models",
+              "path": "llama-cpp.md"
+            },
+            {
+              "title": "Configure Your Terminal",
+              "path": "terminal-setup.md"
+            },
+            {
+              "title": "Configure Shell Commands",
+              "path": "shell-aliases.md"
+            },
+            {
+              "title": "Run WOPR in tmux",
+              "path": "tmux.md"
+            },
+            {
+              "title": "Run WOPR on Windows",
+              "path": "windows.md"
+            },
+            {
+              "title": "Run WOPR on Android",
+              "path": "termux.md"
+            }
+          ]
+        },
+        {
+          "title": "Customize WOPR",
+          "items": [
+            {
+              "title": "Configure WOPR",
+              "path": "configuration.md"
+            },
+            {
+              "title": "Create Prompt Templates",
+              "path": "prompt-templates.md"
+            },
+            {
+              "title": "Add Skills",
+              "path": "skills.md"
+            },
+            {
+              "title": "Connect MCP Servers",
+              "path": "mcp.md"
+            },
+            {
+              "title": "Fetch and Search the Web",
+              "path": "web.md"
+            },
+            {
+              "title": "Create Themes",
+              "path": "themes.md"
+            }
+          ]
+        },
+        {
+          "title": "Build on WOPR",
+          "items": [
+            {
+              "title": "Add Custom Providers",
+              "path": "custom-provider.md"
+            },
+            {
+              "title": "Terminal UI",
+              "path": "tui.md"
+            },
+            {
+              "title": "Integrate with the CLI",
+              "path": "cli-integration.md"
+            },
+            {
+              "title": "Use the SDK",
+              "path": "sdk.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Reference",
+      "items": [
+        {
+          "title": "CLI",
+          "path": "cli.md"
+        },
+        {
+          "title": "Slash Commands",
+          "path": "slash-commands.md"
+        },
+        {
+          "title": "Settings",
+          "path": "settings.md"
+        },
+        {
+          "title": "Environment Variables",
+          "path": "environment-variables.md"
+        },
+        {
+          "title": "Keybindings",
+          "path": "keybindings.md"
+        },
+        {
+          "title": "Provider Authentication",
+          "path": "providers.md"
+        },
+        {
+          "title": "Session File Format",
+          "path": "session-format.md"
+        },
+        {
+          "title": "Compaction and Branch Summaries",
+          "path": "compaction.md"
+        },
+        {
+          "title": "JSON Event Stream",
+          "path": "json.md"
+        },
+        {
+          "title": "RPC Protocol",
+          "path": "rpc.md"
+        },
+        {
+          "title": "RPC Commands",
+          "path": "rpc-commands.md"
+        },
+        {
+          "title": "Message Types",
+          "path": "message-types.md"
+        }
+      ]
+    },
+    {
+      "title": "WOPR",
+      "items": [
+        {
+          "title": "WOPR Concepts",
+          "path": "concepts.md"
+        },
+        {
+          "title": "Install and Troubleshooting",
+          "path": "install-troubleshooting.md"
+        },
+        {
+          "title": "Knowledge Graph",
+          "path": "knowledge-graph.md"
+        },
+        {
+          "title": "Benchmarks",
+          "path": "evals.md"
+        },
+        {
+          "title": "Develop WOPR",
+          "path": "development.md"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "from": "session.md",
+      "to": "session-format.md"
+    },
+    {
+      "from": "tree.md",
+      "to": "sessions.md"
+    },
+    {
+      "from": "usage.md#cli-verbs",
+      "to": "cli.md#cli-verbs"
+    },
+    {
+      "from": "usage.md#generic-subcommands",
+      "to": "cli.md#generic-subcommands"
+    },
+    {
+      "from": "usage.md#wopr-docs",
+      "to": "cli.md#wopr-docs"
+    },
+    {
+      "from": "usage.md#slash-commands-tui",
+      "to": "slash-commands.md"
+    },
+    {
+      "from": "usage.md#core",
+      "to": "slash-commands.md#core"
+    },
+    {
+      "from": "rpc.md#supported-commands",
+      "to": "rpc-commands.md#supported-commands"
+    },
+    {
+      "from": "rpc.md#prompt",
+      "to": "rpc-commands.md#prompt"
+    },
+    {
+      "from": "rpc.md#abort",
+      "to": "rpc-commands.md#abort"
+    },
+    {
+      "from": "rpc.md#state",
+      "to": "rpc-commands.md#state"
+    },
+    {
+      "from": "rpc.md#select-a-model",
+      "to": "rpc-commands.md#select-a-model"
+    },
+    {
+      "from": "rpc.md#thinking-level",
+      "to": "rpc-commands.md#thinking-level"
+    },
+    {
+      "from": "rpc.md#compaction-and-retry",
+      "to": "rpc-commands.md#compaction-and-retry"
+    },
+    {
+      "from": "rpc.md#steer-and-follow-up",
+      "to": "rpc-commands.md#steer-and-follow-up"
+    },
+    {
+      "from": "rpc.md#bash",
+      "to": "rpc-commands.md#bash"
+    },
+    {
+      "from": "rpc.md#session-data",
+      "to": "rpc-commands.md#session-data"
+    },
+    {
+      "from": "rpc.md#session-replacement-and-export",
+      "to": "rpc-commands.md#session-replacement-and-export"
+    },
+    {
+      "from": "rpc.md#command-catalogue",
+      "to": "rpc-commands.md#command-catalogue"
+    },
+    {
+      "from": "process-integration.md",
+      "to": "cli-integration.md"
+    },
+    {
+      "from": "cartridges.md",
+      "to": "concepts.md"
+    },
+    {
+      "from": "cartridge-binaries.md",
+      "to": "concepts.md"
+    },
+    {
+      "from": "packages.md",
+      "to": "concepts.md"
+    },
+    {
+      "from": "derivative-harnesses.md",
+      "to": "sdk.md"
+    }
+  ]
+}

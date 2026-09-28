@@ -1,0 +1,129 @@
+name: Release
+
+# Pushing a tag vMAJOR.MINOR.PATCH (matching coding/version.Version) builds
+# every release archive, writes SHA256SUMS, signs it with the release Ed25519
+# key (SHA256SUMS.sig, which `wopr update` verifies), attests build provenance,
+# and publishes the GitHub Release. See docs/project/RELEASING.md.
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Publish ${{ github.ref_name }}
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Validate the tag against coding/version
+        id: version
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version=${TAG#v}
+          [[ "$TAG" = "v$version" && "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] ||
+            { echo "tag $TAG is not vMAJOR.MINOR.PATCH" >&2; exit 1; }
+          # The version is a constant, not a linker flag, so `go install
+          # ...@vX.Y.Z` builds report the same version as release archives.
+          source_version=$(sed -nE 's/^const Version = "([^"]+)"$/\1/p' coding/version/version.go)
+          [ "$version" = "$source_version" ] ||
+            { echo "tag $TAG does not match coding/version.Version $source_version" >&2; exit 1; }
+          # go install github.com/alexrudloff/wopr/cmd/wopr@vX.Y.Z needs a
+          # go.mod with no replace or exclude directive.
+          automation/release/module-tags.sh "$version" go.mod >/dev/null
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Build release archives
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64 windows/amd64; do
+            goos=${target%/*}
+            goarch=${target#*/}
+            name="wopr-${VERSION}-${goos}-${goarch}"
+            stage="$RUNNER_TEMP/$name"
+            binary=wopr
+            if [ "$goos" = windows ]; then binary=wopr.exe; fi
+            mkdir -p "$stage"
+            CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch go build -trimpath \
+              -ldflags "-s -w -X main.Build=$GITHUB_SHA" \
+              -o "$stage/$binary" ./cmd/wopr
+            cp LICENSE NOTICE "$stage/"
+            if [ "$goos" = windows ]; then
+              (cd "$RUNNER_TEMP" && zip -qr "$GITHUB_WORKSPACE/dist/$name.zip" "$name")
+            else
+              tar -C "$RUNNER_TEMP" -czf "dist/$name.tar.gz" "$name"
+            fi
+          done
+      - name: Smoke-test the linux/amd64 archive
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/smoke"
+          tar -xzf "dist/wopr-${VERSION}-linux-amd64.tar.gz" -C "$RUNNER_TEMP/smoke"
+          got=$("$RUNNER_TEMP/smoke/wopr-${VERSION}-linux-amd64/wopr" --version)
+          [ "$got" = "$VERSION" ] || { echo "wopr --version = $got, want $VERSION" >&2; exit 1; }
+      - name: Write SHA256SUMS
+        shell: bash
+        working-directory: dist
+        run: |
+          set -euo pipefail
+          sha256sum -- *.tar.gz *.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+      - name: Sign SHA256SUMS
+        shell: bash
+        env:
+          WOPR_RELEASE_SIGNING_KEY: ${{ secrets.WOPR_RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          go run ./automation/release/signkey sign dist/SHA256SUMS
+          # The signature must verify against the public key embedded in the
+          # binaries being released, or `wopr update` would refuse them.
+          go run ./automation/release/signkey verify dist/SHA256SUMS
+      - name: Attest build provenance
+        if: github.event.repository.private == false
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/*.tar.gz
+            dist/*.zip
+      - name: Publish the GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "WOPR $TAG" \
+            --verify-tag \
+            --generate-notes \
+            "${prerelease[@]}"

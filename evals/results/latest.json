@@ -1,0 +1,87 @@
+{
+  "kind": "overhead",
+  "generated": "2026-09-27T13:37:11Z",
+  "host": {
+    "os": "darwin",
+    "arch": "arm64",
+    "cpus": 18,
+    "go": "go1.27.1"
+  },
+  "version": "0.2.0",
+  "runs": 10,
+  "warmup": 1,
+  "prompt": "Say hello",
+  "session_exchanges": 2000,
+  "results": [
+    {
+      "scenario": "startup",
+      "title": "Startup (--version)",
+      "runs": 10,
+      "wall_ms_median": 16.7,
+      "wall_ms_p90": 18.7,
+      "wall_ms_min": 15.4,
+      "cpu_ms_median": 19.2,
+      "rss_mib_median": 30.3
+    },
+    {
+      "scenario": "round-trip",
+      "title": "One prompt, streamed reply (OpenAI Chat Completions)",
+      "runs": 10,
+      "wall_ms_median": 24,
+      "wall_ms_p90": 36.7,
+      "wall_ms_min": 20.8,
+      "cpu_ms_median": 32.1,
+      "rss_mib_median": 39.6,
+      "requests": 1,
+      "request_bytes": 8277,
+      "bytes_sent": 8277,
+      "system_bytes": 3609,
+      "tools": 6
+    },
+    {
+      "scenario": "round-trip-responses",
+      "title": "One prompt, streamed reply (OpenAI Responses)",
+      "runs": 10,
+      "wall_ms_median": 26.1,
+      "wall_ms_p90": 31.1,
+      "wall_ms_min": 23.9,
+      "cpu_ms_median": 32.6,
+      "rss_mib_median": 39.1,
+      "requests": 1,
+      "request_bytes": 8216,
+      "bytes_sent": 8216,
+      "system_bytes": 3609,
+      "tools": 6
+    },
+    {
+      "scenario": "round-trip-messages",
+      "title": "One prompt, streamed reply (Anthropic Messages)",
+      "runs": 10,
+      "wall_ms_median": 32.8,
+      "wall_ms_p90": 35.3,
+      "wall_ms_min": 27.2,
+      "cpu_ms_median": 31,
+      "rss_mib_median": 38.9,
+      "requests": 1,
+      "request_bytes": 8329,
+      "bytes_sent": 8329,
+      "system_bytes": 3609,
+      "tools": 6
+    },
+    {
+      "scenario": "resumed-session",
+      "title": "One prompt after resuming a large Session",
+      "runs": 10,
+      "wall_ms_median": 101.5,
+      "wall_ms_p90": 122.4,
+      "wall_ms_min": 66.5,
+      "cpu_ms_median": 97.1,
+      "rss_mib_median": 58.3,
+      "requests": 1,
+      "request_bytes": 427829,
+      "bytes_sent": 427829,
+      "system_bytes": 3601,
+      "tools": 6
+    }
+  ]
+}

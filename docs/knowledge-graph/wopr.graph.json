@@ -1,0 +1,15 @@
+{
+  "entities": [
+    {"id": "wopr", "label": "WOPR", "kind": "project", "summary": "The Go implementation; executable wopr.", "where": "coding/version/version.go", "inspect": "wopr verify", "doc": "index.md"},
+    {"id": "session", "label": "Session", "kind": "runtime", "summary": "Append-only JSONL tree of entries for one conversation.", "where": "~/.wopr/agent/sessions", "inspect": "/tree, /session", "doc": "sessions.md"},
+    {"id": "model_runtime", "label": "Model Runtime", "kind": "runtime", "summary": "Session-owned model lookup, auth, completion, and streaming used by every mode.", "where": "coding/", "inspect": "/model, wopr --list-models", "doc": "models.md"},
+    {"id": "provider", "label": "Provider", "kind": "runtime", "summary": "Turns a Transcript into one Event Stream for one API.", "where": "ai/", "inspect": "wopr --list-models", "doc": "providers.md"},
+    {"id": "mode", "label": "Mode", "kind": "runtime", "summary": "Interactive TUI, print, JSON event stream, or RPC over stdin/stdout.", "where": "cmd/wopr", "inspect": "wopr --mode rpc", "doc": "cli.md"},
+    {"id": "resource", "label": "Resource", "kind": "concept", "summary": "One capability: skill, prompt template, theme, or context file.", "where": "~/.wopr/agent, .wopr/ in a project", "inspect": "wopr status --json", "doc": "concepts.md"}
+  ],
+  "relations": [
+    ["session", "owns", "model_runtime", "one per Session"],
+    ["model_runtime", "streams_through", "provider", "one Provider per request"],
+    ["mode", "drives", "session", "TUI, print, JSON, RPC share one Session path"]
+  ]
+}
