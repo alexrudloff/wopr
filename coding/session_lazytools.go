@@ -20,7 +20,7 @@ import (
 const loadToolsName = "load_tools"
 
 // lazyToolNames are the tools held back until requested.
-var lazyToolNames = []string{"task", "web_fetch", "web_search"}
+var lazyToolNames = []string{"task"}
 
 // initLazyTools holds back the lazy tools that are active and installs the
 // loader. It runs after every tool is installed.

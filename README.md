@@ -55,7 +55,7 @@ All on by default. Turn any of them off in `efficiency.json`; details in
 | Tool-output half-life | On small-window models, older tool results shrink to excerpts |
 | Stall nudge | When the model repeats itself or stops making progress, it is told to change approach |
 | Test-rerun cap | A test run that already passed isn't repeated until a file changes |
-| Lazy tools | Rarely used tools load only when the model asks for them |
+| Lazy tools | The subagent tool loads only when the model asks for it; web search and fetch are always loaded |
 | apply_patch | GPT and Codex models get the patch format they were trained on |
 | Quota balance | Spreads work across subscriptions before one gets tight |
 | Per-model learning | Tunes the cutoffs above for each of your models from real sessions |

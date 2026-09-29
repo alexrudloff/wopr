@@ -42,8 +42,8 @@ type Config struct {
 	// TestRerunCap answers a test command that already passed, with no
 	// file changed since, without running it again.
 	TestRerunCap bool `json:"testRerunCap"`
-	// LazyTools holds rarely used tools (task, web_fetch, web_search)
-	// back until the model loads them with load_tools.
+	// LazyTools holds the task tool back until the model loads it with
+	// load_tools. Web search and fetch are always loaded.
 	LazyTools bool `json:"lazyTools"`
 	// ApplyPatch declares the apply_patch tool in place of edit to OpenAI
 	// GPT and Codex models, whose training uses that patch format.
