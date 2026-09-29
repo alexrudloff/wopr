@@ -125,11 +125,6 @@ More keys in `efficiency.json`, each on by default:
   while no file has changed since; the call is answered with a note instead.
   An `edit`, `write`, or any shell command that is not read-only counts as a
   change.
-- `lazyTools`: `task` is left out of every request until the model loads it
-  with `load_tools`, whose description lists it. Loading it changes the
-  declared tools, so the provider re-reads the prompt once. `web_search` and
-  `web_fetch` are always loaded: search is a primitive, and a model that
-  can't see it guesses URLs instead.
 - `applyPatch`: requests served by an OpenAI GPT or Codex model declare
   `apply_patch` (the Codex patch format: `*** Begin Patch`, Add/Delete/Update
   File sections, `@@` hunks) in place of `edit`; other models keep `edit`,

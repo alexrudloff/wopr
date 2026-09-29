@@ -42,9 +42,6 @@ type Config struct {
 	// TestRerunCap answers a test command that already passed, with no
 	// file changed since, without running it again.
 	TestRerunCap bool `json:"testRerunCap"`
-	// LazyTools holds the task tool back until the model loads it with
-	// load_tools. Web search and fetch are always loaded.
-	LazyTools bool `json:"lazyTools"`
 	// ApplyPatch declares the apply_patch tool in place of edit to OpenAI
 	// GPT and Codex models, whose training uses that patch format.
 	ApplyPatch bool `json:"applyPatch"`
@@ -68,7 +65,6 @@ func DefaultConfig() Config {
 		ToolOutputHalfLife:        true,
 		StallNudge:                true,
 		TestRerunCap:              true,
-		LazyTools:                 true,
 		ApplyPatch:                true,
 		QuotaBalance:              true,
 		Learn:                     true,
@@ -77,7 +73,7 @@ func DefaultConfig() Config {
 
 // Enabled reports whether any mechanism is on.
 func (c Config) Enabled() bool {
-	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.LazyTools || c.ApplyPatch
+	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch
 }
 
 // Load reads <agentDir>/efficiency.json. Unknown keys and bad values are
@@ -100,7 +96,7 @@ func Load(agentDir string) (Config, error) {
 		"version": true, "actionFusion": true, "observationPack": true, "evidencePreservingReducer": true,
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
-		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true, "applyPatch": true, "quotaBalance": true, "learn": true,
+		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true /* retired; ignored */, "applyPatch": true, "quotaBalance": true, "learn": true,
 	}
 	for key := range raw {
 		if !known[key] {

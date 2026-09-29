@@ -524,7 +524,6 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initBashArchive()
 	sess.initPruning()
 	sess.initSubagents(toolAllowed(opts, "task"))
-	sess.initLazyTools()
 	sess.model.Store(opts.Model)
 	sess.initSystemPrompt(opts)
 	sess.refreshContext()
