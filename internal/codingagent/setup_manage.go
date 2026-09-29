@@ -376,9 +376,9 @@ func (w *setupWizard) openConnection(id string) {
 			}
 			options = append(options, tui.DialogOption{Title: "Add models from " + c.Name, Category: "Models", Value: "add"})
 			if routed, safe := privacyCounts(c); routed > 0 {
-				title, desc := "Mark all models Privacy Safe", "Private mode routes only to Privacy Safe models"
+				title, desc := "Mark this endpoint as private", "Marks its models Privacy Safe; private mode routes only to those"
 				if safe == routed {
-					title, desc = "Unmark all models Privacy Safe", "they are all marked now"
+					title, desc = "Unmark this endpoint as private", "Its models are all marked Privacy Safe now"
 				}
 				options = append(options, tui.DialogOption{Title: title, Description: desc, Category: "Models", Value: "privacy"})
 			}
@@ -487,9 +487,9 @@ func (w *setupWizard) setConnectionPrivacy(c *setupConnection) {
 	}
 	w.reload()
 	if mark {
-		w.m.showFlash(c.Name + ": models marked Privacy Safe")
+		w.m.showFlash(c.Name + " marked private")
 	} else {
-		w.m.showFlash(c.Name + ": models no longer Privacy Safe")
+		w.m.showFlash(c.Name + " no longer private")
 	}
 }
 

@@ -108,8 +108,8 @@ appears only when a model is flagged, and private only when a model is
 marked Privacy Safe.
 
 **Privacy Safe** is a checkbox in each model's settings on the Model routing
-screen (next to Abliterated), and a connection's screen can mark or unmark
-all its models at once. It means the model's endpoint keeps your data with
+screen (next to Abliterated), and **Mark this endpoint as private** on a
+connection's screen marks all its models at once. It means the model's endpoint keeps your data with
 you: your machine, your network, or a deployment you trust. wopr checks it
 for new models on localhost, a LAN, Tailscale, or a `.local` name; that is
 a suggestion, and yours to change. Jev has its own Privacy Safe checkbox on
