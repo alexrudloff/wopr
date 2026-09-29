@@ -47,6 +47,9 @@ func (s *Session) initEfficiency() {
 	if !state.cfg.Enabled() {
 		return
 	}
+	if state.cfg.StallNudge {
+		s.agent.AddAfterToolCallHook(s.fileWatch.afterToolCall(s.services.CWD()))
+	}
 	if s.inner != nil {
 		state.root = efficiency.RuntimeRoot(s.inner.Path(), s.inner.ID())
 	}

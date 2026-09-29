@@ -60,6 +60,7 @@ type Session struct {
 	// stall is the run's stall-nudge state (see session_stall.go); only
 	// the agent goroutine touches it.
 	stall         stallState
+	fileWatch     fileWatch
 	routeNeeded   atomic.Bool
 	routeBoundary atomic.Bool // the next route decision starts a run
 	routeModelsMu sync.Mutex

@@ -1,8 +1,12 @@
 package coding
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/alexrudloff/wopr/agent"
@@ -27,6 +31,60 @@ const (
 
 // fileChangingTools are the tools whose success counts as progress.
 var fileChangingTools = map[string]bool{"edit": true, "write": true, "apply_patch": true}
+
+// fileWatch spots file changes made through the shell: it keeps the
+// modification time of every file the model read or wrote, and after each
+// shell command marks the call as a change when any of them moved. A file
+// the model never touched isn't watched.
+type fileWatch struct {
+	mu      sync.Mutex
+	mtimes  map[string]time.Time
+	changed map[string]bool // tool call IDs whose command changed a watched file
+}
+
+// afterToolCall records the files read, written, or edited, and checks the
+// watched files after a shell command.
+func (w *fileWatch) afterToolCall(cwd string) agent.AfterToolCallHook {
+	return func(_ context.Context, toolCallID, toolName string, args json.RawMessage, _ agent.AgentToolResult) agent.AfterToolCallResult {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		if w.mtimes == nil {
+			w.mtimes, w.changed = map[string]time.Time{}, map[string]bool{}
+		}
+		switch toolName {
+		case "read", "write", "edit":
+			var in struct {
+				Path string `json:"path"`
+			}
+			if json.Unmarshal(args, &in) == nil && in.Path != "" {
+				path := in.Path
+				if !filepath.IsAbs(path) {
+					path = filepath.Join(cwd, path)
+				}
+				if info, err := os.Stat(path); err == nil {
+					w.mtimes[path] = info.ModTime()
+				}
+			}
+		case "bash":
+			for path, before := range w.mtimes {
+				info, err := os.Stat(path)
+				if err != nil || info.ModTime().Equal(before) {
+					continue
+				}
+				w.mtimes[path] = info.ModTime()
+				w.changed[toolCallID] = true
+			}
+		}
+		return agent.AfterToolCallResult{}
+	}
+}
+
+// changedFile reports whether a shell call changed a watched file.
+func (w *fileWatch) changedFile(toolCallID string) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.changed[toolCallID]
+}
 
 // stallState is one run's nudge bookkeeping, reset with each prompt.
 type stallState struct {
@@ -64,7 +122,7 @@ func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage 
 			args, _ := json.Marshal(call.Arguments)
 			last = call.Name + " " + string(args)
 			calls[last]++
-			changed = changed || fileChangingTools[call.Name]
+			changed = changed || fileChangingTools[call.Name] || s.fileWatch.changedFile(call.ID)
 		}
 		if changed {
 			// A repeat after a file change can see a new result.
