@@ -55,7 +55,8 @@ you set one). Auto and quality take your highest-ranked eligible model;
 speed takes the least expected time to a reply (measured time to first
 token plus decode speed; unmeasured counts as slow); cost takes local, then
 free remote, then subscription, highest-ranked within each, and never pays
-per token; uncensored takes your highest-ranked abliterated model.
+per token; uncensored takes your highest-ranked abliterated model; private
+takes your highest-ranked model marked Privacy Safe.
 Pay-per-token models otherwise come last. The orchestrator keeps its model
 while it stays eligible; subagents follow the same rules at the size they
 are expected to reach. Thinking is your level (or the model's own effort
@@ -94,15 +95,27 @@ mode; see [Basic rules](#basic-rules) for Basic.
 | speed | The fastest model that is capable enough; a model with no speed measurements counts as slow | One step lower |
 | quality | Any available model within 0.05 of the strongest one available, local models included; cost is ignored except pay-per-use, which stays a last resort | One step higher |
 | uncensored | Only models marked abliterated (`"uncensored": true` in router.json), for everything. If none is available, the request fails rather than use another model | As decided |
+| private | Only models marked Privacy Safe, for everything: the orchestrator, subagents, compaction and branch summaries, and the log reducer. Jev is asked only when it is marked Privacy Safe too; otherwise the Basic rules route. If none is available, the request fails rather than use another model. Web search and fetch still work and say that the request left your machine; MCP servers are not restricted | As decided |
 
 Choose a mode in `/model` (the Modes section comes first in each picker),
 or cycle the orchestrator's with Tab on an empty prompt (auto, cost, speed,
-quality, uncensored, then your configured models; Shift+Tab goes back). A mode picked for the orchestrator (Tab, the Orchestrator picker, or
+quality, uncensored, private, then your configured models; Shift+Tab goes back). A mode picked for the orchestrator (Tab, the Orchestrator picker, or
 `/model <mode>`) is the subagents' mode too. A model picked for the
 orchestrator changes only the orchestrator; the subagents keep their
 choice. `/model` → Subagents splits them, and that choice stays until a
 mode is next picked for the orchestrator. Uncensored
-appears only when a model is flagged.
+appears only when a model is flagged, and private only when a model is
+marked Privacy Safe.
+
+**Privacy Safe** is a checkbox in each model's settings on the Model routing
+screen (next to Abliterated), and a connection's screen can mark or unmark
+all its models at once. It means the model's endpoint keeps your data with
+you: your machine, your network, or a deployment you trust. wopr checks it
+for new models on localhost, a LAN, Tailscale, or a `.local` name; that is
+a suggestion, and yours to change. Jev has its own Privacy Safe checkbox on
+the Model routing screen. Sensitive prompts and briefs carrying secrets also
+keep to Privacy Safe models (before any model is marked, to local and LAN
+tiers).
 
 ## Orchestrator and subagents
 
@@ -213,6 +226,8 @@ and a task brief with a hit runs only on your own hardware.
 | `jev.timeoutMs`, `jev.retries` | `1300`, `1` | Per-attempt timeout and retries. |
 | `stickyIdleMinutes` | `10` | Idle time after which the orchestrator may change model. |
 | `tiers[].models[].uncensored` | `false` | Model allowed in uncensored mode. |
+| `tiers[].models[].privacySafe` | `false` | Model keeps data with you: allowed in private mode, and where sensitive prompts and secret briefs go. |
+| `jev.privacySafe` | `false` | Jev keeps prompts with you: private mode asks it; otherwise private mode routes by the Basic rules. |
 | `tiers[].models[].hashline` | unset: on for free-local and free-remote tiers (with the `hashline` setting at `auto`) | Hashline anchors on `read` and `edit` for this model. See [settings](settings.md#hashline-anchors). |
 | `tiers[].models[].effort` | unset | Default thinking level for this model: auto routing starts from it instead of the prompt's demand, and a session that starts on the model without a level set in settings or on the command line uses it. |
 | `escalateThinking` | `false` | Raise the orchestrator's thinking one level after a turn whose tool calls all failed, and lower it one level after a turn whose tool calls all succeeded (at most two levels up, reset at each prompt). Unmeasured. |

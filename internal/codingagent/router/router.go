@@ -424,12 +424,13 @@ func (r *Router) TakePauseNotice() string {
 // without asking Jev.
 func (r *Router) Decide(ctx context.Context, in Input) *Decision {
 	r.mu.Lock()
-	auto, cur, cold, active := r.auto, r.orch, r.cold, r.active
+	auto, cur, cold, active, objective := r.auto, r.orch, r.cold, r.active, r.objective
 	now := r.now()
 	r.mu.Unlock()
 	if !auto {
 		return nil
 	}
+	jev := r.consultsJev(objective)
 	if idle := r.stickyIdle(); cur != nil && !active.IsZero() && now.Sub(active) >= idle {
 		cold = true
 	}
@@ -443,14 +444,14 @@ func (r *Router) Decide(ctx context.Context, in Input) *Decision {
 		}
 		curCand = c
 	}
-	if cur != nil && !cold && (r.jev == nil || !r.strongerExists(curCand, in.ContextTokens)) {
+	if cur != nil && !cold && (!jev || !r.strongerExists(curCand, in.ContextTokens)) {
 		why := "sticky: no stronger model"
-		if r.jev == nil {
+		if !jev {
 			why = "basic: sticky"
 		}
 		return r.keep(cur, curCand, in.ContextTokens, cur.Class, why)
 	}
-	if r.jev == nil {
+	if !jev {
 		return r.decideBasic(in.ContextTokens, now)
 	}
 	class, err := r.Classify(ctx, in)
@@ -580,6 +581,15 @@ func (r *Router) choose(class Classification, contextTokens int) *Decision {
 	if private {
 		need = demand
 	}
+	keepOwned := func(pool []candidate) []candidate {
+		if !private {
+			return pool
+		}
+		if owned := filter(pool, func(c candidate) bool { return r.owned(r.cfg.Tiers[c.tier], c.ref) }); len(owned) > 0 {
+			return owned
+		}
+		return pool
+	}
 	if cost {
 		need = max(0, need-costTolerance)
 	}
@@ -596,7 +606,7 @@ func (r *Router) choose(class Classification, contextTokens int) *Decision {
 		// near the strongest reachable one.
 		chain = r.rank(r.band(r.allCandidates(contextTokens, objective), nil), 0, contextTokens, true, objective)
 	default:
-		pool := r.candidates(contextTokens, paidByKind, objective)
+		pool := keepOwned(r.candidates(contextTokens, paidByKind, objective))
 		chain = r.adequate(r.rank(pool, need, contextTokens, true, objective), need)
 		if len(chain) == 0 && need > demand {
 			// The kind floor is a preference; before paying, see whether an
@@ -1144,7 +1154,7 @@ func (r *Router) SideTask(contextTokens int) (ModelRef, ModelInfo, bool) {
 		return ModelRef{}, ModelInfo{}, false
 	}
 	o := r.SubagentObjective()
-	if r.jev == nil {
+	if !r.consultsJev(o) {
 		chain := r.basicSideOrder(r.candidates(contextTokens, r.cfg.PaidLastResort, o))
 		if len(chain) == 0 {
 			return ModelRef{}, ModelInfo{}, false
@@ -1195,6 +1205,9 @@ func (r *Router) Status() string {
 		fmt.Fprintf(&b, " · engine: Jev (%s)", r.cfg.Jev.Model)
 		if open := r.jev.breakerRemaining(); open > 0 {
 			fmt.Fprintf(&b, " (unreachable, retrying in %s; the Basic rules route meanwhile)", open.Round(time.Second))
+		}
+		if !r.cfg.Jev.PrivacySafe && (objective == ObjectivePrivate || subObjective == ObjectivePrivate) {
+			b.WriteString(" · private mode uses the Basic rules: Jev isn't marked Privacy Safe")
 		}
 	}
 	b.WriteString("\n\n")

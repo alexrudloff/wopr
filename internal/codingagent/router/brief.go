@@ -85,7 +85,7 @@ func (r *Router) DecideBrief(ctx context.Context, in BriefInput) *Decision {
 		return nil
 	}
 	class, ok := r.classifyBrief(ctx, in)
-	if !ok || r.jev == nil {
+	if !ok || !r.consultsJev(r.SubagentObjective()) {
 		// No Jev, or Jev can't answer: the Basic rules route the brief.
 		return r.basicBrief(in, class.Secret)
 	}
@@ -204,7 +204,7 @@ func (r *Router) classifyBrief(ctx context.Context, in BriefInput) (class BriefC
 		return BriefClass{Source: "rule", Rule: "level " + in.Level, Difficulty: map[string]float64{in.Level: 1}}, true
 	case in.Effort == "quick":
 		return BriefClass{Source: "rule", Rule: "quick lookup", Difficulty: map[string]float64{"mechanical": 1}}, true
-	case r.jev == nil:
+	case !r.consultsJev(r.SubagentObjective()):
 		return BriefClass{}, false
 	}
 	class, err := r.jev.classifyBrief(ctx, redacted, in)
@@ -296,8 +296,7 @@ func (r *Router) rankBrief(in BriefInput, class BriefClass, need float64, exclud
 	objective := r.SubagentObjective()
 	var cands []candidate
 	for _, c := range r.allCandidates(in.ContextTokens, objective) {
-		cost := r.cfg.Tiers[c.tier].Cost
-		if c.key() == exclude || (class.Secret && cost != CostFreeLocal && cost != CostFreeRemote) {
+		if c.key() == exclude || (class.Secret && !r.owned(r.cfg.Tiers[c.tier], c.ref)) {
 			continue
 		}
 		cands = append(cands, c)

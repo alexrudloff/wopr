@@ -56,6 +56,11 @@ type ModelRef struct {
 	// Uncensored marks a model without refusal training (an abliterated
 	// model). Uncensored mode routes only to flagged models.
 	Uncensored bool `json:"uncensored,omitempty"`
+	// PrivacySafe marks a model whose endpoint keeps data with the user:
+	// their own hardware or network, or a deployment they trust. Private
+	// mode routes only to flagged models, and sensitive prompts and secret
+	// briefs keep to them.
+	PrivacySafe bool `json:"privacySafe,omitempty"`
 	// Hashline turns hashline anchors on read and edit on or off for this
 	// model. Unset follows the "hashline" setting, whose default "auto"
 	// turns them on for free-local and free-remote tiers only.
@@ -118,6 +123,10 @@ type JevConfig struct {
 	MaxPromptChars int `json:"maxPromptChars,omitempty"`
 	// Disabled turns routing off and keeps the endpoint for later.
 	Disabled bool `json:"disabled,omitempty"`
+	// PrivacySafe marks a Jev endpoint that keeps prompts with the user.
+	// Private mode asks Jev only when it is set; otherwise the Basic rules
+	// route.
+	PrivacySafe bool `json:"privacySafe,omitempty"`
 }
 
 // SubagentConfig tunes subagents.
@@ -301,9 +310,23 @@ func Load(agentDir string) (Config, error) {
 		if o == ObjectiveUncensored && !cfg.hasUncensored() {
 			return cfg, errors.New("router: WOPR_ROUTER=uncensored, but no configured model is flagged uncensored")
 		}
+		if o == ObjectivePrivate && !cfg.hasPrivacySafe() {
+			return cfg, errors.New("router: WOPR_ROUTER=private, but no configured model is marked Privacy Safe")
+		}
 		cfg.Enabled, cfg.objective = true, o
 	}
 	return cfg, nil
+}
+
+// hasPrivacySafe reports whether any configured model is marked Privacy
+// Safe.
+func (c *Config) hasPrivacySafe() bool {
+	for _, tier := range c.Tiers {
+		if slices.ContainsFunc(tier.Models, func(ref ModelRef) bool { return ref.PrivacySafe }) {
+			return true
+		}
+	}
+	return false
 }
 
 // hasUncensored reports whether any configured model is flagged Uncensored.

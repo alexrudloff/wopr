@@ -32,6 +32,10 @@ const (
 	// ObjectiveUncensored: only models flagged Uncensored, orchestrator and
 	// subagents alike, and no Jev (it relays to a third party).
 	ObjectiveUncensored Objective = "uncensored"
+	// ObjectivePrivate: only models marked Privacy Safe, orchestrator,
+	// subagents, and side tasks alike, highest-ranked first; Jev only when
+	// it is marked Privacy Safe too. Nothing falls back to another model.
+	ObjectivePrivate Objective = "private"
 )
 
 // qualityBand is how far below the strongest reachable model a model may be
@@ -49,7 +53,7 @@ const (
 // ParseObjective parses a mode name.
 func ParseObjective(name string) (Objective, bool) {
 	switch o := Objective(strings.ToLower(strings.TrimSpace(name))); o {
-	case ObjectiveAuto, ObjectiveCost, ObjectiveSpeed, ObjectiveQuality, ObjectiveUncensored:
+	case ObjectiveAuto, ObjectiveCost, ObjectiveSpeed, ObjectiveQuality, ObjectiveUncensored, ObjectivePrivate:
 		return o, true
 	}
 	return "", false
@@ -63,8 +67,8 @@ func (r *Router) Objective() Objective {
 }
 
 // Objectives lists the objectives on offer, in the order Tab cycles them:
-// none without routing, and uncensored only when a configured model is
-// flagged for it.
+// none without routing, and uncensored and private only when a configured
+// model is flagged for them.
 func (r *Router) Objectives() []Objective {
 	if !r.Available() {
 		return nil
@@ -73,7 +77,40 @@ func (r *Router) Objectives() []Objective {
 	if r.UncensoredAvailable() {
 		out = append(out, ObjectiveUncensored)
 	}
+	if r.PrivateAvailable() {
+		out = append(out, ObjectivePrivate)
+	}
 	return out
+}
+
+// PrivateAvailable reports whether any configured model is marked Privacy
+// Safe.
+func (r *Router) PrivateAvailable() bool { return r.cfg.hasPrivacySafe() }
+
+// IsPrivacySafe reports whether provider/model is marked Privacy Safe.
+func (r *Router) IsPrivacySafe(spec string) bool {
+	for _, ref := range r.cfg.refs(spec) {
+		if ref.PrivacySafe {
+			return true
+		}
+	}
+	return false
+}
+
+// owned reports whether a model keeps data with the user, for sensitive
+// prompts and secret briefs: marked Privacy Safe, or, when the user marked
+// none, in a free-local or free-remote tier.
+func (r *Router) owned(tier TierConfig, ref ModelRef) bool {
+	if r.cfg.hasPrivacySafe() {
+		return ref.PrivacySafe
+	}
+	return tier.Cost == CostFreeLocal || tier.Cost == CostFreeRemote
+}
+
+// consultsJev reports whether Jev classifies prompts under o: private mode
+// sends nothing to a Jev endpoint not marked Privacy Safe.
+func (r *Router) consultsJev(o Objective) bool {
+	return r.jev != nil && (o != ObjectivePrivate || r.cfg.Jev.PrivacySafe)
 }
 
 // UncensoredAvailable reports whether any configured model is flagged
@@ -127,6 +164,9 @@ func (r *Router) checkObjective(o Objective) error {
 	if o == ObjectiveUncensored && !r.UncensoredAvailable() {
 		return fmt.Errorf("router: no configured model is flagged uncensored")
 	}
+	if o == ObjectivePrivate && !r.PrivateAvailable() {
+		return fmt.Errorf("router: no configured model is marked Privacy Safe")
+	}
 	return nil
 }
 
@@ -178,6 +218,8 @@ func (r *Router) allowed(tier TierConfig, ref ModelRef, o Objective) bool {
 	switch o {
 	case ObjectiveUncensored:
 		return ref.Uncensored
+	case ObjectivePrivate:
+		return ref.PrivacySafe
 	case ObjectiveCost:
 		return tier.Cost != CostPaid
 	}
@@ -192,6 +234,8 @@ func (r *Router) Admits(o Objective, spec string) bool {
 	switch o {
 	case ObjectiveUncensored:
 		return r.IsUncensored(spec)
+	case ObjectivePrivate:
+		return r.IsPrivacySafe(spec)
 	case ObjectiveCost:
 		for i := range r.cfg.refs(spec) {
 			if r.cfg.Tiers[i].Cost != CostPaid {

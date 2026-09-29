@@ -517,6 +517,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initTestCap()
 	sess.initTempFiles()
 	sess.initUndo()
+	sess.agent.AddAfterToolCallHook(sess.privateWebNote)
 	sess.initQueue(opts)
 	sess.initAskUser(opts)
 	sess.initGoal()
@@ -2106,8 +2107,14 @@ func (s *Session) navigateTree(ctx context.Context, targetID string, opts Naviga
 
 	var summary *treeBranchSummary
 	if opts.Summarize && len(collected.Entries) > 0 {
+		// The summary runs where compaction does, so a routing mode (private,
+		// cost) also governs it.
+		summaryModel := s.compactionModel()
+		if summaryModel == nil {
+			return NavigateTreeResult{}, errors.New("no model this routing mode allows can summarize the branch")
+		}
 		bsResult := compaction.GenerateBranchSummary(branchCtx, collected.Entries, compaction.GenerateBranchSummaryOptions{
-			Model:               s.Model(),
+			Model:               summaryModel,
 			Completer:           s.resolveCompleter(),
 			CustomInstructions:  customInstructions,
 			ReplaceInstructions: replaceInstructions,

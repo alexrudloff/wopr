@@ -288,3 +288,65 @@ func TestQuotaBalanceMovesToARoomierPeerPlan(t *testing.T) {
 		t.Fatalf("balancing off: want opus, got %+v", d)
 	}
 }
+
+// Private mode never lets data leave the Privacy Safe models: not the
+// orchestrator, a brief, or a side task, and not by way of Jev unless Jev is
+// marked Privacy Safe too.
+func TestPrivateModeStaysOnPrivacySafeModels(t *testing.T) {
+	private := func(jevSafe bool) (*Router, *fakeJev) {
+		cfg := testConfig()
+		cfg.Tiers[0].Models[0].PrivacySafe = true
+		cfg.Tiers[1].Models[0].PrivacySafe = true
+		jev := promptJev()
+		cfg = withFakeJev(t, cfg, jev)
+		cfg.Jev.PrivacySafe = jevSafe
+		r := newTestRouter(t, cfg, testHost())
+		teachSpeeds(r)
+		if err := setObjectives(r, ObjectivePrivate); err != nil {
+			t.Fatal(err)
+		}
+		return r, jev
+	}
+	brief := BriefInput{Type: "explore", Brief: "trace how the session saves", ContextTokens: 8000}
+
+	r, jev := private(false)
+	if d := r.Decide(context.Background(), Input{Prompt: "fix it", ContextTokens: 8000}); d == nil || !r.IsPrivacySafe(d.Spec()) {
+		t.Fatalf("orchestrator: want a Privacy Safe model, got %+v", d)
+	}
+	if d := r.DecideBrief(context.Background(), brief); d == nil || !r.IsPrivacySafe(d.Spec()) {
+		t.Fatalf("brief: want a Privacy Safe model, got %+v", d)
+	}
+	if ref, _, ok := r.SideTask(8000); !ok || !ref.PrivacySafe {
+		t.Fatalf("side task: want a Privacy Safe model, got %+v %v", ref, ok)
+	}
+	if n := len(jev.requests()); n != 0 {
+		t.Fatalf("Jev isn't Privacy Safe but was asked %d times", n)
+	}
+
+	// The Privacy Safe models go down: nothing else may take the work.
+	for _, idx := range []int{0, 1} {
+		r.markDown(r.cfg.Tiers[idx].Models[0].Spec(), time.Hour)
+	}
+	r.MarkCold()
+	if d := r.Decide(context.Background(), Input{Prompt: "fix it", ContextTokens: 8000}); d != nil {
+		t.Fatalf("orchestrator: want no route, got %s", d.Spec())
+	}
+	if d := r.DecideBrief(context.Background(), brief); d != nil {
+		t.Fatalf("brief: want no route, got %s", d.Spec())
+	}
+	if ref, _, ok := r.SideTask(8000); ok {
+		t.Fatalf("side task: want none, got %s", ref.Spec())
+	}
+	if why := r.NoRouteReason(8000, ObjectivePrivate); !strings.Contains(why, "not marked Privacy Safe") {
+		t.Fatalf("the reason should say why: %q", why)
+	}
+
+	// Jev marked Privacy Safe is asked, and the pick still stays private.
+	r, jev = private(true)
+	if d := r.Decide(context.Background(), Input{Prompt: "fix it", ContextTokens: 8000}); d == nil || !r.IsPrivacySafe(d.Spec()) {
+		t.Fatalf("with a Privacy Safe Jev: want a Privacy Safe model, got %+v", d)
+	}
+	if len(jev.requests()) == 0 {
+		t.Fatal("Jev is Privacy Safe but wasn't asked")
+	}
+}

@@ -19,8 +19,9 @@ differently, change the source.
   window, measured speed, and cost. **Jev** routing has a TypeSafe Jev endpoint
   score every prompt, with Basic taking over whenever Jev can't answer. Modes
   set what to optimize: **auto**, **speed**, **quality**, **cost** (local and
-  subscriptions first, never pay-per-token), or **uncensored**. Off by
-  default; turn it on in `/setup`.
+  subscriptions first, never pay-per-token), **uncensored**, or **private**
+  (only models you mark Privacy Safe, for everything, with no fallback). Off
+  by default; turn it on in `/setup`.
 - **Token efficiency, on by default.** The mechanisms below cut what each
   request carries, and wopr tunes them per model from how each of your models
   actually behaves.

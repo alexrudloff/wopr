@@ -41,6 +41,8 @@ type setupModel struct {
 	Tier       string
 	Capability float64
 	Uncensored bool
+	// PrivacySafe marks a model whose endpoint keeps data with the user.
+	PrivacySafe bool
 	// Measure is what the probes found; nil when not measured.
 	Measure *modelMeasure
 
@@ -485,7 +487,7 @@ func uniqueTierName(tiers []router.TierConfig, name, cost string) string {
 
 // modelRef is the router entry for a setup model.
 func (s *setupModel) modelRef() router.ModelRef {
-	return router.ModelRef{Provider: s.Provider, Model: s.Model, Capability: s.Capability, Uncensored: s.Uncensored, Affinity: s.affinity(nil)}
+	return router.ModelRef{Provider: s.Provider, Model: s.Model, Capability: s.Capability, Uncensored: s.Uncensored, PrivacySafe: s.PrivacySafe, Affinity: s.affinity(nil)}
 }
 
 // strengthBonus is the routing affinity a strength tag gives.
@@ -576,6 +578,9 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 			// Unset picks the key automatically; drop an old "none".
 			delete(merged, "apiKeyProvider")
 		}
+		if !plan.Jev.PrivacySafe {
+			delete(merged, "privacySafe")
+		}
 		out, err := compactJSON(merged)
 		if err != nil {
 			return "", err
@@ -605,7 +610,7 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 		ref := s.modelRef()
 		if s.Ref != nil {
 			ref = *s.Ref
-			ref.Capability, ref.Uncensored, ref.Affinity = s.Capability, s.Uncensored, s.affinity(s.Ref.Affinity)
+			ref.Capability, ref.Uncensored, ref.PrivacySafe, ref.Affinity = s.Capability, s.Uncensored, s.PrivacySafe, s.affinity(s.Ref.Affinity)
 		}
 		drop := s.Removed || s.NoRouting
 		placed := false

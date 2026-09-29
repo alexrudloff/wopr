@@ -612,5 +612,13 @@ func inferTier(kind setupKind, baseURL, provider string) string {
 	return router.CostPaid
 }
 
+// privacySafeAddress suggests Privacy Safe for an endpoint on the user's
+// own machine or network: localhost, a LAN range, Tailscale, or a .local
+// name. The user can uncheck it; it is only a starting point.
+func privacySafeAddress(baseURL string) bool {
+	tier := inferTier(setupViaEndpoint, baseURL, "")
+	return tier == router.CostFreeLocal || tier == router.CostFreeRemote
+}
+
 // tailnet is Tailscale's CGNAT range, where a user's own machines live.
 var tailnet = &net.IPNet{IP: net.IPv4(100, 64, 0, 0), Mask: net.CIDRMask(10, 32)}

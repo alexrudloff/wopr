@@ -86,6 +86,7 @@ fits its window (the window you set, if you set one). Among eligible models:
 | **speed** | The least expected time to a reply: time to first token at the current context size plus a 500-token reply at the measured decode speed. Unmeasured models count as slow. |
 | **cost** | Local, then free remote, then subscription; your highest-ranked model within a class. Never pay-per-token. |
 | **uncensored** | Your highest-ranked model marked abliterated |
+| **private** | Your highest-ranked model marked Privacy Safe |
 
 Pay-per-token models come after every other eligible model, and only with
 `paidLastResort`. The orchestrator stays on its model while that model is
@@ -113,10 +114,11 @@ Basic rules apply them as in [Basic rules](#basic-rules).
 | **speed** | The least expected time to first token among models that meet the need (the prompt's demand, or the brief's level), so a fast model that would fail and escalate is never chosen. Cost is ignored short of pay-per-token. An unmeasured model counts as a second slower than the slowest measured candidate (at least 4 s + 0.5 s per 1K tokens). | one step lower |
 | **quality** | Any reachable model within 0.05 capability of the strongest reachable one, fastest first; need is ignored. Reachable means configured and signed in, fitting the context, not resting after a rate limit or failure, and (for subagents) with a free slot. A strong local model qualifies, and the band slides down when a subscription is limited. Pay-per-token only when nothing else is reachable. | one step higher (up to xhigh) |
 | **uncensored** | Only models flagged `"uncensored": true` (marked abliterated per model in `/setup` → Model routing), for the orchestrator, every subagent, escalation, failover, and side tasks. Jev classifies as in auto. If no flagged model is reachable the request fails; nothing falls back to an unflagged model. Offered only when a configured model is flagged. | as decided |
+| **private** | Only models marked Privacy Safe (`"privacySafe": true`, set per model in `/setup` → Model routing, or for a whole connection on its screen), for the orchestrator, every subagent, escalation, failover, compaction and branch summaries, and the log reducer; highest-ranked first. Jev is asked only when `jev.privacySafe` is set; otherwise the Basic rules route. If no Privacy Safe model can take a request it fails with the reason; nothing falls back to another model. `web_search` and `web_fetch` still work, and their results say the request left your machine. MCP servers are not restricted. Offered only when a configured model is marked. | as decided |
 
 A mode applies to the orchestrator or to the subagents, whichever it was
 chosen for in `/model`. Tab cycles the orchestrator's choice: auto, cost,
-speed, quality, (uncensored), then your configured models (in routing order
+speed, quality, (uncensored), (private), then your configured models (in routing order
 within each connection), then back to auto. A mode picked for the orchestrator (Tab, the Orchestrator picker, or
 `/model <mode>`) is the subagents' mode too. A model picked for the
 orchestrator changes only the orchestrator; the subagents keep their
@@ -317,7 +319,7 @@ and the replacement becomes the sticky orchestrator.
 Every subagent attempt is appended to `~/.wopr/agent/task-log.jsonl`: time,
 session, task id, attempt, type, effort, brief hash and token count, expected
 context, model, tier, route source (rule, jev, basic, chosen, or off), domain, reason,
-routing mode (`auto`, `cost`, `speed`, `quality`, `uncensored`, or `off`), status, confidence, verified and total quotes, turns, tool calls, tokens,
+routing mode (`auto`, `cost`, `speed`, `quality`, `uncensored`, `private`, or `off`), status, confidence, verified and total quotes, turns, tool calls, tokens,
 cost, duration, exhausted budget, outcome (`accepted`, `escalated`,
 `failover`, `failed`), the trigger, and the model it escalated to. The log is
 local and is meant for tuning the bars and affinities from outcomes.
@@ -395,7 +397,7 @@ rank (for example five or more escalations, at least a third of its tasks),
 `/setup` → Model routing suggests moving it down. `"jev": { "disabled": true }`
 or `"enabled": false` turns routing off and keeps the endpoint.
 
-`WOPR_ROUTER=off` starts every invocation with routing off. `WOPR_ROUTER=auto`, `cost`, `speed`, `quality`, or `uncensored` starts it in that mode when a Jev endpoint is configured; `make evals-live MODE=...` uses this to compare modes.
+`WOPR_ROUTER=off` starts every invocation with routing off. `WOPR_ROUTER=auto`, `cost`, `speed`, `quality`, `uncensored`, or `private` starts it in that mode when a Jev endpoint is configured; `make evals-live MODE=...` uses this to compare modes.
 
 ## Commands
 

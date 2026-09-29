@@ -160,7 +160,7 @@ func (m *InteractiveMode) promptMeta(width int) string {
 	}
 	if m.routingEnabled() {
 		// The router picks the model and the thinking level for each prompt.
-		return hexFg(phosphorHex(), string(m.sessionRouter().Objective())) + subagents + running
+		return hexFg(phosphorHex(), modeBadge(m.sessionRouter().Objective())) + subagents + running
 	}
 	var parts []string
 	modelName, provider := "No provider selected", "Connect a provider"

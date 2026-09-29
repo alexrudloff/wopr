@@ -129,7 +129,7 @@ Basic, or on · Jev).
   Routing choice is Off, Basic (fixed rules on your order and each model's
   window, speed, and cost), or Jev (enter a Jev endpoint and model; Save
   checks that Jev answers). With routing on, it picks a model for each
-  prompt and subagent, the modes (auto, cost, speed, quality, uncensored) appear in
+  prompt and subagent, the modes (auto, cost, speed, quality, uncensored, private) appear in
   `/model` and Tab, and this screen holds **Put your models in order**,
   strongest first: new models join the bottom; space picks one up, ↑/↓
   carry it, and space drops it (esc puts it back; alt+↑/↓ move it

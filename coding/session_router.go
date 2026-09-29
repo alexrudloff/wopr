@@ -357,7 +357,30 @@ func (s *Session) gate(model *ai.Model, o router.Objective) error {
 	if o == router.ObjectiveCost {
 		return fmt.Errorf("cost mode never pays per token, and %s is not in a free or subscription tier. Pick another mode or a model with /model or Tab", spec)
 	}
+	if o == router.ObjectivePrivate {
+		return fmt.Errorf("private mode runs only models marked Privacy Safe, and %s is not. Pick another mode or a model with /model or Tab", spec)
+	}
 	return fmt.Errorf("uncensored mode runs only models marked abliterated, and %s is not. Pick another mode or a model with /model or Tab", spec)
+}
+
+// privateMode reports whether the orchestrator or the subagents route in
+// private mode.
+func (s *Session) privateMode() bool {
+	if s == nil || s.router == nil {
+		return false
+	}
+	return s.router.Auto() && s.router.Objective() == router.ObjectivePrivate ||
+		s.router.SubagentRouting() && s.router.SubagentObjective() == router.ObjectivePrivate
+}
+
+// privateWebNote marks web_search and web_fetch results in private mode:
+// the query left the machine, which private mode allows but says.
+func (s *Session) privateWebNote(_ context.Context, _, toolName string, _ json.RawMessage, result agent.AgentToolResult) agent.AfterToolCallResult {
+	if (toolName != "web_search" && toolName != "web_fetch") || !s.privateMode() {
+		return agent.AfterToolCallResult{}
+	}
+	content := result.Content + "\n\n[Private mode: this " + strings.ReplaceAll(toolName, "_", " ") + " request left your machine.]"
+	return agent.AfterToolCallResult{Content: &content}
 }
 
 // subagentBaseModel is the model subagents and side tasks run on when they

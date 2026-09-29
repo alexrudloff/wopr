@@ -26,9 +26,9 @@ import (
 
 // routingRow is one ranked model.
 type routingRow struct {
-	spec, name, cost string
-	use, abliterated bool
-	strengths        []string
+	spec, name, cost              string
+	use, abliterated, privacySafe bool
+	strengths                     []string
 }
 
 // routingSuggestion is a suggestion on screen.
@@ -48,6 +48,8 @@ type routingView struct {
 	endpoint    *tui.TextInput
 	jevKey      *tui.TextInput
 	jevModel    *tui.TextInput
+	// jevPrivate is Jev's Privacy Safe checkbox.
+	jevPrivate bool
 	// keys says which Jev keys exist, for the key field's placeholder.
 	keys      jevKeys
 	testNote  string
@@ -76,6 +78,7 @@ const (
 	itemEndpoint
 	itemJevKey
 	itemJevModel
+	itemJevPrivate
 	itemSuggestMove
 	itemSuggestKeep
 	itemRow
@@ -109,7 +112,7 @@ func (v *routingView) choose(delta int) {
 func (v *routingView) items() []routingItem {
 	out := []routingItem{{kind: itemEngine}}
 	if v.engine == router.EngineJev {
-		out = append(out, routingItem{kind: itemEndpoint}, routingItem{kind: itemJevKey}, routingItem{kind: itemJevModel})
+		out = append(out, routingItem{kind: itemEndpoint}, routingItem{kind: itemJevKey}, routingItem{kind: itemJevModel}, routingItem{kind: itemJevPrivate})
 	}
 	if v.routes() {
 		for i := range v.suggestions {
@@ -222,6 +225,10 @@ func (v *routingView) HandleInput(data string) {
 			v.engine = engineChoices[(slices.Index(engineChoices, v.engine)+1)%len(engineChoices)]
 		case tui.MatchesKeyID(data, "enter"):
 			v.focus++
+		}
+	case itemJevPrivate:
+		if tui.MatchesKeyID(data, "space") || tui.MatchesKeyID(data, "enter") {
+			v.jevPrivate = !v.jevPrivate
 		}
 	case itemEndpoint, itemJevKey, itemJevModel:
 		if tui.MatchesKeyID(data, "enter") {
@@ -345,6 +352,15 @@ func (v *routingView) Render(width int) []string {
 		top = append(top, field("Jev endpoint", focus.kind == itemEndpoint, input(v.endpoint, focus.kind == itemEndpoint, max(10, inner-14))))
 		top = append(top, field("API key", focus.kind == itemJevKey, input(v.jevKey, focus.kind == itemJevKey, max(10, inner-14))))
 		top = append(top, field("Jev model", focus.kind == itemJevModel, input(v.jevModel, focus.kind == itemJevModel, max(10, inner-14))))
+		check := "[ ]"
+		if v.jevPrivate {
+			check = "[x]"
+		}
+		checkText := th.FgText("text", check) + th.FgText("textMuted", " Privacy Safe: prompts sent to Jev stay with you. Private mode asks Jev only when checked.")
+		if focus.kind == itemJevPrivate {
+			checkText = bold(th.FgText("primary", check)) + th.FgText("textMuted", " Privacy Safe: prompts sent to Jev stay with you. Private mode asks Jev only when checked.")
+		}
+		top = append(top, field("", focus.kind == itemJevPrivate, widthx.TruncateToWidth(checkText, max(10, inner-14), "…", false)))
 		if v.testNote != "" {
 			for _, line := range widthx.WrapTextWithAnsi(v.testNote, max(10, inner-14)) {
 				top = append(top, pad+strings.Repeat(" ", 14)+th.FgText("textMuted", line))
@@ -377,6 +393,9 @@ func (v *routingView) Render(width int) []string {
 			var flags []string
 			if row.abliterated {
 				flags = append(flags, "abliterated")
+			}
+			if row.privacySafe {
+				flags = append(flags, "privacy safe")
 			}
 			if len(row.strengths) > 0 {
 				flags = append(flags, "strong: "+strengthWords(row.strengths))
@@ -481,7 +500,7 @@ func (w *setupWizard) routingScreen() {
 			// Models that share a name are told apart by provider and id.
 			name += " (" + spec + ")"
 		}
-		v.rows = append(v.rows, &routingRow{spec: spec, name: name, cost: costLabels[s.Tier], use: !s.NoRouting, abliterated: s.Uncensored, strengths: slices.Clone(s.Strengths)})
+		v.rows = append(v.rows, &routingRow{spec: spec, name: name, cost: costLabels[s.Tier], use: !s.NoRouting, abliterated: s.Uncensored, privacySafe: s.PrivacySafe, strengths: slices.Clone(s.Strengths)})
 	}
 	if was != engineOff {
 		for _, s := range router.Suggestions(w.m.opts.AgentDir) {
@@ -497,6 +516,7 @@ func (w *setupWizard) routingScreen() {
 	v.jevKey.Mask = true
 	v.jevModel = tui.NewInput(tui.InputOptions{Prompt: &prompt, Placeholder: "jev-1.13"})
 	v.jevModel.SetText(jev.Model)
+	v.jevPrivate = jev.PrivacySafe
 	v.keys = w.jevKeys(jev)
 	switch {
 	case len(v.suggestions) > 0:
@@ -535,7 +555,7 @@ func (w *setupWizard) routingScreen() {
 		if v.engine == router.EngineJev {
 			endpoint, model := router.NormalizeJevEndpoint(v.endpoint.Text()), strings.TrimSpace(v.jevModel.Text())
 			key := strings.TrimSpace(v.jevKey.Text())
-			next := router.JevConfig{Endpoint: endpoint, Model: model, APIKeyProvider: jev.APIKeyProvider}
+			next := router.JevConfig{Endpoint: endpoint, Model: model, APIKeyProvider: jev.APIKeyProvider, PrivacySafe: v.jevPrivate}
 			if key != "" || endpoint != jev.Endpoint {
 				// A typed key is saved for Jev; a new endpoint picks its
 				// key automatically.
@@ -558,7 +578,7 @@ func (w *setupWizard) routingScreen() {
 			if next.APIKeyProvider == "" {
 				v.keys.none, v.keys.provider = false, ""
 			}
-			if changed {
+			if changed || v.jevPrivate != jev.PrivacySafe {
 				plan.Jev = &next
 			}
 		}
@@ -620,7 +640,9 @@ func (w *setupWizard) modelRoutingSettings(row *routingRow, engine string) {
 	use.Hint = "Unchecked, routing never picks it; /model still can."
 	abliterated := tui.NewCheckField("Abliterated", row.abliterated)
 	abliterated.Hint = "No refusal training. The uncensored mode routes only to these."
-	fields := []*tui.FormField{use, abliterated}
+	private := tui.NewCheckField("Privacy Safe", row.privacySafe)
+	private.Hint = "Data stays with you: your machine, your network, or a deployment you trust. Private mode routes only to these."
+	fields := []*tui.FormField{use, abliterated, private}
 	for i, d := range router.Domains {
 		f := tui.NewCheckField(strengthLabels[d], slices.Contains(row.strengths, d))
 		if i == 0 {
@@ -637,9 +659,9 @@ func (w *setupWizard) modelRoutingSettings(row *routingRow, engine string) {
 	if !w.form(f) {
 		return
 	}
-	row.use, row.abliterated, row.strengths = use.Checked(), abliterated.Checked(), nil
+	row.use, row.abliterated, row.privacySafe, row.strengths = use.Checked(), abliterated.Checked(), private.Checked(), nil
 	for i, d := range router.Domains {
-		if fields[2+i].Checked() {
+		if fields[3+i].Checked() {
 			row.strengths = append(row.strengths, d)
 		}
 	}
@@ -655,13 +677,16 @@ func (w *setupWizard) saveRouting(v *routingView, models map[string]*setupModel,
 	for _, row := range v.rows {
 		ranking = append(ranking, row.spec)
 		s := models[row.spec]
-		if s.NoRouting == row.use || s.Uncensored != row.abliterated || !slices.Equal(s.Strengths, row.strengths) {
-			s.NoRouting, s.Uncensored, s.Strengths = !row.use, row.abliterated, row.strengths
+		if s.NoRouting == row.use || s.Uncensored != row.abliterated || s.PrivacySafe != row.privacySafe || !slices.Equal(s.Strengths, row.strengths) {
+			s.NoRouting, s.Uncensored, s.PrivacySafe, s.Strengths = !row.use, row.abliterated, row.privacySafe, row.strengths
 			changes = append(changes, s)
 		}
 	}
 	if r := w.m.sessionRouter(); r != nil && r.Objective() == router.ObjectiveUncensored && !slices.ContainsFunc(v.rows, func(row *routingRow) bool { return row.use && row.abliterated }) {
 		return errors.New("this session is in the uncensored mode, which needs a model marked abliterated that routing uses")
+	}
+	if r := w.m.sessionRouter(); r != nil && r.Objective() == router.ObjectivePrivate && !slices.ContainsFunc(v.rows, func(row *routingRow) bool { return row.use && row.privacySafe }) {
+		return errors.New("this session is in private mode, which needs a model marked Privacy Safe that routing uses")
 	}
 	if err := w.saveRanking(ranking, nil, changes); err != nil {
 		return err

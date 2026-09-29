@@ -194,10 +194,7 @@ func (r *Router) basicBrief(in BriefInput, secret bool) *Decision {
 	o := r.SubagentObjective()
 	pool := r.paidLast(r.allCandidates(in.ContextTokens, o))
 	if secret {
-		pool = filter(pool, func(c candidate) bool {
-			cost := r.cfg.Tiers[c.tier].Cost
-			return cost == CostFreeLocal || cost == CostFreeRemote
-		})
+		pool = filter(pool, func(c candidate) bool { return r.owned(r.cfg.Tiers[c.tier], c.ref) })
 	}
 	chain, quota := r.balanceQuota(r.basicOrder(pool, in.ContextTokens, o), 0)
 	d := r.basicDecision(chain, in.ContextTokens, o)
@@ -219,7 +216,7 @@ func (r *Router) escalateBasic(prev *Decision, in BriefInput) *Decision {
 	o := r.SubagentObjective()
 	floor := r.capabilityOf(prev.chosen)
 	pool := filter(r.paidLast(r.allCandidates(in.ContextTokens, o)), func(c candidate) bool {
-		if prev.Brief.Secret && r.cfg.Tiers[c.tier].Cost != CostFreeLocal && r.cfg.Tiers[c.tier].Cost != CostFreeRemote {
+		if prev.Brief.Secret && !r.owned(r.cfg.Tiers[c.tier], c.ref) {
 			return false
 		}
 		return r.capabilityOf(c) > floor
@@ -288,6 +285,8 @@ func (r *Router) NoRouteReason(contextTokens int, o Objective) string {
 		add(excluded, "pay per token, which cost mode never uses")
 	case ObjectiveUncensored:
 		add(excluded, "not marked abliterated")
+	case ObjectivePrivate:
+		add(excluded, "not marked Privacy Safe")
 	default:
 		add(excluded, "pay per token and not allowed as a last resort")
 	}

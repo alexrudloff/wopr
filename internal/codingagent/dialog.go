@@ -275,11 +275,21 @@ var modeDescriptions = map[router.Objective]string{
 	router.ObjectiveSpeed:      "The fastest model capable enough, with less thinking",
 	router.ObjectiveQuality:    "A model near the strongest available, with more thinking",
 	router.ObjectiveUncensored: "Uncensored models only, orchestrator and subagents",
+	router.ObjectivePrivate:    "Privacy Safe models only, for everything; never falls back",
 }
 
 // modeTitle is a routing mode's name in the model picker.
 func modeTitle(o router.Objective) string {
 	return strings.ToUpper(string(o[:1])) + string(o[1:])
+}
+
+// modeBadge is the routing mode as the prompt shows it; private mode
+// carries a lock so it is never missed.
+func modeBadge(o router.Objective) string {
+	if o == router.ObjectivePrivate {
+		return "🔒 private"
+	}
+	return string(o)
 }
 
 // selectRoutingMode lets the router pick the orchestrator under mode o and

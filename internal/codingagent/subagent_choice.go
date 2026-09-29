@@ -150,7 +150,7 @@ func (m *InteractiveMode) subagentsNote() string {
 	}
 	sub := m.subagentChoice()
 	if o, ok := modeSpec(sub); ok {
-		return "subagents " + string(o)
+		return "subagents " + modeBadge(o)
 	}
 	return "subagents " + m.choiceLabel(sub)
 }

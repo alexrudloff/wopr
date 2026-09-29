@@ -101,7 +101,7 @@ func (w *setupWizard) loadConnections() []*setupConnection {
 				if ref.Model == s.Model {
 					entry := ref
 					s.Ref, s.FromTier, s.Tier = &entry, tier.Name, tier.Cost
-					s.Capability, s.Uncensored = ref.Capability, ref.Uncensored
+					s.Capability, s.Uncensored, s.PrivacySafe = ref.Capability, ref.Uncensored, ref.PrivacySafe
 					s.Strengths = nil
 					for _, d := range router.Domains {
 						if ref.Affinity[d] > 0 {
@@ -375,6 +375,13 @@ func (w *setupWizard) openConnection(id string) {
 					Footer: w.modelFooter(s), Value: "model:" + strconv.Itoa(i)})
 			}
 			options = append(options, tui.DialogOption{Title: "Add models from " + c.Name, Category: "Models", Value: "add"})
+			if routed, safe := privacyCounts(c); routed > 0 {
+				title, desc := "Mark all models Privacy Safe", "Private mode routes only to Privacy Safe models"
+				if safe == routed {
+					title, desc = "Unmark all models Privacy Safe", "they are all marked now"
+				}
+				options = append(options, tui.DialogOption{Title: title, Description: desc, Category: "Models", Value: "privacy"})
+			}
 			switch c.Kind {
 			case setupViaEndpoint:
 				options = append(options,
@@ -425,6 +432,8 @@ func (w *setupWizard) openConnection(id string) {
 			w.modelScreen(c.Models[n])
 		case "add":
 			w.addFromConnection(c)
+		case "privacy":
+			w.setConnectionPrivacy(c)
 		case "edit":
 			w.editEndpoint(c)
 		case "remove":
@@ -442,6 +451,45 @@ func (w *setupWizard) openConnection(id string) {
 		case "env":
 			w.m.showToast("info", "", "Unset $"+c.KeyEnv+" in your shell to disconnect "+c.Name+", or set another key there.")
 		}
+	}
+}
+
+// privacyCounts counts a connection's routed models and how many of them
+// are marked Privacy Safe.
+func privacyCounts(c *setupConnection) (routed, safe int) {
+	for _, s := range c.Models {
+		if s.Ref == nil {
+			continue
+		}
+		routed++
+		if s.PrivacySafe {
+			safe++
+		}
+	}
+	return routed, safe
+}
+
+// setConnectionPrivacy marks every routed model of the connection Privacy
+// Safe, or unmarks them all when all are marked.
+func (w *setupWizard) setConnectionPrivacy(c *setupConnection) {
+	routed, safe := privacyCounts(c)
+	mark := safe < routed
+	var changes []*setupModel
+	for _, s := range c.Models {
+		if s.Ref != nil && s.PrivacySafe != mark {
+			s.PrivacySafe = mark
+			changes = append(changes, s)
+		}
+	}
+	if err := w.saveRanking(w.currentRanking(), nil, changes); err != nil {
+		w.showError("Could not save", err)
+		return
+	}
+	w.reload()
+	if mark {
+		w.m.showFlash(c.Name + ": models marked Privacy Safe")
+	} else {
+		w.m.showFlash(c.Name + ": models no longer Privacy Safe")
 	}
 }
 
