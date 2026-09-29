@@ -519,6 +519,14 @@ func (w *setupWizard) addEndpoint() string {
 			f.Error = "Could not save: " + err.Error()
 			continue
 		}
+		// An endpoint on the user's machine or network starts private; the
+		// connection screen changes it.
+		if privacySafeAddress(ep.BaseURL) {
+			if err := w.writeConfig(router.ConfigFileName, func(src string) (string, error) { return setPrivateProvider(src, ep.ID, true) }); err != nil {
+				f.Error = "Could not save: " + err.Error()
+				continue
+			}
+		}
 		w.reload()
 		return ep.ID
 	}

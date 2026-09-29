@@ -612,9 +612,10 @@ func inferTier(kind setupKind, baseURL, provider string) string {
 	return router.CostPaid
 }
 
-// privacySafeAddress suggests Privacy Safe for an endpoint on the user's
-// own machine or network: localhost, a LAN range, Tailscale, or a .local
-// name. The user can uncheck it; it is only a starting point.
+// privacySafeAddress suggests a private connection for an endpoint on the
+// user's own machine or network: localhost, a LAN range, Tailscale, or a
+// .local name. It is only a starting point; the connection screen changes
+// it.
 func privacySafeAddress(baseURL string) bool {
 	tier := inferTier(setupViaEndpoint, baseURL, "")
 	return tier == router.CostFreeLocal || tier == router.CostFreeRemote

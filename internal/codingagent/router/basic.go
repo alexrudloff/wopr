@@ -286,7 +286,7 @@ func (r *Router) NoRouteReason(contextTokens int, o Objective) string {
 	case ObjectiveUncensored:
 		add(excluded, "not marked abliterated")
 	case ObjectivePrivate:
-		add(excluded, "not marked Privacy Safe")
+		add(excluded, "not on a private connection")
 	default:
 		add(excluded, "pay per token and not allowed as a last resort")
 	}

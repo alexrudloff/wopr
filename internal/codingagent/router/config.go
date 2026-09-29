@@ -56,10 +56,8 @@ type ModelRef struct {
 	// Uncensored marks a model without refusal training (an abliterated
 	// model). Uncensored mode routes only to flagged models.
 	Uncensored bool `json:"uncensored,omitempty"`
-	// PrivacySafe marks a model whose endpoint keeps data with the user:
-	// their own hardware or network, or a deployment they trust. Private
-	// mode routes only to flagged models, and sensitive prompts and secret
-	// briefs keep to them.
+	// PrivacySafe is the per-model flag earlier versions wrote; Load moves
+	// it to PrivateProviders.
 	PrivacySafe bool `json:"privacySafe,omitempty"`
 	// Hashline turns hashline anchors on read and edit on or off for this
 	// model. Unset follows the "hashline" setting, whose default "auto"
@@ -155,6 +153,11 @@ type Config struct {
 	// Ranking orders the models strongest first, as /setup keeps it; the
 	// tiers' capabilities are derived from it (see Strengths).
 	Ranking Ranking `json:"ranking,omitempty"`
+	// PrivateProviders are the connections that keep data with the user:
+	// their own hardware or network, or a deployment they trust. Private
+	// mode routes only to their models, and sensitive prompts and secret
+	// briefs keep to them.
+	PrivateProviders []string `json:"privateProviders,omitempty"`
 	// Tiers are ordered cheapest first.
 	Tiers []TierConfig `json:"tiers"`
 	// Kinds tunes routing per task kind.
@@ -297,6 +300,7 @@ func Load(agentDir string) (Config, error) {
 		return cfg, fmt.Errorf("router: read %s: %w", path, err)
 	}
 	cfg.statsDir = agentDir
+	cfg.migratePrivacySafe()
 	v := strings.ToLower(strings.TrimSpace(os.Getenv("WOPR_ROUTER")))
 	if v == "off" || v == "0" || v == "false" {
 		cfg.Enabled = false
@@ -311,18 +315,37 @@ func Load(agentDir string) (Config, error) {
 			return cfg, errors.New("router: WOPR_ROUTER=uncensored, but no configured model is flagged uncensored")
 		}
 		if o == ObjectivePrivate && !cfg.hasPrivacySafe() {
-			return cfg, errors.New("router: WOPR_ROUTER=private, but no configured model is marked Privacy Safe")
+			return cfg, errors.New("router: WOPR_ROUTER=private, but no configured model is on a private connection")
 		}
 		cfg.Enabled, cfg.objective = true, o
 	}
 	return cfg, nil
 }
 
-// hasPrivacySafe reports whether any configured model is marked Privacy
-// Safe.
+// migratePrivacySafe moves the per-model Privacy Safe flag of earlier
+// versions to the model's provider.
+func (c *Config) migratePrivacySafe() {
+	for i := range c.Tiers {
+		for j := range c.Tiers[i].Models {
+			ref := &c.Tiers[i].Models[j]
+			if ref.PrivacySafe && !slices.Contains(c.PrivateProviders, ref.Provider) {
+				c.PrivateProviders = append(c.PrivateProviders, ref.Provider)
+			}
+			ref.PrivacySafe = false
+		}
+	}
+}
+
+// private reports whether the provider is a private connection.
+func (c *Config) private(provider string) bool {
+	return slices.Contains(c.PrivateProviders, provider)
+}
+
+// hasPrivacySafe reports whether any configured model is on a private
+// connection.
 func (c *Config) hasPrivacySafe() bool {
 	for _, tier := range c.Tiers {
-		if slices.ContainsFunc(tier.Models, func(ref ModelRef) bool { return ref.PrivacySafe }) {
+		if slices.ContainsFunc(tier.Models, func(ref ModelRef) bool { return c.private(ref.Provider) }) {
 			return true
 		}
 	}

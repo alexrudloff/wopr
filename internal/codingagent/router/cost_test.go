@@ -289,14 +289,13 @@ func TestQuotaBalanceMovesToARoomierPeerPlan(t *testing.T) {
 	}
 }
 
-// Private mode never lets data leave the Privacy Safe models: not the
+// Private mode never lets data leave the private connections: not the
 // orchestrator, a brief, or a side task, and not by way of Jev unless Jev is
 // marked Privacy Safe too.
 func TestPrivateModeStaysOnPrivacySafeModels(t *testing.T) {
 	private := func(jevSafe bool) (*Router, *fakeJev) {
 		cfg := testConfig()
-		cfg.Tiers[0].Models[0].PrivacySafe = true
-		cfg.Tiers[1].Models[0].PrivacySafe = true
+		cfg.PrivateProviders = []string{"local", "lan"}
 		jev := promptJev()
 		cfg = withFakeJev(t, cfg, jev)
 		cfg.Jev.PrivacySafe = jevSafe
@@ -316,7 +315,7 @@ func TestPrivateModeStaysOnPrivacySafeModels(t *testing.T) {
 	if d := r.DecideBrief(context.Background(), brief); d == nil || !r.IsPrivacySafe(d.Spec()) {
 		t.Fatalf("brief: want a Privacy Safe model, got %+v", d)
 	}
-	if ref, _, ok := r.SideTask(8000); !ok || !ref.PrivacySafe {
+	if ref, _, ok := r.SideTask(8000); !ok || !r.IsPrivacySafe(ref.Spec()) {
 		t.Fatalf("side task: want a Privacy Safe model, got %+v %v", ref, ok)
 	}
 	if n := len(jev.requests()); n != 0 {
@@ -337,7 +336,7 @@ func TestPrivateModeStaysOnPrivacySafeModels(t *testing.T) {
 	if ref, _, ok := r.SideTask(8000); ok {
 		t.Fatalf("side task: want none, got %s", ref.Spec())
 	}
-	if why := r.NoRouteReason(8000, ObjectivePrivate); !strings.Contains(why, "not marked Privacy Safe") {
+	if why := r.NoRouteReason(8000, ObjectivePrivate); !strings.Contains(why, "not on a private connection") {
 		t.Fatalf("the reason should say why: %q", why)
 	}
 

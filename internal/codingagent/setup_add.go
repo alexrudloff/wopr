@@ -232,8 +232,7 @@ func (w *setupWizard) pickEndpointModels(ep *setupEndpoint, models []remoteModel
 	return w.chooseModels(fmt.Sprintf("Models from %s (%d)", ep.Name, len(items)), items, "", func(item tui.ModelSelectorItem) *setupModel {
 		remote := byID[item.ID]
 		return &setupModel{Kind: setupViaEndpoint, Provider: ep.ID, Model: item.ID, Name: remote.Name, Endpoint: ep,
-			Context: remote.Context, MaxOutput: remote.MaxOutput, Tier: inferTier(setupViaEndpoint, ep.BaseURL, ep.ID),
-			PrivacySafe: privacySafeAddress(ep.BaseURL)}
+			Context: remote.Context, MaxOutput: remote.MaxOutput, Tier: inferTier(setupViaEndpoint, ep.BaseURL, ep.ID)}
 	})
 }
 

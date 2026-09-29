@@ -395,7 +395,7 @@ func (v *routingView) Render(width int) []string {
 				flags = append(flags, "abliterated")
 			}
 			if row.privacySafe {
-				flags = append(flags, "privacy safe")
+				flags = append(flags, "private")
 			}
 			if len(row.strengths) > 0 {
 				flags = append(flags, "strong: "+strengthWords(row.strengths))
@@ -640,9 +640,7 @@ func (w *setupWizard) modelRoutingSettings(row *routingRow, engine string) {
 	use.Hint = "Unchecked, routing never picks it; /model still can."
 	abliterated := tui.NewCheckField("Abliterated", row.abliterated)
 	abliterated.Hint = "No refusal training. The uncensored mode routes only to these."
-	private := tui.NewCheckField("Privacy Safe", row.privacySafe)
-	private.Hint = "Data stays with you: your machine, your network, or a deployment you trust. Private mode routes only to these."
-	fields := []*tui.FormField{use, abliterated, private}
+	fields := []*tui.FormField{use, abliterated}
 	for i, d := range router.Domains {
 		f := tui.NewCheckField(strengthLabels[d], slices.Contains(row.strengths, d))
 		if i == 0 {
@@ -659,9 +657,9 @@ func (w *setupWizard) modelRoutingSettings(row *routingRow, engine string) {
 	if !w.form(f) {
 		return
 	}
-	row.use, row.abliterated, row.privacySafe, row.strengths = use.Checked(), abliterated.Checked(), private.Checked(), nil
+	row.use, row.abliterated, row.strengths = use.Checked(), abliterated.Checked(), nil
 	for i, d := range router.Domains {
-		if fields[3+i].Checked() {
+		if fields[2+i].Checked() {
 			row.strengths = append(row.strengths, d)
 		}
 	}
@@ -677,8 +675,8 @@ func (w *setupWizard) saveRouting(v *routingView, models map[string]*setupModel,
 	for _, row := range v.rows {
 		ranking = append(ranking, row.spec)
 		s := models[row.spec]
-		if s.NoRouting == row.use || s.Uncensored != row.abliterated || s.PrivacySafe != row.privacySafe || !slices.Equal(s.Strengths, row.strengths) {
-			s.NoRouting, s.Uncensored, s.PrivacySafe, s.Strengths = !row.use, row.abliterated, row.privacySafe, row.strengths
+		if s.NoRouting == row.use || s.Uncensored != row.abliterated || !slices.Equal(s.Strengths, row.strengths) {
+			s.NoRouting, s.Uncensored, s.Strengths = !row.use, row.abliterated, row.strengths
 			changes = append(changes, s)
 		}
 	}
@@ -686,7 +684,7 @@ func (w *setupWizard) saveRouting(v *routingView, models map[string]*setupModel,
 		return errors.New("this session is in the uncensored mode, which needs a model marked abliterated that routing uses")
 	}
 	if r := w.m.sessionRouter(); r != nil && r.Objective() == router.ObjectivePrivate && !slices.ContainsFunc(v.rows, func(row *routingRow) bool { return row.use && row.privacySafe }) {
-		return errors.New("this session is in private mode, which needs a model marked Privacy Safe that routing uses")
+		return errors.New("this session is in private mode, which needs a model on a private connection that routing uses")
 	}
 	if err := w.saveRanking(ranking, nil, changes); err != nil {
 		return err

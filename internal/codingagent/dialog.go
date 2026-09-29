@@ -275,7 +275,7 @@ var modeDescriptions = map[router.Objective]string{
 	router.ObjectiveSpeed:      "The fastest model capable enough, with less thinking",
 	router.ObjectiveQuality:    "A model near the strongest available, with more thinking",
 	router.ObjectiveUncensored: "Uncensored models only, orchestrator and subagents",
-	router.ObjectivePrivate:    "Privacy Safe models only, for everything; never falls back",
+	router.ObjectivePrivate:    "Private connections only, for everything; never falls back",
 }
 
 // modeTitle is a routing mode's name in the model picker.

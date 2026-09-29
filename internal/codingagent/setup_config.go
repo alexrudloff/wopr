@@ -41,7 +41,8 @@ type setupModel struct {
 	Tier       string
 	Capability float64
 	Uncensored bool
-	// PrivacySafe marks a model whose endpoint keeps data with the user.
+	// PrivacySafe reports that the model's connection is private (read
+	// from router.json's privateProviders; set on the connection).
 	PrivacySafe bool
 	// Measure is what the probes found; nil when not measured.
 	Measure *modelMeasure
@@ -487,7 +488,7 @@ func uniqueTierName(tiers []router.TierConfig, name, cost string) string {
 
 // modelRef is the router entry for a setup model.
 func (s *setupModel) modelRef() router.ModelRef {
-	return router.ModelRef{Provider: s.Provider, Model: s.Model, Capability: s.Capability, Uncensored: s.Uncensored, PrivacySafe: s.PrivacySafe, Affinity: s.affinity(nil)}
+	return router.ModelRef{Provider: s.Provider, Model: s.Model, Capability: s.Capability, Uncensored: s.Uncensored, Affinity: s.affinity(nil)}
 }
 
 // strengthBonus is the routing affinity a strength tag gives.
@@ -515,6 +516,10 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 	if strings.TrimSpace(src) == "" {
 		src = "{}\n"
 	}
+	src, err := migratePrivacySafe(src)
+	if err != nil {
+		return "", err
+	}
 	var current struct {
 		Tiers *[]router.TierConfig `json:"tiers"`
 		Jev   json.RawMessage      `json:"jev"`
@@ -536,7 +541,6 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 		}
 		return jsoncAppend(src, root, jsoncMember(key, value)), nil
 	}
-	var err error
 	if plan.Enabled != nil {
 		if src, err = set(src, "enabled", strconv.FormatBool(*plan.Enabled)); err != nil {
 			return "", err
@@ -610,7 +614,7 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 		ref := s.modelRef()
 		if s.Ref != nil {
 			ref = *s.Ref
-			ref.Capability, ref.Uncensored, ref.PrivacySafe, ref.Affinity = s.Capability, s.Uncensored, s.PrivacySafe, s.affinity(s.Ref.Affinity)
+			ref.Capability, ref.Uncensored, ref.Affinity = s.Capability, s.Uncensored, s.affinity(s.Ref.Affinity)
 		}
 		drop := s.Removed || s.NoRouting
 		placed := false
@@ -693,6 +697,93 @@ func mergeRouterJSON(src string, plan routerPlan) (string, error) {
 		}
 	}
 	return src, nil
+}
+
+// setPrivateProvider marks provider private in router.json, or unmarks it.
+func setPrivateProvider(src, provider string, private bool) (string, error) {
+	if strings.TrimSpace(src) == "" {
+		src = "{}\n"
+	}
+	src, err := migratePrivacySafe(src)
+	if err != nil {
+		return "", err
+	}
+	var current struct {
+		Private []string `json:"privateProviders"`
+	}
+	if err := json.Unmarshal([]byte(stripJSONComments(src)), &current); err != nil {
+		return "", fmt.Errorf("router.json: %w", err)
+	}
+	list := slices.DeleteFunc(current.Private, func(p string) bool { return p == provider })
+	if private {
+		list = append(list, provider)
+	}
+	return writePrivateProviders(src, list)
+}
+
+// migratePrivacySafe moves the per-model "privacySafe" flags earlier
+// versions wrote into "privateProviders", by the model's provider.
+func migratePrivacySafe(src string) (string, error) {
+	var current struct {
+		Private []string `json:"privateProviders"`
+		Tiers   []struct {
+			Models []struct {
+				Provider    string `json:"provider"`
+				PrivacySafe bool   `json:"privacySafe"`
+			} `json:"models"`
+		} `json:"tiers"`
+	}
+	if err := json.Unmarshal([]byte(stripJSONComments(src)), &current); err != nil {
+		return "", fmt.Errorf("router.json: %w", err)
+	}
+	list, moved := current.Private, false
+	for i, tier := range current.Tiers {
+		for j, ref := range tier.Models {
+			span, ok, err := jsoncFind(src, "tiers", fmt.Sprintf("#%d", i), "models", fmt.Sprintf("#%d", j), "privacySafe")
+			if err != nil {
+				return "", err
+			}
+			if !ok {
+				continue
+			}
+			src, moved = jsoncRemove(src, span), true
+			if ref.PrivacySafe && !slices.Contains(list, ref.Provider) {
+				list = append(list, ref.Provider)
+			}
+		}
+	}
+	if !moved {
+		return src, nil
+	}
+	return writePrivateProviders(src, list)
+}
+
+// writePrivateProviders sets "privateProviders" to list, sorted, or removes
+// it when list is empty.
+func writePrivateProviders(src string, list []string) (string, error) {
+	span, ok, err := jsoncFind(src, "privateProviders")
+	if err != nil {
+		return "", err
+	}
+	if len(list) == 0 {
+		if ok {
+			src = jsoncRemove(src, span)
+		}
+		return src, nil
+	}
+	slices.Sort(list)
+	data, err := json.Marshal(slices.Compact(list))
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return jsoncReplace(src, span, string(data)), nil
+	}
+	root, _, err := jsoncFind(src)
+	if err != nil {
+		return "", err
+	}
+	return jsoncAppend(src, root, jsoncMember("privateProviders", string(data))), nil
 }
 
 // updateProbeURL points the tiers probed at from to to, after an

@@ -32,7 +32,7 @@ const (
 	// ObjectiveUncensored: only models flagged Uncensored, orchestrator and
 	// subagents alike, and no Jev (it relays to a third party).
 	ObjectiveUncensored Objective = "uncensored"
-	// ObjectivePrivate: only models marked Privacy Safe, orchestrator,
+	// ObjectivePrivate: only models on private connections, orchestrator,
 	// subagents, and side tasks alike, highest-ranked first; Jev only when
 	// it is marked Privacy Safe too. Nothing falls back to another model.
 	ObjectivePrivate Objective = "private"
@@ -83,26 +83,22 @@ func (r *Router) Objectives() []Objective {
 	return out
 }
 
-// PrivateAvailable reports whether any configured model is marked Privacy
-// Safe.
+// PrivateAvailable reports whether any configured model is on a private
+// connection.
 func (r *Router) PrivateAvailable() bool { return r.cfg.hasPrivacySafe() }
 
-// IsPrivacySafe reports whether provider/model is marked Privacy Safe.
+// IsPrivacySafe reports whether provider/model is on a private connection.
 func (r *Router) IsPrivacySafe(spec string) bool {
-	for _, ref := range r.cfg.refs(spec) {
-		if ref.PrivacySafe {
-			return true
-		}
-	}
-	return false
+	provider, _, _ := strings.Cut(spec, "/")
+	return r.cfg.private(provider)
 }
 
 // owned reports whether a model keeps data with the user, for sensitive
-// prompts and secret briefs: marked Privacy Safe, or, when the user marked
-// none, in a free-local or free-remote tier.
+// prompts and secret briefs: on a private connection, or, when the user
+// marked none, in a free-local or free-remote tier.
 func (r *Router) owned(tier TierConfig, ref ModelRef) bool {
 	if r.cfg.hasPrivacySafe() {
-		return ref.PrivacySafe
+		return r.cfg.private(ref.Provider)
 	}
 	return tier.Cost == CostFreeLocal || tier.Cost == CostFreeRemote
 }
@@ -165,7 +161,7 @@ func (r *Router) checkObjective(o Objective) error {
 		return fmt.Errorf("router: no configured model is flagged uncensored")
 	}
 	if o == ObjectivePrivate && !r.PrivateAvailable() {
-		return fmt.Errorf("router: no configured model is marked Privacy Safe")
+		return fmt.Errorf("router: no configured model is on a private connection")
 	}
 	return nil
 }
@@ -219,7 +215,7 @@ func (r *Router) allowed(tier TierConfig, ref ModelRef, o Objective) bool {
 	case ObjectiveUncensored:
 		return ref.Uncensored
 	case ObjectivePrivate:
-		return ref.PrivacySafe
+		return r.cfg.private(ref.Provider)
 	case ObjectiveCost:
 		return tier.Cost != CostPaid
 	}

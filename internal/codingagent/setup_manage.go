@@ -36,7 +36,10 @@ type setupConnection struct {
 	// variable a key comes from instead.
 	HasKey bool
 	KeyEnv string
-	Models []*setupModel
+	// Private marks a connection that keeps data with the user; private
+	// mode and sensitive prompts use only its models.
+	Private bool
+	Models  []*setupModel
 }
 
 // kindLabel names a connection kind for people.
@@ -83,7 +86,11 @@ func (w *setupWizard) loadConnections() []*setupConnection {
 	}
 	refs := map[string][]router.ModelRef{}
 	tierOf := map[string]router.TierConfig{}
+	private := map[string]bool{}
 	if r := w.m.sessionRouter(); r != nil {
+		for _, provider := range r.Config().PrivateProviders {
+			private[provider] = true
+		}
 		for _, tier := range r.Config().Tiers {
 			for _, ref := range tier.Models {
 				if _, seen := tierOf[ref.Spec()]; seen {
@@ -101,7 +108,7 @@ func (w *setupWizard) loadConnections() []*setupConnection {
 				if ref.Model == s.Model {
 					entry := ref
 					s.Ref, s.FromTier, s.Tier = &entry, tier.Name, tier.Cost
-					s.Capability, s.Uncensored, s.PrivacySafe = ref.Capability, ref.Uncensored, ref.PrivacySafe
+					s.Capability, s.Uncensored = ref.Capability, ref.Uncensored
 					s.Strengths = nil
 					for _, d := range router.Domains {
 						if ref.Affinity[d] > 0 {
@@ -191,6 +198,12 @@ func (w *setupWizard) loadConnections() []*setupConnection {
 		}
 		out = append(out, c)
 	}
+	for _, c := range out {
+		c.Private = private[c.ID]
+		for _, s := range c.Models {
+			s.PrivacySafe = c.Private
+		}
+	}
 	return out
 }
 
@@ -212,14 +225,21 @@ func connectionDetail(c *setupConnection) string {
 		if c.HasKey {
 			detail += " · key"
 		}
-		return detail
+		return detail + privateNote(c)
 	case setupViaSubscription:
-		return "subscription · signed in"
+		return "subscription · signed in" + privateNote(c)
 	}
 	if c.KeyEnv != "" {
-		return "API key · from $" + strings.TrimPrefix(c.KeyEnv, "$")
+		return "API key · from $" + strings.TrimPrefix(c.KeyEnv, "$") + privateNote(c)
 	}
-	return "API key · stored"
+	return "API key · stored" + privateNote(c)
+}
+
+func privateNote(c *setupConnection) string {
+	if c.Private {
+		return " · private"
+	}
+	return ""
 }
 
 // modelFooter summarizes a model in a list: measuring, or its speed.
@@ -375,13 +395,12 @@ func (w *setupWizard) openConnection(id string) {
 					Footer: w.modelFooter(s), Value: "model:" + strconv.Itoa(i)})
 			}
 			options = append(options, tui.DialogOption{Title: "Add models from " + c.Name, Category: "Models", Value: "add"})
-			if routed, safe := privacyCounts(c); routed > 0 {
-				title, desc := "Mark this endpoint as private", "Marks its models Privacy Safe; private mode routes only to those"
-				if safe == routed {
-					title, desc = "Unmark this endpoint as private", "Its models are all marked Privacy Safe now"
-				}
-				options = append(options, tui.DialogOption{Title: title, Description: desc, Category: "Models", Value: "privacy"})
+			check := "[ ]"
+			if c.Private {
+				check = "[x]"
 			}
+			options = append(options, tui.DialogOption{Title: check + " Private endpoint", Description: "Private mode and sensitive prompts use only private endpoints",
+				Category: "Connection", Value: "privacy"})
 			switch c.Kind {
 			case setupViaEndpoint:
 				options = append(options,
@@ -454,34 +473,10 @@ func (w *setupWizard) openConnection(id string) {
 	}
 }
 
-// privacyCounts counts a connection's routed models and how many of them
-// are marked Privacy Safe.
-func privacyCounts(c *setupConnection) (routed, safe int) {
-	for _, s := range c.Models {
-		if s.Ref == nil {
-			continue
-		}
-		routed++
-		if s.PrivacySafe {
-			safe++
-		}
-	}
-	return routed, safe
-}
-
-// setConnectionPrivacy marks every routed model of the connection Privacy
-// Safe, or unmarks them all when all are marked.
+// setConnectionPrivacy toggles whether the connection is private.
 func (w *setupWizard) setConnectionPrivacy(c *setupConnection) {
-	routed, safe := privacyCounts(c)
-	mark := safe < routed
-	var changes []*setupModel
-	for _, s := range c.Models {
-		if s.Ref != nil && s.PrivacySafe != mark {
-			s.PrivacySafe = mark
-			changes = append(changes, s)
-		}
-	}
-	if err := w.saveRanking(w.currentRanking(), nil, changes); err != nil {
+	mark := !c.Private
+	if err := w.writeConfig(router.ConfigFileName, func(src string) (string, error) { return setPrivateProvider(src, c.ID, mark) }); err != nil {
 		w.showError("Could not save", err)
 		return
 	}

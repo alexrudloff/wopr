@@ -116,7 +116,7 @@ leader sequences are fixed and are not read from `keybindings.json`.
 | `ctrl+x` `?` | Open the agent's waiting question |
 | `ctrl+x` `q` | Quit; asks first while background agents run |
 
-On an empty prompt, `tab` cycles the models you set up in `/setup`, in setup's order. With model routing on, it cycles the routing modes first (`auto`, `cost`, `speed`, `quality`, `uncensored` when a model is flagged, and `private` when one is marked Privacy Safe), then those models, then back to `auto`; `shift+tab` goes the other way. A mode Tab picks applies to the subagents too; a model changes only the orchestrator (`/model` → Subagents splits them). `ctrl+t` cycles the thinking level, shown in the prompt as a five-bar meter.
+On an empty prompt, `tab` cycles the models you set up in `/setup`, in setup's order. With model routing on, it cycles the routing modes first (`auto`, `cost`, `speed`, `quality`, `uncensored` when a model is flagged, and `private` when a connection is private), then those models, then back to `auto`; `shift+tab` goes the other way. A mode Tab picks applies to the subagents too; a model changes only the orchestrator (`/model` → Subagents splits them). `ctrl+t` cycles the thinking level, shown in the prompt as a five-bar meter.
 
 While a response is running, press `escape` twice within five seconds to
 interrupt it. The first press arms the interrupt and the prompt shows

@@ -20,7 +20,7 @@ differently, change the source.
   score every prompt, with Basic taking over whenever Jev can't answer. Modes
   set what to optimize: **auto**, **speed**, **quality**, **cost** (local and
   subscriptions first, never pay-per-token), **uncensored**, or **private**
-  (only models you mark Privacy Safe, for everything, with no fallback). Off
+  (only connections you mark private, for everything, with no fallback). Off
   by default; turn it on in `/setup`.
 - **Token efficiency, on by default.** The mechanisms below cut what each
   request carries, and wopr tunes them per model from how each of your models
