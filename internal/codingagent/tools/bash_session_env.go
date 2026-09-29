@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"os"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -52,6 +53,18 @@ func sessionEnvironment(ctx context.Context, expose bool, binDir string) []strin
 		return slices.Contains(sessionVariables, name)
 	})
 	session, ok := agent.ToolEnvironmentFrom(ctx)
+	if ok && session.TempDir != "" && os.MkdirAll(session.TempDir, 0o700) == nil {
+		// The session's own temp directory, so files a command creates
+		// through mktemp or a language's temp API can be cleaned up with it.
+		env = slices.DeleteFunc(env, func(kv string) bool {
+			name, _, _ := strings.Cut(kv, "=")
+			return name == "TMPDIR" || strings.EqualFold(name, "TMP") || strings.EqualFold(name, "TEMP")
+		})
+		env = append(env, "TMPDIR="+session.TempDir)
+		if runtime.GOOS == "windows" {
+			env = append(env, "TMP="+session.TempDir, "TEMP="+session.TempDir)
+		}
+	}
 	if !expose || !ok {
 		return env
 	}

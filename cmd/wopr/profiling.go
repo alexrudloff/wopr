@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
 )
 
 // stopProfiles writes the WOPR_PROFILE profiles that main started. It is a no-op
@@ -13,6 +15,7 @@ var stopProfiles = func() {}
 // main uses this on every exit path.
 func exitProcess(code int) {
 	stopProfiles()
+	tempfiles.ExitCleanup()
 	os.Exit(code)
 }
 

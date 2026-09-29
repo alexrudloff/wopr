@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
 	"github.com/alexrudloff/wopr/tui"
 )
 
@@ -240,5 +241,6 @@ func (m *InteractiveMode) handleInterruptSignal() {
 	}
 	// Restore terminal state before exit 130.
 	tui.RestoreTerminalFromSignal()
+	tempfiles.ExitCleanup()
 	os.Exit(130)
 }

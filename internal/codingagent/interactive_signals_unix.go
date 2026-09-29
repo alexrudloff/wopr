@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
 	"github.com/alexrudloff/wopr/tui"
 )
 
@@ -32,6 +33,7 @@ func (m *InteractiveMode) installTerminalGoneHandler(ctx context.Context) func()
 // dead tty re-trigger EIO/EPIPE). Only SIGHUP reaches it: SIGHUP is
 // registered only off win32, where console close arrives as SIGTERM.
 func (m *InteractiveMode) handleTerminalGone() {
+	tempfiles.ExitCleanup()
 	os.Exit(129)
 }
 

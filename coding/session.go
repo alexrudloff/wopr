@@ -21,6 +21,7 @@ import (
 	"github.com/alexrudloff/wopr/internal/codingagent/compaction"
 	"github.com/alexrudloff/wopr/internal/codingagent/queue"
 	"github.com/alexrudloff/wopr/internal/codingagent/router"
+	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
 	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 )
 
@@ -60,6 +61,7 @@ type Session struct {
 	// stall is the run's stall-nudge state (see session_stall.go); only
 	// the agent goroutine touches it.
 	stall         stallState
+	temp          *tempfiles.Tracker
 	fileWatch     fileWatch
 	routeNeeded   atomic.Bool
 	routeBoundary atomic.Bool // the next route decision starts a run
@@ -387,6 +389,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 		PrepareToolResult: func(ctx context.Context, result agent.AgentToolResult) agent.AgentToolResult {
 			return sess.prepareToolResult(ctx, result)
 		},
+		TempDir:  func() string { return sess.sessionTempDir() },
 		StreamFn: cacheWarmingStreamFn(func() *Session { return sess }),
 		PrepareNextTurn: func(ctx context.Context, turn agent.PrepareNextTurnContext) *agent.AgentLoopTurnUpdate {
 			return sess.prepareNextTurn(ctx, turn)
@@ -511,6 +514,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initEfficiency()
 	sess.initApplyPatch()
 	sess.initTestCap()
+	sess.initTempFiles()
 	sess.initQueue(opts)
 	sess.initAskUser(opts)
 	sess.initGoal()
@@ -917,6 +921,9 @@ func (s *Session) Close() error {
 	s.closeCacheWarming()
 	s.closeMCP()
 	s.learner().Close()
+	if s.temp != nil {
+		s.temp.CleanSession(s.ID(), false)
+	}
 	s.closeOnce.Do(func() {
 		close(s.closeDone)
 	})
@@ -1686,6 +1693,9 @@ func (s *Session) emitOrderedEventSync(ev agent.AgentEvent) {
 
 // emitCompactionEvent preserves the order of compaction and agent events.
 func (s *Session) emitCompactionEvent(ev agent.AgentEvent) {
+	if end, ok := ev.(agent.CompactionEndEvent); ok && !end.Aborted && end.Summary != "" {
+		s.cleanTempAfterCompaction()
+	}
 	if _, ok := ev.(agent.CompactionStartEvent); ok {
 		s.emitOrderedEventSync(ev)
 		return

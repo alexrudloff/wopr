@@ -23,6 +23,7 @@ import (
 	"github.com/alexrudloff/wopr/internal/codingagent"
 	"github.com/alexrudloff/wopr/internal/codingagent/export"
 	"github.com/alexrudloff/wopr/internal/codingagent/prompts"
+	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
 	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 	"github.com/alexrudloff/wopr/internal/profiling"
 	"github.com/alexrudloff/wopr/internal/woprdocs"
@@ -677,6 +678,9 @@ func main() {
 		fatalf("error: construct session: %v", err)
 	}
 	trace.Mark("session-created")
+	// Deferred first so it runs last: after the session closes, whatever
+	// this process's sessions left in the temp directories goes.
+	defer tempfiles.ExitCleanup()
 	defer func() { _ = codingSess.Close() }()
 	// A resumed session restores the model it was using.
 	if restored := codingSess.Model(); restored != nil {

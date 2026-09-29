@@ -83,6 +83,9 @@ func (s *Session) cleanupRetiredSessionResources(sessionID string) {
 		return
 	}
 	ai.CloseOpenAICodexWebSocketSessions(sessionID)
+	if s.temp != nil {
+		s.noteTempCleaned(s.temp.CleanSession(sessionID, true))
+	}
 }
 
 func (s *Session) cacheWarmer() (*icodingagent.CacheWarmer, string) {

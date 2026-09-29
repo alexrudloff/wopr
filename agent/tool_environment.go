@@ -12,11 +12,13 @@ import (
 // WOPR_PROVIDER, WOPR_MODEL, and WOPR_REASONING_LEVEL. Empty fields are not exported.
 // Image metadata supplies the selected model profile to read tools.
 type ToolEnvironment struct {
-	SessionID      string
-	SessionFile    string
-	Provider       string
-	Model          string
-	ThinkingLevel  string
+	SessionID     string
+	SessionFile   string
+	Provider      string
+	Model         string
+	ThinkingLevel string
+	// TempDir, when set, is the TMPDIR for processes the tool starts.
+	TempDir        string
 	InputLimits    *ai.ModelInputLimits
 	SupportsImages *bool
 }
@@ -39,6 +41,9 @@ func (a *Agent) toolEnvironment(model *ai.Model, thinking ai.ThinkingLevel) Tool
 	env := ToolEnvironment{SessionID: a.opts.SessionID, ThinkingLevel: string(thinking)}
 	if a.opts.SessionFile != nil {
 		env.SessionFile = a.opts.SessionFile()
+	}
+	if a.opts.TempDir != nil {
+		env.TempDir = a.opts.TempDir()
 	}
 	if model != nil {
 		env.Model = model.ID

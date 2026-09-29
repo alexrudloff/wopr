@@ -394,6 +394,12 @@ type RouteEvent struct {
 	Fallback bool
 }
 
+// TempFilesCleanedEvent reports that temp files the session created were
+// deleted.
+type TempFilesCleanedEvent struct {
+	Count int
+}
+
 // RoutingPausedEvent reports that Jev stopped answering: the Basic rules
 // route until it answers again. It fires once per outage.
 type RoutingPausedEvent struct {
@@ -435,6 +441,7 @@ func (CompactionEndEvent) agentEvent()                  {}
 func (AutoRetryStartEvent) agentEvent()                 {}
 func (RouteEvent) agentEvent()                          {}
 func (RoutingPausedEvent) agentEvent()                  {}
+func (TempFilesCleanedEvent) agentEvent()               {}
 func (SavingsEvent) agentEvent()                        {}
 func (AutoRetryEndEvent) agentEvent()                   {}
 func (SummarizationRetryScheduledEvent) agentEvent()    {}
@@ -501,6 +508,9 @@ type AgentOptions struct {
 	// SessionFile, when set, reports the session file tools may expose as
 	// WOPR_SESSION_FILE. Nil or an empty result exports nothing.
 	SessionFile func() string
+	// TempDir, when set, reports the TMPDIR for processes tools start. An
+	// empty result leaves the inherited one.
+	TempDir func() string
 
 	// SteeringMode controls how steering messages are drained (default: one-at-a-time).
 	SteeringMode QueueMode

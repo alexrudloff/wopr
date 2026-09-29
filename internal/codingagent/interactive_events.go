@@ -418,6 +418,10 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		m.handleRouteEvent(e)
 		m.tuiInst.Render()
 
+	case agent.TempFilesCleanedEvent:
+		m.showFlash(fmt.Sprintf("Cleaned up %d temp files", e.Count))
+		m.tuiInst.Render()
+
 	case agent.RoutingPausedEvent:
 		m.showToast("warning", "", e.Reason)
 		m.tuiInst.Render()

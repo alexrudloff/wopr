@@ -57,6 +57,8 @@ func rpcAgentEvent(event agent.AgentEvent) ([]any, error) {
 		}}, nil
 	case agent.RoutingPausedEvent:
 		return []any{map[string]any{"type": "routing_paused", "reason": event.Reason}}, nil
+	case agent.TempFilesCleanedEvent:
+		return []any{map[string]any{"type": "temp_files_cleaned", "count": event.Count}}, nil
 	case agent.AutoRetryEndEvent:
 		out := map[string]any{"type": "auto_retry_end", "success": event.Success, "attempt": event.Attempt}
 		if event.FinalError != "" {

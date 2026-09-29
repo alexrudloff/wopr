@@ -87,6 +87,8 @@ type Settings struct {
 	Skills  []string `json:"skills,omitempty"`
 	Prompts []string `json:"prompts,omitempty"`
 	Themes  []string `json:"themes,omitempty"`
+	// CleanupTempFiles deletes the temp files sessions create (default on).
+	CleanupTempFiles *bool `json:"cleanupTempFiles,omitempty"`
 	// EnableSkillCommands lists /skill:name commands in autocomplete.
 	// Default: true.
 	EnableSkillCommands *bool `json:"enableSkillCommands,omitempty"`
@@ -509,6 +511,9 @@ func (s Settings) GetCollapseChangelog() bool    { return boolOr(s.CollapseChang
 
 // GetBashCompaction reports whether bash output is compacted. Default: true.
 func (s Settings) GetBashCompaction() bool { return boolOr(s.BashCompaction, true) }
+
+// GetCleanupTempFiles reports whether sessions' temp files are cleaned up.
+func (s Settings) GetCleanupTempFiles() bool { return boolOr(s.CleanupTempFiles, true) }
 
 // GetEnableSkillCommands reports whether /skill:name commands autocomplete.
 func (s Settings) GetEnableSkillCommands() bool { return boolOr(s.EnableSkillCommands, true) }

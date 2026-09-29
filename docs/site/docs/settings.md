@@ -153,6 +153,7 @@ in the 256-color palette. See [terminal setup](terminal-setup.md).
 | `shellPath` | string |  | Shell used by the bash tool. |
 | `shellCommandPrefix` | string |  | Prefix applied to every shell command. |
 | `externalEditor` | string |  | Editor opened by `app.editor.external`. |
+| `cleanupTempFiles` | boolean | `true` | Delete the temp files sessions create once nothing needs them. See [Temp file cleanup](#temp-file-cleanup). |
 
 ## Tools
 
@@ -194,6 +195,27 @@ After `edit` or `write` succeeds, WOPR runs a fast checker on the changed file a
   "diagnostics": { "timeoutMs": 3000, "commands": { "go": "go vet {dir}", "shell": "off" } }
 }
 ```
+### Temp file cleanup
+
+Models often leave scripts, screenshots and downloads in the system temp directory. WOPR tracks what a session creates there and deletes it once nothing needs it.
+
+What is tracked:
+
+- Each shell command runs with `TMPDIR` set to a folder for the session, so `mktemp` and language temp APIs write there.
+- Files the `write` and `edit` tools put in /tmp or the system temp directory.
+- Top-level entries in those directories that appear during a shell command and belong to you. Anything that existed when WOPR started is never tracked.
+
+The list lives in `~/.wopr/agent/temp-files.json`, with the session and the WOPR process that created each entry.
+
+When tracked files are deleted:
+
+- After a compaction, if neither the summary nor the kept messages mention the file by path or name, and it hasn't been used in the last 5 minutes.
+- When you leave a session (`/new`, resume, switch), for files not used in the last 5 minutes. The rest wait for a later trigger.
+- When WOPR exits, including a closed terminal or an external interrupt.
+- When WOPR starts, for files whose creating process is no longer running (a crash or `kill -9`).
+
+Deletion stays inside the temp directories, touches only tracked entries you own, and never follows a symlink. Running processes are left alone. Set `cleanupTempFiles` to `false`, or turn off **Clean up temp files** in `/settings`, to keep everything.
+
 ### Bash output compaction
 
 WOPR drops lines that carry no signal from the output of common commands before the model sees them. Filters only remove lines they recognize and never reword the rest; failure lines are always kept.

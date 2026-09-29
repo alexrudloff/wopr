@@ -779,6 +779,8 @@ func settingsItems() []settingItem {
 		},
 		boolSetting("auto-resize-images", "Auto-resize images", "Resize large images to 2000x2000 max for better model compatibility", Settings.GetImageAutoResize, func(s *Settings) **bool { return &s.images().AutoResize }),
 		boolSetting("block-images", "Block images", "Prevent images from being sent to LLM providers", Settings.GetBlockImages, func(s *Settings) **bool { return &s.images().BlockImages }),
+		boolSetting("cleanup-temp-files", "Clean up temp files", "Delete the temp files a session's tools create once nothing needs them",
+			Settings.GetCleanupTempFiles, func(s *Settings) **bool { return &s.CleanupTempFiles }),
 		boolSetting("skill-commands", "Skill commands", "Register skills as /skill:name commands",
 			Settings.GetEnableSkillCommands, func(s *Settings) **bool { return &s.EnableSkillCommands }),
 		boolSetting("show-hardware-cursor", "Show hardware cursor", "Show the terminal cursor while still positioning it for IME support", Settings.GetShowHardwareCursor, func(s *Settings) **bool { return &s.ShowHardwareCursor }),
