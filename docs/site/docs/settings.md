@@ -203,7 +203,8 @@ What is tracked:
 
 - Each shell command runs with `TMPDIR` set to a folder for the session, so `mktemp` and language temp APIs write there.
 - Files the `write` and `edit` tools put in /tmp or the system temp directory.
-- Top-level entries in those directories that appear during a shell command and belong to you. Anything that existed when WOPR started is never tracked.
+- Top-level entries in those directories that appear during a shell command, belong to you, and are named in the command or its output. An entry nothing names may belong to another program and is left alone; anything that existed when WOPR started is never tracked.
+- The shell tool's own full-output logs (`wopr-bash-*.log`).
 
 The list lives in `~/.wopr/agent/temp-files.json`, with the session and the WOPR process that created each entry.
 

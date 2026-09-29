@@ -106,8 +106,11 @@ func (t *Tracker) BeforeCommand(callID string) {
 }
 
 // AfterCommand records the entries the command created: new since its
-// snapshot, absent when the process started, and owned by the user.
-func (t *Tracker) AfterCommand(callID, sessionID string) {
+// snapshot, absent when the process started, owned by the user, and named
+// in text (the command and its output). A new entry nothing names may
+// belong to another program writing to the same directory, so it is left
+// alone.
+func (t *Tracker) AfterCommand(callID, sessionID, text string) {
 	t.mu.Lock()
 	before, ok := t.snapshots[callID]
 	delete(t.snapshots, callID)
@@ -122,7 +125,7 @@ func (t *Tracker) AfterCommand(callID, sessionID string) {
 				continue
 			}
 			path := filepath.Join(root, name)
-			if owned(path) {
+			if strings.Contains(text, name) && owned(path) {
 				created = append(created, path)
 			}
 		}

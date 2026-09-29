@@ -7,6 +7,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
+	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 )
 
 // initTempFiles tracks the temp files this session's tools create, unless
@@ -23,10 +24,14 @@ func (s *Session) initTempFiles() {
 		}
 		return agent.ToolCallHookResult{}
 	})
-	s.agent.AddAfterToolCallHook(func(_ context.Context, callID, toolName string, args json.RawMessage, _ agent.AgentToolResult) agent.AfterToolCallResult {
+	s.agent.AddAfterToolCallHook(func(_ context.Context, callID, toolName string, args json.RawMessage, result agent.AgentToolResult) agent.AfterToolCallResult {
 		switch toolName {
 		case "bash":
-			t.AfterCommand(callID, s.ID())
+			t.AfterCommand(callID, s.ID(), string(args)+"\n"+result.Content)
+			if details, ok := result.Details.(*tools.BashDetails); ok && details != nil && details.FullOutputPath != "" {
+				// The tool's own full-output log.
+				t.RecordPath(s.ID(), details.FullOutputPath)
+			}
 		case "write", "edit":
 			var in struct {
 				Path string `json:"path"`
@@ -41,6 +46,14 @@ func (s *Session) initTempFiles() {
 		}
 		return agent.AfterToolCallResult{}
 	})
+}
+
+// recordBashLog records the full-output log a user shell command (!cmd)
+// left in the temp directory.
+func (s *Session) recordBashLog(path string) {
+	if s.temp != nil && path != "" {
+		s.temp.RecordPath(s.ID(), path)
+	}
 }
 
 // sessionTempDir is the TMPDIR for this session's shell commands, or "" when

@@ -3,6 +3,7 @@ package tempfiles
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -35,6 +36,23 @@ func TestCleanupDeletesOnlyWhatIsSafe(t *testing.T) {
 	}
 	exists := func(p string) bool { _, err := os.Lstat(p); return err == nil }
 
+	// A command is credited only with new entries its text or output names.
+	tr.baseline = tr.list()
+	tr.BeforeCommand("c1")
+	named := file(root, "named.txt", old)
+	unnamed := file(root, "other-app.lock", old)
+	tr.AfterCommand("c1", "s1", "echo hi > named.txt")
+	var tracked []string
+	_ = tr.update(func(e []Entry) []Entry {
+		for _, x := range e {
+			tracked = append(tracked, x.Path)
+		}
+		return e
+	})
+	if !slices.Contains(tracked, named) || slices.Contains(tracked, unnamed) {
+		t.Fatalf("command diff tracked %v, want %s and not %s", tracked, named, unnamed)
+	}
+
 	untracked := file(root, "untracked", old)
 	outsideFile := file(outside, "outside", old)
 	target := file(outside, "target", old)
@@ -57,7 +75,7 @@ func TestCleanupDeletesOnlyWhatIsSafe(t *testing.T) {
 	// Leaving the session: the link itself goes, never its target; nothing
 	// untracked or outside a root is touched.
 	tr.CleanSession("s1", false)
-	if exists(link) || !exists(target) || !exists(untracked) || !exists(outsideFile) {
+	if exists(link) || !exists(target) || !exists(untracked) || !exists(outsideFile) || !exists(unnamed) {
 		t.Fatalf("session: link=%v target=%v untracked=%v outside=%v", exists(link), exists(target), exists(untracked), exists(outsideFile))
 	}
 

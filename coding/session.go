@@ -1350,6 +1350,7 @@ func (s *Session) executeBash(ctx context.Context, command string, excludeFromCo
 	}
 	operations := tools.NewLocalBashOperations(settings, filepath.Join(s.services.AgentDir(), "bin"))
 	shared, err := tools.ExecuteBashWithOperations(bashCtx, resolvedCommand, s.inner.CWD(), operations, tools.BashExecOptions{OnChunk: onChunk})
+	s.recordBashLog(shared.FullOutputPath)
 	exitCode := -1
 	if shared.ExitCode != nil {
 		exitCode = *shared.ExitCode
