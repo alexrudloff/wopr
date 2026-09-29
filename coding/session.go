@@ -64,6 +64,7 @@ type Session struct {
 	temp          *tempfiles.Tracker
 	fileWatch     fileWatch
 	undo          fileUndo
+	council       sessionCouncil
 	routeNeeded   atomic.Bool
 	routeBoundary atomic.Bool // the next route decision starts a run
 	routeModelsMu sync.Mutex
@@ -525,6 +526,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initBashArchive()
 	sess.initPruning()
 	sess.initSubagents(toolAllowed(opts, "task"))
+	sess.restoreWarCouncil(inner)
 	sess.model.Store(opts.Model)
 	sess.initSystemPrompt(opts)
 	sess.refreshContext()
@@ -904,6 +906,7 @@ func (s *Session) ReplaceInner(sess *icodingagent.Session) {
 		thinking = ai.ClampThinkingLevel(model, thinking)
 	}
 	s.agent.SetThinkingLevel(thinking)
+	s.restoreWarCouncil(sess)
 	// The session routes as it did when it was left; a new one keeps the
 	// current choice.
 	if choice, _ := sessionRouting(sess); choice != "" {

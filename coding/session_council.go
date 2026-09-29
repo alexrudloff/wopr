@@ -1,0 +1,398 @@
+package coding
+
+import (
+	"cmp"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"github.com/alexrudloff/wopr/agent"
+	"github.com/alexrudloff/wopr/ai"
+	icodingagent "github.com/alexrudloff/wopr/internal/codingagent"
+	"github.com/alexrudloff/wopr/internal/codingagent/router"
+	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
+	"github.com/alexrudloff/wopr/internal/text"
+)
+
+// War council: in a Global Thermonuclear War session every user prompt,
+// and every council tool call, goes in parallel to every routed model the
+// user set up, each at its own deepest thinking. Their proposals come back
+// to the orchestrator in one message to synthesize before it works.
+
+// warCouncilEntryType is the custom session entry that turns the council on
+// for a session, so a resumed session keeps it.
+const warCouncilEntryType = "war_council_on"
+
+// sessionCouncil is the Session's war council state.
+type sessionCouncil struct {
+	on      atomic.Bool
+	private atomic.Bool
+	// timeout overrides the settings' time limit (tests).
+	timeout time.Duration
+	// streamFn overrides member provider streams (tests).
+	streamFn agent.StreamFn
+}
+
+// EnableWarCouncil turns the war council on for this session. private keeps
+// it to private connections, as private mode does.
+func (s *Session) EnableWarCouncil(private bool) {
+	s.council.on.Store(true)
+	s.council.private.Store(private)
+	if s.inner != nil {
+		_ = s.inner.AppendCustomEntry(warCouncilEntryType, map[string]bool{"on": true, "private": private})
+	}
+	s.setCouncilTool(true)
+}
+
+// WarCouncil reports whether the war council is on for this session.
+func (s *Session) WarCouncil() bool { return s.council.on.Load() }
+
+// restoreWarCouncil turns the council on or off as the session recorded.
+func (s *Session) restoreWarCouncil(inner *icodingagent.Session) {
+	on, private := false, false
+	if inner != nil {
+		for _, entry := range inner.Entries() {
+			if entry.Base.Type != "custom" {
+				continue
+			}
+			var custom struct {
+				CustomType string `json:"customType"`
+				Data       struct {
+					On      bool `json:"on"`
+					Private bool `json:"private"`
+				} `json:"data"`
+			}
+			if json.Unmarshal(entry.Raw(), &custom) == nil && custom.CustomType == warCouncilEntryType {
+				on, private = custom.Data.On, custom.Data.Private
+			}
+		}
+	}
+	s.council.on.Store(on)
+	s.council.private.Store(private)
+	s.setCouncilTool(on)
+}
+
+// setCouncilTool installs or removes the council tool.
+func (s *Session) setCouncilTool(on bool) {
+	if s.agent == nil {
+		return
+	}
+	tools := slices.DeleteFunc(slices.Clone(s.agent.Tools()), func(t agent.AgentTool) bool { return t.Name() == councilToolName })
+	s.tools = slices.DeleteFunc(s.tools, func(t agent.AgentTool) bool { return t.Name() == councilToolName })
+	if on && s.tasks.tool != nil {
+		tool := councilTool{s: s}
+		s.tools = append(s.tools, tool)
+		tools = append(tools, tool)
+	}
+	s.agent.SetTools(tools)
+}
+
+// councilProposal is one member's answer as the orchestrator reads it.
+type councilProposal struct {
+	name, spec string
+	text       string
+}
+
+// CouncilResult is one council round: the proposals and who could not
+// answer.
+type CouncilResult struct {
+	// Proposals are the members that answered, in ranking order.
+	Proposals []councilProposal
+	// Skipped names the members that could not be asked or answered, with why.
+	Skipped []string
+}
+
+// Models names the members that answered.
+func (r CouncilResult) Models() []string {
+	out := make([]string, len(r.Proposals))
+	for i, p := range r.Proposals {
+		out[i] = p.name
+	}
+	return out
+}
+
+// councilMembers is who the council asks: every routed model but the
+// orchestrator and those the user left out, private connections only when
+// the session is private. Members that can't answer are returned as skipped.
+func (s *Session) councilMembers() (members []router.CouncilMember, skipped []string) {
+	if s.router == nil {
+		return nil, nil
+	}
+	excluded, _ := s.services.Settings().GetWarCouncil()
+	if m := s.Model(); m != nil {
+		excluded = append(slices.Clone(excluded), providerID(m)+"/"+m.ID)
+	}
+	for _, m := range s.router.CouncilMembers(s.council.private.Load(), excluded...) {
+		if m.Skip != "" {
+			skipped = append(skipped, m.Ref.Spec()+" ("+m.Skip+")")
+			continue
+		}
+		members = append(members, m)
+	}
+	return members, skipped
+}
+
+// runCouncil asks every council member question in parallel and collects
+// their checked proposals. A member past the time limit is dropped, not
+// waited for.
+func (s *Session) runCouncil(ctx context.Context, question string) CouncilResult {
+	members, skipped := s.councilMembers()
+	_, timeout := s.services.Settings().GetWarCouncil()
+	if s.council.timeout > 0 {
+		timeout = s.council.timeout
+	}
+	brief := s.councilBrief(question)
+	var calls []councilCall
+	for _, member := range members {
+		model, err := s.routeModel(member.Ref.Provider, member.Ref.Model)
+		if err != nil {
+			skipped = append(skipped, member.Ref.Spec()+" (unavailable: "+text.Clip(err.Error(), 80)+")")
+			continue
+		}
+		route := subagent.Route{
+			Model:    model,
+			Thinking: ai.ClampThinkingLevel(model, ai.ThinkingMax),
+			Provider: member.Ref.Provider,
+			Spec:     member.Ref.Spec(),
+			Reason:   "war council",
+			Source:   "council",
+			Mode:     "council",
+		}
+		name := cmp.Or(model.DisplayName, member.Ref.Spec())
+		calls = append(calls, councilCall{name: name, spec: route.Spec, run: func(ctx context.Context) (string, error) {
+			spec := subagent.Spec{Type: subagent.TypePropose, Description: "council · " + name, Brief: brief, Effort: subagent.EffortThorough}
+			id := subagent.NewTaskID(fmt.Sprintf("council\x00%s\x00%d\x00%s", route.Spec, time.Now().UnixNano(), question))
+			_, answer, err := s.councilRunner(route).Run(ctx, id, spec, nil)
+			return answer, err
+		}})
+	}
+	proposals, late := gatherCouncil(ctx, calls, timeout)
+	return CouncilResult{Proposals: proposals, Skipped: append(skipped, late...)}
+}
+
+// councilCall is one member's run.
+type councilCall struct {
+	name, spec string
+	run        func(context.Context) (string, error)
+}
+
+// gatherCouncil runs the calls in parallel, each under the time limit, and
+// returns their proposals in call order and why the rest aren't there. It
+// returns once every call finished or the limit passed: a late member is
+// cancelled and dropped, never waited for, even if its provider is slow to
+// notice.
+func gatherCouncil(ctx context.Context, calls []councilCall, timeout time.Duration) (proposals []councilProposal, missing []string) {
+	type done struct {
+		i      int
+		answer string
+		err    error
+	}
+	finished := make(chan done, len(calls))
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	for i, call := range calls {
+		go func() {
+			answer, err := call.run(callCtx)
+			if callCtx.Err() != nil {
+				// An answer cut off by the limit or a stop isn't a proposal.
+				err = callCtx.Err()
+			}
+			finished <- done{i, answer, err}
+		}()
+	}
+	results := make([]*done, len(calls))
+	for pending := len(calls); pending > 0; pending-- {
+		select {
+		case d := <-finished:
+			results[d.i] = &d
+		case <-callCtx.Done():
+			pending = 0
+		}
+	}
+	for i, call := range calls {
+		r := results[i]
+		switch {
+		case r != nil && r.err == nil:
+			proposals = append(proposals, councilProposal{name: call.name, spec: call.spec, text: r.answer})
+		case ctx.Err() != nil:
+			missing = append(missing, call.name+" (stopped)")
+		case r == nil || errors.Is(callCtx.Err(), context.DeadlineExceeded):
+			missing = append(missing, fmt.Sprintf("%s (late: dropped after %s)", call.name, timeout.Round(time.Second)))
+		default:
+			missing = append(missing, call.name+" (failed: "+text.Clip(r.err.Error(), 120)+")")
+		}
+	}
+	return proposals, missing
+}
+
+// councilRunner is a task runner fixed to one member's route, sharing the
+// session's task registry (the sidebar lists members as live agents) and
+// provider limits.
+func (s *Session) councilRunner(route subagent.Route) *subagent.Tool {
+	t := &subagent.Tool{Host: councilHost{taskHost: taskHost{s: s}, route: route}, SessionID: s.ID(), StreamFn: s.council.streamFn}
+	if s.tasks.tool != nil {
+		t.Limiter, t.Registry = s.tasks.tool.Limiter, s.tasks.tool.Registry
+	}
+	if t.Limiter == nil {
+		t.Limiter = subagent.NewLimiter(0, nil)
+	}
+	return t
+}
+
+// councilHost routes every attempt to its member's model: no escalation or
+// failover to another model, since each member is its own voice.
+type councilHost struct {
+	taskHost
+	route subagent.Route
+}
+
+func (h councilHost) Route(context.Context, subagent.Request) (subagent.Route, error) {
+	return h.route, nil
+}
+
+func (councilHost) Escalate(subagent.Request, subagent.Route) (subagent.Route, bool) {
+	return subagent.Route{}, false
+}
+
+func (councilHost) Failover(subagent.Route, string) (subagent.Route, bool) {
+	return subagent.Route{}, false
+}
+
+// councilBrief is what every member sees: the question, the conversation's
+// recent turns, and the files the session has worked with.
+func (s *Session) councilBrief(question string) string {
+	var b strings.Builder
+	b.WriteString("REQUEST:\n" + strings.TrimSpace(question) + "\n")
+	var turns []string
+	for _, m := range slices.Backward(s.agent.Messages()) {
+		if len(turns) >= 6 {
+			break
+		}
+		switch {
+		case m.User != nil:
+			if t := strings.TrimSpace(turnText(m)); t != "" && t != strings.TrimSpace(question) {
+				turns = append(turns, "User: "+text.Clip(t, 600))
+			}
+		case m.Assistant != nil:
+			if t := strings.TrimSpace(turnText(m)); t != "" {
+				turns = append(turns, "Lead model: "+text.Clip(t, 900))
+			}
+		}
+	}
+	if len(turns) > 0 {
+		slices.Reverse(turns)
+		b.WriteString("\nCONVERSATION SO FAR (most recent last):\n" + strings.Join(turns, "\n") + "\n")
+	}
+	if files := s.fileWatch.paths(); len(files) > 0 {
+		b.WriteString("\nFILES THE SESSION HAS WORKED WITH:\n- " + strings.Join(files, "\n- ") + "\n")
+	}
+	return b.String()
+}
+
+// CouncilMessageType is the custom message that carries the council's
+// proposals to the orchestrator.
+const CouncilMessageType = subagent.CouncilMessageType
+
+// councilMessage is the council round as the orchestrator reads it and the
+// transcript shows it.
+func councilMessage(r CouncilResult) agent.AgentMessage {
+	var b strings.Builder
+	if len(r.Proposals) == 0 {
+		b.WriteString("War council: no member answered. Work on the request yourself.")
+	} else {
+		fmt.Fprintf(&b, "War council: %d proposals for the request above, each from another model working independently. Synthesize the best parts into your plan or answer; don't just pick one. Say where they disagree and why your choice wins. wopr checked their quotes; unverified ones are marked.\n", len(r.Proposals))
+		for i, p := range r.Proposals {
+			fmt.Fprintf(&b, "\n### Proposal %d: %s (%s)\n%s\n", i+1, p.name, p.spec, strings.TrimSpace(p.text))
+		}
+	}
+	if len(r.Skipped) > 0 {
+		b.WriteString("\nNot heard from: " + strings.Join(r.Skipped, "; ") + ".")
+	}
+	return agent.AgentMessage{Custom: map[string]any{
+		"role":       agent.RoleCustom,
+		"customType": CouncilMessageType,
+		"content":    b.String(),
+		"display":    true,
+		"details":    map[string]any{"models": r.Models(), "skipped": r.Skipped},
+		"timestamp":  time.Now().UnixMilli(),
+	}}
+}
+
+// councilAtPrompt runs the council on a user prompt in a war council
+// session and returns the message to add after it, or nil.
+func (s *Session) councilAtPrompt(ctx context.Context, messages []agent.AgentMessage) []agent.AgentMessage {
+	if !s.council.on.Load() || !slices.ContainsFunc(messages, func(m agent.AgentMessage) bool { return m.User != nil }) {
+		return nil
+	}
+	question := lastUserPrompt(messages)
+	if strings.TrimSpace(question) == "" {
+		return nil
+	}
+	return []agent.AgentMessage{councilMessage(s.runCouncil(ctx, question))}
+}
+
+// councilToolName is the tool the orchestrator puts a hard sub-question to
+// the council with.
+const councilToolName = "council"
+
+// councilTool puts a question to the war council mid-task.
+type councilTool struct{ s *Session }
+
+func (councilTool) Name() string  { return councilToolName }
+func (councilTool) Label() string { return "War council" }
+
+func (councilTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeSequential }
+
+func (councilTool) Schema() ai.ToolSchema {
+	return ai.ToolSchema{
+		Name:        councilToolName,
+		Description: "Put a hard question to the war council: every other model the user has set up answers it independently, in parallel, at its deepest thinking, and you get all their proposals to synthesize. Slow and expensive; use it for design decisions, tricky bugs, and questions where a second opinion matters, not for lookups.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"question": map[string]any{"type": "string", "description": "The question, with the facts and constraints the members need; they see this and a short brief of the conversation"},
+			},
+			"required": []string{"question"},
+		},
+	}
+}
+
+func (t councilTool) Execute(ctx context.Context, _ string, params json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
+	var in struct {
+		Question string `json:"question"`
+	}
+	if err := json.Unmarshal(params, &in); err != nil {
+		return agent.AgentToolResult{}, err
+	}
+	if strings.TrimSpace(in.Question) == "" {
+		return agent.AgentToolResult{}, errors.New("council needs a question")
+	}
+	r := t.s.runCouncil(ctx, in.Question)
+	content, _ := councilMessage(r).Custom["content"].(string)
+	return agent.AgentToolResult{Content: content, Preview: fmt.Sprintf("%d proposals", len(r.Proposals))}, nil
+}
+
+// turnText is the plain text of a user prompt or an assistant reply.
+func turnText(m agent.AgentMessage) string {
+	var parts []string
+	switch {
+	case m.User != nil:
+		for _, block := range m.User.Content {
+			if t, ok := block.(ai.TextContent); ok {
+				parts = append(parts, t.Text)
+			}
+		}
+	case m.Assistant != nil:
+		for _, block := range m.Assistant.Content {
+			if t, ok := block.(ai.TextContent); ok {
+				parts = append(parts, t.Text)
+			}
+		}
+	}
+	return strings.Join(parts, "\n")
+}

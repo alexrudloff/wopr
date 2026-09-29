@@ -399,6 +399,31 @@ or `"enabled": false` turns routing off and keeps the endpoint.
 
 `WOPR_ROUTER=off` starts every invocation with routing off. `WOPR_ROUTER=auto`, `cost`, `speed`, `quality`, `uncensored`, or `private` starts it in that mode when a Jev endpoint is configured; `make evals-live MODE=...` uses this to compare modes.
 
+## War council
+
+Global Thermonuclear War (`globalThermonuclearWar`, `ctrl+x g`) pins the top
+of the ranking at maximum thinking with routing off and turns on the war
+council for that session (custom entry `war_council_on`, restored on resume).
+`Session.preparePrompt` runs a round on each user prompt, and the `council`
+tool runs one on demand: `Router.CouncilMembers` lists every routed model
+once in ranking order, minus the orchestrator and the models in
+`settings.json` `warCouncil.excluded`, only private connections when the
+session was private, and marks unreachable (probe failed), resting, and
+signed-out members as skipped. Each member runs as a `propose` subagent
+(`subagent.TypePropose`: read-only tools, the proposal system prompt, quotes
+verified, no escalation or failover) on its own model at its maximum
+thinking, through the session's task registry and provider limits.
+`gatherCouncil` stops collecting at the time limit
+(`warCouncil.timeoutSeconds`, default 300) and drops late members. The
+proposals reach the orchestrator as one `war_council` custom message that
+asks it to synthesize, not select.
+
+Code candidates (next, not built): for a significant change, each member
+works in its own git worktree, runs the build and tests, and returns its
+diff with the results; the orchestrator picks or merges from the diffs and
+test outcomes. Execution results replace a judge's opinion, the pattern that
+works best for code.
+
 ## Commands
 
 - `/router` or `/router status`: the state of both halves, tiers, health, resting models, the last decision, and counters.

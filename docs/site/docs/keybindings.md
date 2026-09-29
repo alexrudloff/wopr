@@ -108,7 +108,7 @@ leader sequences are fixed and are not read from `keybindings.json`.
 | `ctrl+x` `y` | Copy the selection or the last assistant message |
 | `ctrl+x` `s` | Show session info (`/session`) |
 | `ctrl+x` `j` | Open the session tree (`/tree`) |
-| `ctrl+x` `g` | Global Thermonuclear War: a new session on the strongest signed-in subscription model at maximum thinking, with routing off |
+| `ctrl+x` `g` | Global Thermonuclear War: a new session on the top model in your order at maximum thinking, routing off, with the [war council](routing.md#war-council) proposing on every prompt |
 | `ctrl+x` `h` | Toggle thinking blocks |
 | `ctrl+x` `p` | Open the command palette |
 | `ctrl+x` `a` | List this session's agents (`/agents`) |

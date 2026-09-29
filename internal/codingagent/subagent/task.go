@@ -21,6 +21,11 @@ import (
 // TypeExplore is the read-only investigation type.
 const TypeExplore = "explore"
 
+// TypePropose is a war council proposal: a read-only child answers the
+// user's request its own way, for the orchestrator to synthesize. Only the
+// council runs it; the task tool offers explore alone.
+const TypePropose = "propose"
+
 // LevelMechanical is the router's difficulty level for lookups.
 const LevelMechanical = "mechanical"
 
@@ -301,7 +306,7 @@ func (t *Tool) Start(ctx context.Context, id string, spec Spec) (Agent, error) {
 // prepare validates spec and routes it.
 func (t *Tool) prepare(ctx context.Context, id string, spec Spec) (Request, Route, error) {
 	spec.Type = cmp.Or(spec.Type, TypeExplore)
-	if spec.Type != TypeExplore {
+	if spec.Type != TypeExplore && spec.Type != TypePropose {
 		return Request{}, Route{}, fmt.Errorf("unknown task type %q (available: explore)", spec.Type)
 	}
 	if strings.TrimSpace(spec.Brief) == "" {
@@ -379,6 +384,10 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 		res = ParseResult(out.Text)
 		verified, quotes = res.Verify(t.Host.Cwd(), out.Outputs)
 		trigger = EscalationTrigger(res, verified, quotes, out)
+		if req.Type == TypePropose && trigger == "no evidence" {
+			// A proposal may be ideas or a plan with nothing to quote.
+			trigger = ""
+		}
 		rec.Status, rec.Confidence, rec.Verified, rec.Quotes, rec.Trigger = res.Status, res.Confidence, verified, quotes, trigger
 		rec.Outcome = "accepted"
 		if trigger != "" && attempt < maxAttempts && ctx.Err() == nil {
@@ -423,7 +432,7 @@ func (t *Tool) runAttempt(ctx context.Context, req Request, route Route, notes s
 		Model:     route.Model,
 		Thinking:  route.Thinking,
 		Tools:     t.Host.Tools(),
-		System:    ExploreSystemPrompt(t.Host.Cwd()),
+		System:    systemPrompt(req.Type, t.Host.Cwd()),
 		Prompt:    BriefPrompt(req, notes),
 		Budget:    BudgetFor(req.Effort),
 		SessionID: t.SessionID + ":task",
@@ -521,7 +530,11 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 	}
 	answer := cmp.Or(res.Answer, "(no answer)")
 	full := answer
-	answer = text.Clip(answer, answerBudgetBytes)
+	answerBudget, resultBudget := answerBudgetBytes, resultBudgetBytes
+	if req.Type == TypePropose {
+		answerBudget, resultBudget = 3*answerBudgetBytes, 2*resultBudgetBytes
+	}
+	answer = text.Clip(answer, answerBudget)
 	body.WriteString("ANSWER: " + answer + "\n")
 	if len(res.Evidence) > 0 {
 		fmt.Fprintf(&body, "EVIDENCE (wopr verified %d/%d):\n", d.Verified, d.Quotes)
@@ -547,11 +560,11 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 		body.WriteString("NOT_CHECKED: " + text.Clip(res.NotChecked, 500) + "\n")
 	}
 	result := body.String()
-	if len(full) > answerBudgetBytes || len(result) > resultBudgetBytes {
+	if len(full) > answerBudget || len(result) > resultBudget {
 		if id := t.Host.Archive(req.ID+":result", "ANSWER: "+full+"\n"+result); id != "" {
-			result = text.Clip(result, resultBudgetBytes) + fmt.Sprintf("\n(full result: obs_recall id=%s)\n", id)
+			result = text.Clip(result, resultBudget) + fmt.Sprintf("\n(full result: obs_recall id=%s)\n", id)
 		} else {
-			result = text.Clip(result, resultBudgetBytes) + "\n"
+			result = text.Clip(result, resultBudget) + "\n"
 		}
 	}
 	footer := []string{route.Spec}

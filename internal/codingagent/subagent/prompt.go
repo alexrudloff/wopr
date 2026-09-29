@@ -19,9 +19,31 @@ EVIDENCE:
 - cmd: <command> "<exact line from its output>"
 NOT_CHECKED: <what you did not look at, or none>`
 
+// proposeSystem is a war council member's system prompt. It keeps the
+// explore result format, so its quotes are verified the same way.
+const proposeSystem = `You are one of several models on a war council. Each member gets the same request and answers it independently; a lead model reads every proposal and builds the final answer from the best parts. You get the request and a short brief of the conversation, not its history.
+- Give your best independent answer: for a coding task, the approach and plan you would follow, with the specific changes; for a question, your answer; for ideas, your strongest ones. Say what you would not do and why. Don't hedge toward what others might say.
+- Tools: read, grep, find, ls, and bash limited to read-only commands. Look at the code you rely on; you cannot edit files.
+- When you rely on code, quote lines exactly as they appear, same characters and whitespace: one line per quote, no line numbers, no "...". wopr checks every quote. Ideas and plans need no quotes.
+Finish with exactly this format and nothing after it:
+STATUS: done | partial | failed | blocked
+CONFIDENCE: high | medium | low
+ANSWER: <your proposal, at most about 700 words>
+EVIDENCE:
+- <path>:<line or start-end> "<exact line from the file>"
+NOT_CHECKED: <what you did not look at, or none>`
+
 // ExploreSystemPrompt is the explore child's system prompt for cwd.
 func ExploreSystemPrompt(cwd string) string {
 	return exploreSystem + "\nWorking directory: " + cwd
+}
+
+// systemPrompt is the child's system prompt for the task type.
+func systemPrompt(taskType, cwd string) string {
+	if taskType == TypePropose {
+		return proposeSystem + "\nWorking directory: " + cwd
+	}
+	return ExploreSystemPrompt(cwd)
 }
 
 // BriefPrompt is the child's only user message: the brief, its anchors,

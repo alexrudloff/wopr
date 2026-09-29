@@ -22,6 +22,10 @@ differently, change the source.
   subscriptions first, never pay-per-token), **uncensored**, or **private**
   (only connections you mark private, for everything, with no fallback). Off
   by default; turn it on in `/setup`.
+- **Global Thermonuclear War.** `ctrl+x g` puts your top model at maximum
+  thinking and turns on the war council: every other model you set up answers
+  each prompt in parallel at its own maximum thinking, and the top model
+  builds from the best of their proposals. Slow and expensive on purpose.
 - **Token efficiency, on by default.** The mechanisms below cut what each
   request carries, and wopr tunes them per model from how each of your models
   actually behaves.

@@ -38,7 +38,8 @@ func withInstructionBaseline(current, messages []agent.AgentMessage) []agent.Age
 
 // preparePrompt applies the Session instruction baseline when the first user
 // prompt runs. The agent adds the active tool declarations to this same message.
-func (s *Session) preparePrompt(_ context.Context, messages []agent.AgentMessage) ([]agent.AgentMessage, error) {
+func (s *Session) preparePrompt(ctx context.Context, messages []agent.AgentMessage) ([]agent.AgentMessage, error) {
+	messages = append(messages, s.councilAtPrompt(ctx, messages)...)
 	text := lastUserPrompt(messages)
 	if efficiency.IsCorrection(text, false) {
 		s.efficiencyCorrection()

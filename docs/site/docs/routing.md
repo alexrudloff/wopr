@@ -206,6 +206,45 @@ pinned `◎` row with its turns, spend, and time. `wopr -p "/goal <objective>"`
 runs the loop headless and exits when the audit passes (status 0) or a cap
 pauses it (status 1).
 
+## War council
+
+Global Thermonuclear War (`ctrl+x g`) throws everything you have at the
+work. It starts a new session on the top model in your order at its maximum
+thinking, with routing off, and turns on the war council: on every prompt,
+every other model you set up (subscriptions, API keys, and your own
+endpoints, pay-per-token included) answers the same request independently,
+in parallel, each at its own maximum thinking. Members work read-only (read,
+grep, find, ls, read-only shell) from the request and a short brief of the
+conversation; wopr checks the lines they quote. Their proposals reach the
+top model in one message, which builds its plan or answer from the best
+parts, says where they disagree, and then does the work as usual. The
+transcript shows the round as **War council: N proposals (…)**, which expands
+to each proposal; while it runs, the members show in the sidebar's Agents
+list and as "N running" at the prompt.
+
+In a war council session the top model also has a `council` tool, to put a
+hard question to the council mid-task. The council runs only on your prompts
+and that tool, never on searches, reads, or edits.
+
+- **Who's in**: **War council** on `/setup`'s main screen lists every model
+  you set up, all checked; uncheck one to leave it out. A model you add later
+  joins automatically. The top model itself sits out, since it synthesizes.
+- **Time limit**: each member gets 5 minutes by default (2, 5, 10, or 20 on
+  that screen); a member still working then is dropped, never waited for,
+  and named in the round.
+- **Skipped members**: a model that's unreachable, resting after errors, or
+  not signed in is skipped and named.
+- **Private mode**: started from private mode, the session stays private:
+  the top model and every member come from private connections.
+- **Cost**: every prompt runs every member, so a round costs about as much as
+  all of them answering; it's as slow as the slowest member within the limit.
+- The council stays on for that session, including after `/resume`.
+
+Next: code candidates. For a significant code change, each member would make
+its attempt in its own git worktree and run the build and tests; the top
+model would compare the diffs with their test results and pick or merge. Not
+built yet.
+
 ## What stays private
 
 Before anything is sent to Jev, a local scanner looks for credentials (private

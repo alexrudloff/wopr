@@ -104,6 +104,10 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 			m.appendCustomMessage(CustomMessageEntry{CustomType: goal.MessageType, Content: custom["content"], Display: true, Details: custom["details"]})
 			m.tuiInst.RequestRender()
 		}
+		if custom := e.Message.Custom; custom != nil && custom["customType"] == subagent.CouncilMessageType {
+			m.appendCustomMessage(CustomMessageEntry{CustomType: subagent.CouncilMessageType, Content: custom["content"], Display: true, Details: custom["details"]})
+			m.tuiInst.RequestRender()
+		}
 		if custom := e.Message.Custom; custom != nil && custom["customType"] == subagent.ResultMessageType {
 			if display, _ := custom["display"].(bool); display {
 				m.appendCustomMessage(CustomMessageEntry{CustomType: subagent.ResultMessageType, Content: custom["content"], Display: true, Details: custom["details"]})

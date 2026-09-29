@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -77,6 +79,13 @@ func (w *fileWatch) afterToolCall(cwd string) agent.AfterToolCallHook {
 		}
 		return agent.AfterToolCallResult{}
 	}
+}
+
+// paths lists the files the model read or wrote, sorted.
+func (w *fileWatch) paths() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Sorted(maps.Keys(w.mtimes))
 }
 
 // changedFile reports whether a shell call changed a watched file.

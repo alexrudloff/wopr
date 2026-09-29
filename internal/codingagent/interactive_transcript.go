@@ -350,6 +350,13 @@ func (m *InteractiveMode) appendCustomMessage(message CustomMessageEntry) {
 		m.chatContainer.Add(block)
 		return
 	}
+	if message.CustomType == subagent.CouncilMessageType {
+		block := newCouncilBlock(tui.CustomMessageText(&tui.CustomMessage{Content: message.Content}), message.Details, m.keyHint("app.tools.expand"))
+		block.SetExpanded(m.toolsExpanded)
+		m.customMessageOrder = append(m.customMessageOrder, block)
+		m.chatContainer.Add(block)
+		return
+	}
 	if message.CustomType == subagent.ResultMessageType {
 		if d, ok := resultDetails(message.Details); ok {
 			block := newTaskResultBlock(d, tui.CustomMessageText(&tui.CustomMessage{Content: message.Content}), m.keyHint("app.tools.expand"))

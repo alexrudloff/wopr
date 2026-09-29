@@ -89,6 +89,8 @@ type Settings struct {
 	Themes  []string `json:"themes,omitempty"`
 	// CleanupTempFiles deletes the temp files sessions create (default on).
 	CleanupTempFiles *bool `json:"cleanupTempFiles,omitempty"`
+	// WarCouncil configures Global Thermonuclear War's council.
+	WarCouncil *WarCouncilSettings `json:"warCouncil,omitempty"`
 	// EnableSkillCommands lists /skill:name commands in autocomplete.
 	// Default: true.
 	EnableSkillCommands *bool `json:"enableSkillCommands,omitempty"`
@@ -514,6 +516,28 @@ func (s Settings) GetBashCompaction() bool { return boolOr(s.BashCompaction, tru
 
 // GetCleanupTempFiles reports whether sessions' temp files are cleaned up.
 func (s Settings) GetCleanupTempFiles() bool { return boolOr(s.CleanupTempFiles, true) }
+
+// WarCouncilSettings are the models the war council leaves out, so a model
+// set up later joins it, and how long a member may take.
+type WarCouncilSettings struct {
+	Excluded       []string `json:"excluded,omitempty"`
+	TimeoutSeconds int      `json:"timeoutSeconds,omitempty"`
+}
+
+// DefaultWarCouncilTimeout is how long a council member may take by default.
+const DefaultWarCouncilTimeout = 5 * time.Minute
+
+// GetWarCouncil returns the council settings with the default time limit.
+func (s Settings) GetWarCouncil() (excluded []string, timeout time.Duration) {
+	timeout = DefaultWarCouncilTimeout
+	if c := s.WarCouncil; c != nil {
+		excluded = c.Excluded
+		if c.TimeoutSeconds > 0 {
+			timeout = time.Duration(c.TimeoutSeconds) * time.Second
+		}
+	}
+	return excluded, timeout
+}
 
 // GetEnableSkillCommands reports whether /skill:name commands autocomplete.
 func (s Settings) GetEnableSkillCommands() bool { return boolOr(s.EnableSkillCommands, true) }

@@ -279,6 +279,10 @@ func (r *Registry) Wait() { r.wg.Wait() }
 // task's result delivered to the orchestrator.
 const ResultMessageType = "task-result"
 
+// CouncilMessageType is the custom message carrying a war council's
+// proposals to the orchestrator.
+const CouncilMessageType = "war_council"
+
 // ResultDetails describe a delivered result for the transcript's compact
 // block.
 type ResultDetails struct {

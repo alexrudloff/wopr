@@ -430,7 +430,7 @@ func userDisplayName() string {
 // {key:action} is replaced with the action's key, {war:text} is drawn in the
 // war red, and {model} names the top of the user's model order.
 var homeTips = []string{
-	"{ctrl+x g} starts {war:GLOBAL THERMONUCLEAR WAR}: a new session on {model} at max thinking",
+	"{ctrl+x g} starts {war:GLOBAL THERMONUCLEAR WAR}: {model} at max thinking, with every other model you set up proposing on each prompt",
 	"Press {key:app.commandPalette} to see all available actions and commands",
 	"The leader key is {ctrl+x}; combine it with other keys for quick actions",
 	"Press {tab} on an empty prompt to cycle your recent models",
@@ -459,7 +459,7 @@ func (t *homeTip) Render(width int) []string {
 	th := tui.ActiveTheme()
 	tip := homeTips[t.index%len(homeTips)]
 	if strings.Contains(tip, "{model}") {
-		if _, name := t.m.strongestModel(); name != "" {
+		if _, name := t.m.strongestModel(false); name != "" {
 			tip = strings.ReplaceAll(tip, "{model}", name)
 		} else {
 			tip = homeTips[1]
@@ -545,13 +545,20 @@ func (m *InteractiveMode) sessionRouter() *router.Router {
 
 // strongestModel is the top of the user's model order among the models set
 // up in /setup, whatever they cost: the model a Global Thermonuclear War
-// session runs on. Without an order it is the first configured model.
-func (m *InteractiveMode) strongestModel() (spec, name string) {
-	models := m.configuredModels()
+// session runs on. private keeps to private connections. Without an order
+// it is the first configured model.
+func (m *InteractiveMode) strongestModel(private bool) (spec, name string) {
+	r := m.sessionRouter()
+	var models []configuredModel
+	for _, c := range m.configuredModels() {
+		if !private || r != nil && r.IsPrivacySafe(c.spec) {
+			models = append(models, c)
+		}
+	}
 	if len(models) == 0 {
 		return "", ""
 	}
-	if r := m.sessionRouter(); r != nil {
+	if r != nil {
 		for _, ranked := range r.Config().Ranking {
 			for _, c := range models {
 				if c.spec == ranked {
@@ -564,9 +571,13 @@ func (m *InteractiveMode) strongestModel() (spec, name string) {
 }
 
 // globalThermonuclearWar starts a new session on the strongest model at its
-// deepest thinking, with routing off.
+// deepest thinking, with routing off and the war council on: every other
+// model the user set up proposes on each prompt, and the strongest one
+// synthesizes. A session in private mode keeps both to private connections.
 func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
-	spec, name := m.strongestModel()
+	r := m.sessionRouter()
+	private := r != nil && r.Auto() && r.Objective() == router.ObjectivePrivate
+	spec, name := m.strongestModel(private)
 	if spec == "" {
 		m.showToast("warning", "", "No models are set up. Run /setup to connect one.")
 		return
@@ -574,7 +585,7 @@ func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
 	if !m.homeVisible() {
 		m.dispatchSlash("/new")
 	}
-	if r := m.sessionRouter(); r != nil {
+	if r != nil {
 		r.SetMode(router.ModeOff)
 	}
 	if m.switchModel(spec) != nil {
@@ -584,7 +595,15 @@ func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
 	if top := maxThinkingIndex(m.opts.Model); top > 0 {
 		_ = m.applyThinkingLevel(levelsForModel(m.opts.Model)[top], false)
 	}
-	m.showToast("error", "GLOBAL THERMONUCLEAR WAR", name+" · max thinking · routing off")
+	detail := name + " · max thinking"
+	if council, ok := m.opts.SessionHandle.(interface{ EnableWarCouncil(bool) }); ok {
+		council.EnableWarCouncil(private)
+		detail += " · war council on"
+	}
+	if private {
+		detail += " · private"
+	}
+	m.showToast("error", "GLOBAL THERMONUCLEAR WAR", detail)
 }
 
 // centered places component in the middle of the row, at most maxWidth wide.
