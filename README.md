@@ -44,7 +44,8 @@ differently, change the source.
 - **One Go binary.** Fullscreen terminal UI with a sidebar for context,
   routing, live agents, subscription usage, and speed per model; command
   palette on `ctrl+p`; opencode-compatible themes; MCP servers; web fetch and
-  search. Signed releases and `/upgrade`.
+  search with no setup (your search key, else the model provider's own
+  search, else DuckDuckGo). Signed releases and `/upgrade`.
 
 ## Efficiency
 

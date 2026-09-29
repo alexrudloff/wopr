@@ -196,6 +196,9 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 
 	case agent.MessageEndEvent:
 		defer m.refreshFooterContextUsage()
+		for _, card := range m.serverSearchCards(e.Message.Assistant) {
+			m.appendToChat(card)
+		}
 		if m.evCurrentBlock != nil && e.Message.Assistant != nil {
 			m.updateAssistantMessageBlock(m.evCurrentBlock, e.Message.Assistant)
 			m.lastAssistantText = strings.TrimSpace(m.evCurrentBlock.Text())

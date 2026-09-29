@@ -63,6 +63,7 @@ type Session struct {
 	stall         stallState
 	temp          *tempfiles.Tracker
 	fileWatch     fileWatch
+	webSearch     webSearchState
 	undo          fileUndo
 	council       sessionCouncil
 	routeNeeded   atomic.Bool

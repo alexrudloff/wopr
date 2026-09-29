@@ -10,6 +10,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -189,9 +190,9 @@ type respInputItem struct {
 // carries parameters (+ strict when the model supports strict mode); a grammar
 // (custom) tool carries a format block instead.
 type respTool struct {
-	Type        string         `json:"type"` // "function" | "custom"
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
+	Type        string         `json:"type"` // "function" | "custom" | "web_search"
+	Name        string         `json:"name,omitempty"`
+	Description string         `json:"description,omitempty"`
 	Parameters  map[string]any `json:"parameters,omitempty"`
 	// Strict is a tri-state: absent (nil), null, true, or false. The default
 	// varies by provider (generic omits it; codex sends null; strict-mode models
@@ -371,6 +372,12 @@ type respOutputContent struct {
 	Type    string `json:"type,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Refusal string `json:"refusal,omitempty"`
+	// Annotations carry the url_citation entries of a server web search.
+	Annotations []struct {
+		Type  string `json:"type"`
+		URL   string `json:"url"`
+		Title string `json:"title"`
+	} `json:"annotations,omitempty"`
 }
 
 // ─── Message conversion ──────────────────────────────────────────────────────
@@ -819,6 +826,10 @@ func (p *openAIResponsesProvider) Stream(ctx context.Context, transcript Transcr
 		}
 		req.Tools = convertedTools
 	}
+	if opts.ServerWebSearch {
+		req.Tools = append(slices.DeleteFunc(req.Tools, func(t respTool) bool { return t.Name == WebSearchToolName }), respTool{Type: "web_search"})
+		req.Include = append(req.Include, "web_search_call.action.sources")
+	}
 	if !p.cfg.Codex && opts.MaxTokens > 0 && (p.cfg.Compat == nil || p.cfg.Compat.SupportsMaxOutputTokens == nil || *p.cfg.Compat.SupportsMaxOutputTokens) {
 		// OpenAI Responses rejects max_output_tokens below 16.
 		req.MaxOutputTokens = max(opts.MaxTokens, openAIResponsesMinOutputTokens)
@@ -1211,6 +1222,14 @@ func (p *openAIResponsesProvider) parseResponsesSSE(ctx context.Context, r io.Re
 			var item respOutputItem
 			if err := json.Unmarshal(event.Item, &item); err != nil {
 				continue
+			}
+			if item.Type == "web_search_call" {
+				query, results := parseResponsesSearchCall(event.Item)
+				builder.addServerSearch(query, results, "")
+				continue
+			}
+			if item.Type == "message" {
+				addResponsesCitations(builder, item.Content)
 			}
 			state := createState(event.OutputIndex, item)
 			if state == nil || state.itemType != item.Type {

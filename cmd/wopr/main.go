@@ -507,8 +507,9 @@ func main() {
 	// be activated via --tools. agentToolNames is the ACTIVE set advertised in
 	// the system prompt; it defaults to read/bash/edit/write plus task (the
 	// subagent tool) and the web and MCP tools, with powershell/grep/find/ls
-	// registered but opt-in. The session installs web_search only when a
-	// search backend is configured and mcp only when a server is.
+	// registered but opt-in. The session always installs web_search (a
+	// configured provider, the model provider's own search, or DuckDuckGo)
+	// and installs mcp only when a server is configured.
 	registryToolNames := tools.BuiltinToolNames()
 	agentToolNames := []string{"read", "bash", "edit", "write", "task", "web_fetch", "web_search", "mcp"}
 	// The defaultTools setting replaces the default active set.

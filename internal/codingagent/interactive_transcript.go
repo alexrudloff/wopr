@@ -222,6 +222,9 @@ func (m *InteractiveMode) renderSessionEntries() {
 			m.updateAssistantMessageBlock(block, msg.Assistant)
 			m.chatContainer.Add(block)
 			m.assistantBlocks = append(m.assistantBlocks, block)
+			for _, card := range m.serverSearchCards(msg.Assistant) {
+				m.chatContainer.Add(card)
+			}
 			// Tool-use blocks.
 			for _, b := range msg.Assistant.Content {
 				call, ok := b.(ai.ToolCall)

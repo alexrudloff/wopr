@@ -36,6 +36,7 @@ func cacheWarmingStreamFn(session func() *Session) agent.StreamFn {
 			if err := s.objectiveGate(model); err != nil {
 				return nil, err
 			}
+			options.ServerWebSearch = s.useServerSearch(model, transcript)
 			s.startCacheWarming(model, transcript, options)
 		}
 		return model.Provider.Stream(ctx, transcript, options)

@@ -303,6 +303,7 @@ func (w *setupWizard) manage() {
 		options = append(options,
 			tui.DialogOption{Title: "Model routing", Footer: w.routingSummary(), Category: "Routing", Value: "routing"},
 			tui.DialogOption{Title: "War council", Description: "who proposes in Global Thermonuclear War", Footer: w.councilSummary(), Category: "Routing", Value: "council"},
+			tui.DialogOption{Title: "Web search", Description: "how models search the web", Footer: w.webSearchSummary(), Category: "Tools", Value: "websearch"},
 			tui.DialogOption{Title: "Done", Description: "back to the home screen", Value: "done", Pinned: true})
 		d := tui.NewDialogSelect("Models", options, "")
 		d.Select(cmp.Or(highlight, options[0].Value))
@@ -343,6 +344,8 @@ func (w *setupWizard) manage() {
 			w.routingScreen()
 		case "council":
 			w.councilScreen()
+		case "websearch":
+			w.webSearchScreen()
 		}
 	}
 }

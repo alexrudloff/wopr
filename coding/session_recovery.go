@@ -247,7 +247,7 @@ func (s *Session) handlePostAgentRun(ctx context.Context, messages []agent.Agent
 		// continue the run on it without a backoff.
 		return ctx.Err() == nil, nil
 	}
-	if icodingagent.IsRetryableError(message, s.contextWindow()) {
+	if s.serverSearchRefused(message) || icodingagent.IsRetryableError(message, s.contextWindow()) {
 		retrying, err := s.prepareRetry(ctx, message)
 		if err != nil {
 			return false, err

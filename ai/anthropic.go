@@ -166,10 +166,13 @@ type anthToolReference struct {
 }
 
 type anthTool struct {
+	// Type is set only for a server tool, such as web search.
+	Type             string            `json:"type,omitempty"`
 	Name             string            `json:"name"`
-	Description      string            `json:"description"`
+	Description      string            `json:"description,omitempty"`
 	Strict           *bool             `json:"strict,omitempty"`
-	InputSchema      map[string]any    `json:"input_schema"`
+	InputSchema      map[string]any    `json:"input_schema,omitempty"`
+	MaxUses          int               `json:"max_uses,omitempty"`
 	CacheControl     *anthCacheControl `json:"cache_control,omitempty"`
 	EagerInputStream any               `json:"eager_input_streaming,omitempty"`
 	// DeferLoading declares a tool that stays inactive until a tool_addition
@@ -220,6 +223,10 @@ type anthEventContentBlockStart struct {
 		Text  string `json:"text,omitempty"`
 		Input any    `json:"input,omitempty"`
 		Data  string `json:"data,omitempty"` // redacted_thinking
+		// ToolUseID and Content are a web_search_tool_result's server_tool_use
+		// and its results, or its error.
+		ToolUseID string          `json:"tool_use_id,omitempty"`
+		Content   json.RawMessage `json:"content,omitempty"`
 	} `json:"content_block"`
 }
 
@@ -1004,6 +1011,25 @@ func anthropicRequestTools(messages []Message, params anthropicParams, initialTo
 	return tools, nil
 }
 
+// withAnthropicServerSearch declares Anthropic's server web search in place
+// of the web_search function tool, keeping the cache breakpoint on the last
+// tool.
+func withAnthropicServerSearch(tools []anthTool) []anthTool {
+	var cc *anthCacheControl
+	out := make([]anthTool, 0, len(tools)+1)
+	for _, tool := range tools {
+		if tool.CacheControl != nil {
+			cc, tool.CacheControl = tool.CacheControl, nil
+		}
+		if tool.Name != WebSearchToolName {
+			out = append(out, tool)
+		}
+	}
+	out = append(out, anthTool{Type: "web_search_20250305", Name: WebSearchToolName, MaxUses: serverSearchMaxUses})
+	out[len(out)-1].CacheControl = cc
+	return out
+}
+
 // buildParams builds the request fields WOPR sends.
 func (p *anthropicProvider) buildParams(model *Model, transcript TranscriptContext, isOAuthToken bool, modelHeaders, optionsHeaders anthropicHeaders, opts StreamOptions, env ProviderEnv) (anthropicParams, error) {
 	supportsMidConversation := anthropicCompatFlag(model, func(c *ModelCompat) *bool { return c.SupportsMidConvoSystemMessages })
@@ -1066,6 +1092,9 @@ func (p *anthropicProvider) buildParams(model *Model, transcript TranscriptConte
 	req.Tools, err = anthropicRequestTools(messages, params, initialTools, isOAuthToken, supportsEager, supportsStrictTools, toolCacheControl)
 	if err != nil {
 		return anthropicParams{}, err
+	}
+	if opts.ServerWebSearch {
+		req.Tools = withAnthropicServerSearch(req.Tools)
 	}
 	if toolChoice, ok := opts.ToolChoice.(string); ok {
 		req.ToolChoice = map[string]any{"type": toolChoice}
@@ -1169,7 +1198,7 @@ func unmarshalAnthropicSSEEvent(event serverSentEvent, target any) error {
 func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, builder *assistantStreamBuilder, names anthropicStreamNames) {
 	// Track active blocks by their Anthropic index.
 	type activeBlock struct {
-		blockType string // "text" | "thinking" | "tool_use"
+		blockType string // "text" | "thinking" | "tool_use" | "server_tool_use"
 		redacted  bool   // true for redacted_thinking
 		seqIdx    int    // 0-based sequential tool call index
 		toolID    string
@@ -1179,6 +1208,8 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 	}
 	blocks := map[int]*activeBlock{}
 	toolCallSeqIdx := 0 // 0-based sequential index for tool calls only
+	// serverQueries maps a server_tool_use id to its search query.
+	serverQueries := map[string]string{}
 
 	// Usage is updated as events arrive, retaining billed usage on errors.
 	usage := &builder.partial.Usage
@@ -1254,6 +1285,14 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 				ab.redacted = true
 				ab.signature.WriteString(ev.ContentBlock.Data)
 				builder.thinkingStart(true, "[Reasoning redacted]", ev.ContentBlock.Data)
+			case "server_tool_use":
+				ab.toolID = ev.ContentBlock.ID
+				if input, ok := ev.ContentBlock.Input.(map[string]any); ok {
+					serverQueries[ab.toolID], _ = input["query"].(string)
+				}
+			case "web_search_tool_result":
+				results, errText := parseAnthropicSearchResults(ev.ContentBlock.Content)
+				builder.addServerSearch(serverQueries[ev.ContentBlock.ToolUseID], results, errText)
 			case "tool_use":
 				ab.toolID = ev.ContentBlock.ID
 				ab.toolName = names.toolName(ev.ContentBlock.Name)
@@ -1280,6 +1319,9 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 				builder.thinkingDelta(ev.Delta.Thinking, false)
 			case "input_json_delta":
 				ab.toolArgs.WriteString(ev.Delta.PartialJSON)
+				if ab.blockType == "server_tool_use" {
+					continue
+				}
 				builder.toolCallDelta(streamToolCallDelta{
 					index: ab.seqIdx, id: ab.toolID, name: ab.toolName, argumentsDelta: ev.Delta.PartialJSON,
 				})
@@ -1306,6 +1348,13 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 				builder.endThinking()
 			case "tool_use":
 				builder.endToolCall(ab.seqIdx)
+			case "server_tool_use":
+				var input struct {
+					Query string `json:"query"`
+				}
+				if json.Unmarshal([]byte(ab.toolArgs.String()), &input) == nil && input.Query != "" {
+					serverQueries[ab.toolID] = input.Query
+				}
 			}
 			delete(blocks, ev.Index)
 

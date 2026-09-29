@@ -103,7 +103,9 @@ Run `/setup` from the home screen, or `wopr setup`, any time. Its main screen
 lists your **connections** (each endpoint, API key, and subscription) with
 their models, the ways to connect another, **Model routing** (off, on ·
 Basic, or on · Jev), and **War council**, the models that propose in Global
-Thermonuclear War (see [war council](routing.md#war-council)).
+Thermonuclear War (see [war council](routing.md#war-council)), and **Web
+search**, where a Brave or Tavily key or a SearXNG instance can be added (see
+[web tools](web.md); search works without one).
 
 - **Adding a model**: a connection's "Models from …" list is the provider's
   own current list (Anthropic's, Google's, or the model list of an

@@ -464,8 +464,13 @@ func ProviderHeadersFromStrings(values map[string]string) ProviderHeaders {
 
 // StreamOptions are the options for a streaming LLM call.
 type StreamOptions struct {
-	MaxTokens   int
-	Temperature float64
+	// ServerWebSearch asks a provider that runs web search on its own servers
+	// (Anthropic, OpenAI Responses) to declare that search in place of the
+	// web_search function tool. Each search it runs is recorded as a
+	// DiagnosticServerWebSearch on the reply.
+	ServerWebSearch bool
+	MaxTokens       int
+	Temperature     float64
 	// TemperatureSet distinguishes an explicit zero temperature from omission.
 	// Non-zero Temperature values remain present for existing callers.
 	TemperatureSet  bool

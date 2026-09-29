@@ -376,7 +376,8 @@ func (s *Session) privateMode() bool {
 // privateWebNote marks web_search and web_fetch results in private mode:
 // the query left the machine, which private mode allows but says.
 func (s *Session) privateWebNote(_ context.Context, _, toolName string, _ json.RawMessage, result agent.AgentToolResult) agent.AfterToolCallResult {
-	if (toolName != "web_search" && toolName != "web_fetch") || !s.privateMode() {
+	if (toolName != "web_search" && toolName != "web_fetch") || !s.privateMode() ||
+		toolName == "web_search" && s.webSearch.tool != nil && s.webSearch.tool.Backend.Private() {
 		return agent.AfterToolCallResult{}
 	}
 	content := result.Content + "\n\n[Private mode: this " + strings.ReplaceAll(toolName, "_", " ") + " request left your machine.]"

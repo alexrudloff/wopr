@@ -1,6 +1,7 @@
 // Package web implements the web_fetch and web_search tools: a URL fetched
 // to markdown or text, with private networks blocked by default, and a web
-// search through a configured provider (Brave, Tavily or SearXNG).
+// search through a configured provider (Brave, Tavily or SearXNG), else
+// DuckDuckGo's results page.
 package web
 
 import (
@@ -38,6 +39,9 @@ type SearchConfig struct {
 	// endpoints, so an API key only ever goes to its own provider.
 	URL        string `json:"url,omitempty"`
 	MaxResults int    `json:"maxResults,omitempty"`
+	// Private marks a SearXNG instance the user runs, so searches through it
+	// count as private.
+	Private bool `json:"private,omitempty"`
 }
 
 // ParseConfig reads the global web section, then lets the project section
@@ -72,6 +76,24 @@ var searchEnv = []struct{ provider, key string }{
 	{"brave", "BRAVE_SEARCH_API_KEY"},
 	{"tavily", "TAVILY_API_KEY"},
 	{"searxng", "SEARXNG_URL"},
+}
+
+// StoredKeyIDs maps each search key variable to the auth.json entry /setup
+// stores that key under.
+var StoredKeyIDs = map[string]string{"BRAVE_API_KEY": "brave-search", "BRAVE_SEARCH_API_KEY": "brave-search", "TAVILY_API_KEY": "tavily"}
+
+// SearchLookup reads a search setting from getenv, else a key stored in
+// auth.json (stored may be nil).
+func SearchLookup(getenv func(string) string, stored func(id string) string) func(string) string {
+	return func(name string) string {
+		if v := getenv(name); v != "" {
+			return v
+		}
+		if id := StoredKeyIDs[name]; id != "" && stored != nil {
+			return stored(id)
+		}
+		return ""
+	}
 }
 
 // SearchEnvVars lists the environment variables that configure web search;

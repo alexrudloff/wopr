@@ -33,14 +33,16 @@ type Result struct {
 	Title, URL, Snippet string
 }
 
-// ErrNotConfigured is the result of a search without a backend.
-var ErrNotConfigured = errors.New("web search is not configured: set BRAVE_API_KEY, TAVILY_API_KEY or SEARXNG_URL, or web.search in settings")
+// ddgName is the keyless backend used when no provider is configured.
+const ddgName = "duckduckgo"
 
-// Backend runs searches against one provider's HTTP API.
+// Backend runs searches against one provider's HTTP API, or DuckDuckGo's
+// results page when none is configured.
 type Backend struct {
 	name     string
 	endpoint string
 	key      string
+	private  bool
 	client   *http.Client
 }
 
@@ -52,20 +54,48 @@ func newBackend(cfg SearchConfig) *Backend {
 	case "tavily":
 		b.endpoint = tavilyEndpont
 	case "searxng":
-		b.endpoint = strings.TrimRight(cfg.URL, "/") + "/search"
-		return b
-	default:
-		return nil
+		if cfg.URL != "" {
+			b.endpoint = strings.TrimRight(cfg.URL, "/") + "/search"
+			b.private = cfg.Private
+			return b
+		}
 	}
-	if b.key == "" {
-		return nil
+	if b.endpoint == "" || (b.name != "searxng" && b.key == "") {
+		return &Backend{name: ddgName, endpoint: ddgEndpoint, client: b.client}
 	}
 	return b
 }
 
 func (b *Backend) Name() string { return b.name }
 
+// Keyed reports whether the backend is a configured provider (a key or a
+// SearXNG instance) rather than the keyless DuckDuckGo fallback.
+func (b *Backend) Keyed() bool { return b.name != ddgName }
+
+// Private reports whether searches stay with the user: a SearXNG instance
+// marked private.
+func (b *Backend) Private() bool { return b.private }
+
+// Describe names the backend for settings screens.
+func (b *Backend) Describe() string {
+	switch b.name {
+	case "brave":
+		return "Brave (key)"
+	case "tavily":
+		return "Tavily (key)"
+	case "searxng":
+		if b.private {
+			return "SearXNG (private)"
+		}
+		return "SearXNG"
+	}
+	return "DuckDuckGo"
+}
+
 func (b *Backend) Search(ctx context.Context, query string, n int) ([]Result, error) {
+	if b.name == ddgName {
+		return b.searchDDG(ctx, query, n)
+	}
 	var req *http.Request
 	var err error
 	switch b.name {
@@ -129,8 +159,8 @@ type SearchTool struct {
 	MaxResults int
 }
 
-// NewSearchTool returns the search tool for cfg, completed from getenv. Its
-// Backend is nil when search is not configured.
+// NewSearchTool returns the search tool for cfg, completed from getenv.
+// Without a configured provider it searches DuckDuckGo.
 func NewSearchTool(cfg SearchConfig, getenv func(string) string) *SearchTool {
 	resolved := cfg.resolved(getenv)
 	return &SearchTool{Backend: newBackend(resolved), MaxResults: resolved.MaxResults}
@@ -163,10 +193,10 @@ func (t *SearchTool) Execute(ctx context.Context, _ string, raw json.RawMessage,
 	if strings.TrimSpace(p.Query) == "" {
 		return agent.AgentToolResult{}, errors.New("web_search: query is empty")
 	}
-	if t.Backend == nil {
-		return agent.AgentToolResult{Content: ErrNotConfigured.Error(), IsError: true}, nil
-	}
 	results, err := t.Backend.Search(ctx, p.Query, t.MaxResults)
+	if errors.Is(err, ErrDDGNoResults) {
+		return agent.AgentToolResult{Content: err.Error(), IsError: true}, nil
+	}
 	if err != nil {
 		return agent.AgentToolResult{}, err
 	}

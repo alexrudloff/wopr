@@ -15,8 +15,8 @@ import (
 )
 
 // Web and MCP tools (see internal/codingagent/web and internal/codingagent/mcp).
-// Each is installed only when it can do something: web_fetch always,
-// web_search when a search backend is configured, and mcp when a server is.
+// web_fetch and web_search are always installed (see session_websearch.go
+// for how a search runs); mcp only when a server is configured.
 
 // MCPSchemaCacheFileName holds the schemas of promoted MCP tools under the
 // agent directory.
@@ -62,11 +62,9 @@ func (s *Session) initWebAndMCP(opts SessionOptions) {
 			extra = append(extra, fetch)
 		}
 		if harnessToolAllowed(opts, web.SearchToolName) {
-			search := web.NewSearchTool(cfg.Search, os.Getenv)
-			_, requested := opts.AllowedTools[web.SearchToolName]
-			if search.Backend != nil || requested {
-				extra = append(extra, search)
-			}
+			search := web.NewSearchTool(cfg.Search, web.SearchLookup(os.Getenv, storedKey(s.services.Auth())))
+			s.webSearch.tool = search
+			extra = append(extra, search)
 		}
 	}
 	if harnessToolAllowed(opts, mcp.ToolName) {

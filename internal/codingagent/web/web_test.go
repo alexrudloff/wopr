@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"os"
 	"strings"
 	"testing"
 )
@@ -65,5 +66,35 @@ func TestFetchBlocksPrivateNetworksByDefault(t *testing.T) {
 		if got := blockedAddr(netip.MustParseAddr(addr)); got != blocked {
 			t.Errorf("blockedAddr(%s) = %t, want %t", addr, got, blocked)
 		}
+	}
+}
+
+// A DuckDuckGo results page yields its organic results with redirect links
+// unwrapped; a page without results (a rate limit or challenge) says so
+// instead of coming back blank.
+func TestDuckDuckGoSearch(t *testing.T) {
+	page, err := os.ReadFile("testdata/ddg_results.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	search := func(body string) (string, bool) {
+		t.Helper()
+		srv := serve(t, "text/html", body, http.StatusOK)
+		tool := NewSearchTool(SearchConfig{}, func(string) string { return "" })
+		tool.Backend.endpoint = srv.URL
+		res, err := tool.Execute(context.Background(), "call-1", json.RawMessage(`{"query":"rotating detonation engine"}`), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Content, res.IsError
+	}
+	got, isErr := search(string(page))
+	if isErr || !strings.Contains(got, "1. Integrated Rotating Detonation Engine System (InRoDES) - NASA\n   https://www.nasa.gov/integrated-rotating-detonation-engine-system-inrodes/") ||
+		!strings.Contains(got, "2. ") || !strings.Contains(got, "https://techport.nasa.gov/projects/116281") || strings.Contains(got, "Sponsored") {
+		t.Fatalf("results = %q", got)
+	}
+	got, isErr = search(`<html><body><div class="anomaly-modal">Please confirm you are human</div></body></html>`)
+	if !isErr || !strings.Contains(got, "possibly rate-limited") {
+		t.Fatalf("challenge page = %q, error %v", got, isErr)
 	}
 }
