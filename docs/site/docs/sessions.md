@@ -52,6 +52,23 @@ the mistake and continue, so the failed attempt never reaches the model again.
 Filter the tree when it grows. `ctrl+u` shows your messages only, `ctrl+t` hides
 tool results, and `ctrl+l` shows labeled entries. See [keybindings](keybindings.md).
 
+## Undoing file changes
+
+Before `write`, `edit`, or `apply_patch` changes a file, WOPR keeps a copy of it
+(or notes that it didn't exist) in the session's archive. `/undo` puts back the
+last change: the file returns byte for byte, and a file the tool created is
+removed. Run `/undo` again to step further back. `/undo <path>` undoes the latest
+change to one file, and `/undo prompt` undoes everything since your last prompt.
+It is also in the command palette as **Undo last change**.
+
+If the file changed after the tool's change (you edited it, or a shell command
+did), `/undo` still restores it and saves the newer version in the archive, and
+says where. The model is told about the undo at its next turn.
+
+Changes made by shell commands (`sed -i`, `mv`, a script) aren't covered, and
+files larger than 5 MB aren't copied. The copies live with the session and go
+when it does.
+
 ## Naming and finding
 
 An unnamed session is identified by its time and first message, which is hard to

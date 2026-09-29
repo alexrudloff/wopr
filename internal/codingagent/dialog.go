@@ -125,6 +125,7 @@ func (m *InteractiveMode) openCommandPalette(ctx context.Context) {
 		{title: "Jump to message", category: "Session", key: leader("j"), run: slash("/tree")},
 		{title: "Global Thermonuclear War", category: "Agent", key: leader("g"), run: func() { m.globalThermonuclearWar(ctx) }},
 		{title: "Fork session", category: "Session", run: slash("/fork")},
+		{title: "Undo last change", category: "Session", run: slash("/undo")},
 		{title: "Compact session", category: "Session", key: leader("c"), run: slash("/compact")},
 		{title: "Copy last assistant message", category: "Session", key: leader("y"), run: slash("/copy")},
 		{title: "Export session transcript", category: "Session", key: leader("x"), run: slash("/export")},

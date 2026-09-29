@@ -17,6 +17,7 @@ The dispatcher is exhaustive: every built-in command is listed here. Prompt temp
 | `/fork` | Fork from a previous user message. |
 | `/clone` | Duplicate session at the current position. |
 | `/tree` | Navigate session tree. |
+| `/undo` | Undo the last file change a tool made. `/undo <path>` undoes the latest change to that file; `/undo prompt` undoes every change since your last prompt. See [undoing file changes](sessions.md#undoing-file-changes). |
 | `/compact` | Manually compact the context. |
 | `/reload` | Reload keybindings, skills, prompts, themes, and context files. |
 | `/reload --explain` | Same plus resource counts. |

@@ -63,6 +63,7 @@ type Session struct {
 	stall         stallState
 	temp          *tempfiles.Tracker
 	fileWatch     fileWatch
+	undo          fileUndo
 	routeNeeded   atomic.Bool
 	routeBoundary atomic.Bool // the next route decision starts a run
 	routeModelsMu sync.Mutex
@@ -515,6 +516,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initApplyPatch()
 	sess.initTestCap()
 	sess.initTempFiles()
+	sess.initUndo()
 	sess.initQueue(opts)
 	sess.initAskUser(opts)
 	sess.initGoal()
