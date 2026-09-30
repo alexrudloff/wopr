@@ -288,23 +288,10 @@ func (w *setupWizard) addSubscription() string {
 		}
 		options = append(options, tui.DialogOption{Title: p.Name, Footer: footer, Value: p.ID})
 	}
-	// Subscriptions that sign in with a key from their console.
-	for _, p := range w.m.oauthProviderList("login-api-key") {
-		if p.ID == "opencode-go" {
-			footer := ""
-			if p.Stored || p.AuthStatusSource != "" {
-				footer = cmp.Or(p.AuthStatusLabel, "configured")
-			}
-			options = append(options, tui.DialogOption{Title: p.Name, Description: "API key", Footer: footer, Value: "key:" + p.ID})
-		}
-	}
 	d := tui.NewDialogSelect("Sign in with a subscription", options, "")
 	chosen, ok := w.sel(d)
 	if !ok {
 		return ""
-	}
-	if provider, ok := strings.CutPrefix(chosen.Value, "key:"); ok {
-		return w.addAPIKeyFor(provider, chosen.Title, chosen.Footer)
 	}
 	if chosen.Footer == "" && !w.login(chosen.Value, chosen.Title) {
 		return ""
@@ -362,19 +349,19 @@ func (w *setupWizard) addAPIKey() string {
 		if p.Stored || p.AuthStatusSource != "" {
 			footer = cmp.Or(p.AuthStatusLabel, "configured")
 		}
-		options = append(options, tui.DialogOption{Title: p.Name, Footer: footer, Value: p.ID})
+		description := ""
+		if inferTier(setupViaAPIKey, "", p.ID) == router.CostSubscription {
+			// A monthly plan whose key comes from the provider's console.
+			description = "subscription plan"
+		}
+		options = append(options, tui.DialogOption{Title: p.Name, Description: description, Footer: footer, Value: p.ID})
 	}
 	d := tui.NewDialogSelect("Add an API key", options, "")
 	chosen, ok := w.sel(d)
 	if !ok {
 		return ""
 	}
-	return w.addAPIKeyFor(chosen.Value, chosen.Title, chosen.Footer)
-}
-
-// addAPIKeyFor asks for provider's key, checks it, and saves it; configured
-// names a key already set up, offered for reuse.
-func (w *setupWizard) addAPIKeyFor(provider, name, configured string) string {
+	provider, name, configured := chosen.Value, chosen.Title, chosen.Footer
 	if configured != "" {
 		// A key is already configured: use it, or replace it.
 		use := tui.NewDialogSelect(name+" already has a key", []tui.DialogOption{
