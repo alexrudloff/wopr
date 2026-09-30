@@ -60,9 +60,12 @@ type Session struct {
 	thinkingBoost atomic.Int32
 	// stall is the run's stall-nudge state (see session_stall.go); only
 	// the agent goroutine touches it.
-	stall         stallState
-	temp          *tempfiles.Tracker
-	fileWatch     fileWatch
+	stall     stallState
+	temp      *tempfiles.Tracker
+	fileWatch fileWatch
+	// anchorsOff holds, per model spec, the learned hashline decision taken
+	// at the latest request.
+	anchorsOff    sync.Map
 	webSearch     webSearchState
 	undo          fileUndo
 	shell         shellEdits

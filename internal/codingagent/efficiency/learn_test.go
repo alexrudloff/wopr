@@ -63,3 +63,23 @@ func TestLearnedValuesStayInBounds(t *testing.T) {
 		t.Fatalf("damaged file: effective window %d, want the configured 32768", got)
 	}
 }
+
+// Anchors go off only when anchored edits fail often and clearly more than
+// exact-text edits (the eval's local models: 18 of 48 against 1 of 96).
+func TestAnchorsOffRule(t *testing.T) {
+	for _, tc := range []struct {
+		name                           string
+		anchored, aFails, text, tFails int
+		off                            bool
+	}{
+		{"eval's local models", 48, 18, 96, 1, true},
+		{"too few anchored edits", 7, 7, 0, 0, false},
+		{"failing no more than text", 20, 5, 20, 4, false},
+		{"rare failures", 50, 5, 50, 0, false},
+	} {
+		m := ModelLearning{AnchoredEdits: tc.anchored, AnchoredFails: tc.aFails, TextEdits: tc.text, TextFails: tc.tFails}
+		if got := m.anchorsFailing(); got != tc.off {
+			t.Errorf("%s: anchors off = %v, want %v", tc.name, got, tc.off)
+		}
+	}
+}

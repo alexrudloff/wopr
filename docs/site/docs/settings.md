@@ -164,7 +164,7 @@ in the 256-color palette. See [terminal setup](terminal-setup.md).
 | `defaultTools` | string[] | `read`, `bash`, `edit`, `write`, `task`, `web_fetch`, `web_search`, `mcp` | Built-in tools active at startup. An empty array turns off every built-in tool. `mcp` is installed only when an MCP server is configured. |
 | `mcpServers` | object |  | MCP servers by name: `command`, `args`, `env` for stdio, or `url`, `headers` for streamable HTTP. See [MCP servers](mcp.md). |
 | `web` | object |  | `web_fetch` limits and the `web_search` provider: `allowPrivateNetwork`, `fetchTimeoutMs`, `maxBytes`, `search` (`provider`, `apiKey`, `url`, `maxResults`, `private`). See [Web tools](web.md). |
-| `hashline` | string | `auto` | Hashline anchors on `read` and `edit`: `auto`, `on`, or `off`. `auto` turns them on for models on free-local and free-remote router tiers. A router model's own `hashline` flag wins. |
+| `hashline` | string | `auto` | Hashline anchors on `read` and `edit`: `auto`, `on`, or `off`. `auto` turns them on for models on free-local and free-remote router tiers, and turns them back off for a model whose anchored edits keep failing (at least 20% of 8+ anchored edits, and 3× its exact-text failure rate; see per-model learning in the efficiency docs). A router model's own `hashline` flag wins. |
 | `bashCompaction` | boolean | `true` | Drop known noise from `bash` output before the model sees it. See [bash output compaction](#bash-output-compaction). |
 | `diagnostics` | object | see meaning | Checker run after `edit` and `write`: `enabled` (default `true`), `timeoutMs` (default `4000`), and `commands` (per-language overrides). See [post-edit diagnostics](#post-edit-diagnostics). |
 

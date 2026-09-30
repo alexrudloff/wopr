@@ -408,8 +408,24 @@ func (s *Session) learnRequest(model *ai.Model, messages []agent.AgentMessage) {
 
 // learnAfterToolCall shows the learner each tool call: recalls, readbacks
 // of reduced logs, and file reads.
-func (s *Session) learnAfterToolCall(_ context.Context, _, toolName string, args json.RawMessage, _ agent.AgentToolResult) agent.AfterToolCallResult {
+func (s *Session) learnAfterToolCall(ctx context.Context, _, toolName string, args json.RawMessage, result agent.AgentToolResult) agent.AfterToolCallResult {
 	l := s.learner()
+	if toolName == "edit" {
+		var in struct {
+			Edits []struct {
+				Anchor string `json:"anchor"`
+			} `json:"edits"`
+		}
+		if json.Unmarshal(args, &in) == nil && len(in.Edits) > 0 {
+			anchored := false
+			for _, e := range in.Edits {
+				anchored = anchored || strings.TrimSpace(e.Anchor) != ""
+			}
+			if env, ok := agent.ToolEnvironmentFrom(ctx); ok && env.Model != "" {
+				l.EditResult(env.Provider+"/"+env.Model, anchored, result.IsError)
+			}
+		}
+	}
 	if toolName == "obs_recall" {
 		var in struct {
 			ID string `json:"id"`

@@ -78,6 +78,12 @@ type ModelLearning struct {
 	Rereads         int     `json:"rereads,omitempty"`
 	BandRequests    [10]int `json:"bandRequests"`
 	BandStalls      [10]int `json:"bandStalls"`
+	// Edits by kind, and how many failed: anchored (hashline) edits against
+	// edits by exact text, which decide whether the model keeps anchors.
+	AnchoredEdits int `json:"anchoredEdits,omitempty"`
+	AnchoredFails int `json:"anchoredFails,omitempty"`
+	TextEdits     int `json:"textEdits,omitempty"`
+	TextFails     int `json:"textFails,omitempty"`
 }
 
 func clampInt(v, lo, hi int) int { return max(lo, min(hi, v)) }
@@ -624,6 +630,59 @@ func (l *Learner) Close() {
 	l.Save()
 }
 
+// Anchors turn off for a model once its anchored edits fail at least
+// anchorFailRate of the time over anchorMinEdits or more, and at least
+// anchorFailRatio times as often as its exact-text edits.
+const (
+	anchorMinEdits  = 8
+	anchorFailRate  = 0.2
+	anchorFailRatio = 3.0
+)
+
+// anchorsFailing is the decision rule for one model's edit counts.
+func (m *ModelLearning) anchorsFailing() bool {
+	if m.AnchoredEdits < anchorMinEdits {
+		return false
+	}
+	rate := float64(m.AnchoredFails) / float64(m.AnchoredEdits)
+	textRate := float64(m.TextFails) / float64(max(m.TextEdits, 1))
+	return rate >= anchorFailRate && rate >= anchorFailRatio*textRate
+}
+
+// EditResult records one edit by spec: anchored or by exact text, and
+// whether it failed.
+func (l *Learner) EditResult(spec string, anchored, failed bool) {
+	if !l.On() || spec == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	m := l.model(spec)
+	if anchored {
+		m.AnchoredEdits++
+		if failed {
+			m.AnchoredFails++
+		}
+	} else {
+		m.TextEdits++
+		if failed {
+			m.TextFails++
+		}
+	}
+	l.touched[spec] = true
+}
+
+// AnchorsOff reports whether spec's anchored edits fail clearly more often
+// than its exact-text edits, so hashline's "auto" should leave them off.
+func (l *Learner) AnchorsOff(spec string) bool {
+	if !l.On() || spec == "" {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.peek(spec).anchorsFailing()
+}
+
 // Summary lists, per model, the learned values that differ from the
 // globals.
 func (l *Learner) Summary() []string {
@@ -653,6 +712,9 @@ func (l *Learner) Summary() []string {
 		}
 		if m.ReducerUnreliable {
 			parts = append(parts, "receipts unreliable")
+		}
+		if m.anchorsFailing() {
+			parts = append(parts, fmt.Sprintf("anchors off (%d of %d anchored edits failed)", m.AnchoredFails, m.AnchoredEdits))
 		}
 		if len(parts) > 0 {
 			out = append(out, spec+": "+strings.Join(parts, ", "))

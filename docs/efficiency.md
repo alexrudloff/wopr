@@ -162,6 +162,7 @@ More keys in `efficiency.json`, each on by default:
   | Half-life cuts recalled: over 30% / under 5% | results kept whole | +1 / −1 | 2–12 |
   | Receipts whose raw log the model reads back: over 30% / under 5% | smallest log reduced | ×1.5 / ×0.75 | 2–64 KB |
   | A reducer model's receipts failing verification over 50% | that model is skipped as reducer, tried every 10th time | | |
+  | Anchored edits failing at least 20% of the time (8+ edits) and at least 3× as often as the model's exact-text edits | hashline anchors off for that model under `hashline: auto` (decided once per request, so read and edit agree) | | |
   | Files read before a compaction read again within 6 requests: over 50% / under 20% of compactions | window share (compaction point and routing fit) | +5 / −5 points | 50–100% of the window |
   | Stall nudges at least twice as frequent from a tenth of the window up (20+ requests, 3+ stalls there) | window share | down to that tenth | 50–100% |
 

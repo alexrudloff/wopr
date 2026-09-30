@@ -14,12 +14,16 @@ import (
 // exact text reliably and would only pay for the anchors. Subagents are
 // read-only and never get anchors.
 
-// hashlineMode reports whether provider/model uses hashline anchors.
+// hashlineMode reports whether provider/model uses hashline anchors. In
+// "auto", a model whose anchored edits keep failing (per-model learning)
+// goes without them; that decision is taken once per request (see
+// hashlineDeclarations) so read, edit, and the declarations agree.
 func (s *Session) hashlineMode(provider, model string) bool {
 	var flag *bool
 	free := false
+	spec := provider + "/" + model
 	if s.router != nil {
-		flag, free = s.router.Hashline(provider + "/" + model)
+		flag, free = s.router.Hashline(spec)
 	}
 	if flag != nil {
 		return *flag
@@ -28,6 +32,9 @@ func (s *Session) hashlineMode(provider, model string) bool {
 	case "on":
 		return true
 	case "off":
+		return false
+	}
+	if off, _ := s.anchorsOff.Load(spec); off == true {
 		return false
 	}
 	return free
@@ -55,6 +62,10 @@ func (s *Session) initHashline() {
 // switch never records a tool change.
 func (s *Session) hashlineDeclarations(messages []ai.Message) []ai.Message {
 	model := s.requestModel.Load()
+	if model != nil {
+		spec := providerID(model) + "/" + model.ID
+		s.anchorsOff.Store(spec, s.learner().AnchorsOff(spec))
+	}
 	if model == nil || !s.hashlineMode(providerID(model), model.ID) {
 		return messages
 	}
