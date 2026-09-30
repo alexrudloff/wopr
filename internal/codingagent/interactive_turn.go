@@ -9,6 +9,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+	"github.com/alexrudloff/wopr/internal/codingagent/router"
 	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 	"github.com/alexrudloff/wopr/tui"
 )
@@ -92,6 +93,10 @@ func (m *InteractiveMode) handleSubmitWithImages(ctx context.Context, prompt str
 // unresolved `/foo` is ordinary user text: it goes to the model rather than
 // reporting an unknown command.
 func (m *InteractiveMode) promptUserInput(ctx context.Context, text string, images []ai.ImageContent, followUp bool) {
+	if _, secret := router.ScanSecrets(text); secret {
+		// Sent as typed: the model may need it. The user should know where it goes.
+		m.showToast("warning", "That looks like a secret", "It goes to the model's provider and is saved in this session's file. Rotate it if it matters.")
+	}
 	streaming := m.runStreaming()
 	// Expand skill commands first, then prompt templates on the result.
 	if expanded, ok := m.expandSkillCommand(text); ok {

@@ -60,7 +60,18 @@ type shellBefore struct {
 	watched map[string]fileCopy
 	git     map[string]string // repo-relative path -> porcelain status; nil without git
 	named   map[string]bool   // named path -> existed before
+	// namedCopies are the bytes of existing files the command names that
+	// no copy or clean git index covers: a sed -i on a file the model only
+	// grepped, outside git.
+	namedCopies map[string]fileState
 }
+
+// Named-file copies taken before a command that may write: at most this many
+// files and bytes in all, each also under undoMaxBytes.
+const (
+	namedCopyFiles = 20
+	namedCopyBytes = 20 << 20
+)
 
 // initShellEdits watches the files the model reads and writes, and turns the
 // file changes a shell command makes into /undo changes.
@@ -167,9 +178,51 @@ func (c shellCapture) before(ctx context.Context, callID, command string) {
 	if root := c.gitRoot(ctx); root != "" {
 		b.git, _ = gitStatus(ctx, root)
 	}
+	writes := !readOnlyCommandRE.MatchString(command)
+	var candidates []string
 	for _, path := range namedPaths(c.cwd, command) {
-		_, err := os.Lstat(path)
+		info, err := os.Lstat(path)
 		b.named[path] = err == nil
+		if _, watched := b.watched[path]; writes && err == nil && info.Mode().IsRegular() && !watched {
+			candidates = append(candidates, path)
+		}
+	}
+	// A clean tracked file needs no copy: the index has it.
+	tracked := map[string]bool{}
+	if root := c.gitRoot(ctx); root != "" && b.git != nil && len(candidates) > 0 {
+		var rels []string
+		for _, path := range candidates {
+			if rel, ok := gitRel(root, path); ok && b.git[rel] == "" {
+				rels = append(rels, rel)
+			}
+		}
+		if len(rels) > 0 {
+			out, _ := gitOutput(ctx, root, append([]string{"ls-files", "-z", "--"}, rels...)...)
+			for rel := range strings.SplitSeq(string(out), "\x00") {
+				if rel != "" {
+					tracked[canonical(filepath.Join(root, rel))] = true
+				}
+			}
+		}
+	}
+	total := 0
+	for _, path := range candidates {
+		if tracked[path] || len(b.namedCopies) >= namedCopyFiles {
+			continue
+		}
+		info, err := os.Stat(path)
+		if err != nil || total+int(info.Size()) > namedCopyBytes {
+			continue
+		}
+		state := readFileState(path)
+		if state.skipped != "" {
+			continue
+		}
+		if b.namedCopies == nil {
+			b.namedCopies = map[string]fileState{}
+		}
+		b.namedCopies[path] = state
+		total += len(state.data)
 	}
 	c.edits.mu.Lock()
 	if c.edits.pending == nil {
@@ -242,6 +295,15 @@ func (c shellCapture) after(ctx context.Context, callID, command string) []tools
 			}
 		}
 	}
+	for path, prev := range b.namedCopies {
+		if handled[path] {
+			continue
+		}
+		handled[path] = true
+		if now := readFileState(path); now.exists != prev.exists || now.sum() != prev.sum() {
+			changes = append(changes, shellChange{path: path, before: prev})
+		}
+	}
 	for path, existed := range b.named {
 		if handled[path] || existed {
 			continue
@@ -304,6 +366,18 @@ func (c shellCapture) gitRoot(ctx context.Context) string {
 
 // canonical resolves path's directory through symlinks, so a path reached
 // two ways is one key.
+// gitRel is path relative to the repo root, when it lies inside it.
+func gitRel(root, path string) (string, bool) {
+	if root == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
+
 func canonical(path string) string {
 	if parent, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
 		return filepath.Join(parent, filepath.Base(path))

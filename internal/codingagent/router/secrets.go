@@ -17,6 +17,10 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`),
 	regexp.MustCompile(`\b[rs]k_(?:live|test)_[0-9A-Za-z]{16,}\b`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}`),
+	// OAuth callback and redirect URLs carry codes and tokens as parameters.
+	regexp.MustCompile(`[?&#](?:code|access_token|refresh_token|id_token)=[A-Za-z0-9._~%-]{16,}`),
+	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}`),
+	regexp.MustCompile(`\bcf[a-z]{2,4}_[A-Za-z0-9._-]{20,}`),
 	regexp.MustCompile(`\b[a-zA-Z][a-zA-Z0-9+.-]*://[^/\s:@]+:[^/\s@]+@`),
 	regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|private[_-]?key)\b["']?\s*[:=]\s*(?:"[^"\s]{8,}"|'[^'\s]{8,}'|[A-Za-z0-9_\-+/=.]{12,})`),
 }

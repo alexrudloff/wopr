@@ -86,6 +86,29 @@ func TestShellEditsAreUndoable(t *testing.T) {
 		t.Fatalf("outside git, an unnamed new file was recorded: %+v", got)
 	}
 
+	// Outside git, a sed -i on a file the model only grepped: the command
+	// names it, so it was copied before and the edit is undoable.
+	outsideStore := t.TempDir()
+	config := canonical(filepath.Join(outside, "tsconfig.json"))
+	write(config, `{"include": ["src"]}`+"\n")
+	o = shellCapture{dir: outsideStore, cwd: outside, edits: &shellEdits{}, record: func(snap pendingSnapshot, callID string, after fileState) error {
+		entry := undoEntry{Kind: "change", Tool: snap.tool, Call: callID, Path: snap.path, Absent: !snap.before.exists,
+			Mode: uint32(snap.before.mode), After: after.sum()}
+		return appendUndoEntry(outsideStore, &entry, snap.before)
+	}}
+	sed := "sed -i '' 's/src/src,types/' tsconfig.json"
+	o.before(ctx, "sed", sed)
+	write(config, `{"include": ["src","types"]}`+"\n")
+	if got := o.after(ctx, "sed", sed); len(got) != 1 {
+		t.Fatalf("outside git, a named file's edit was not recorded: %+v", got)
+	}
+	if _, err := undoIn(outsideStore, outside, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(config); got != `{"include": ["src"]}`+"\n" {
+		t.Fatalf("outside git, undo restored %q", got)
+	}
+
 	undo := func() {
 		t.Helper()
 		if _, err := undoIn(store, repo, ""); err != nil {
