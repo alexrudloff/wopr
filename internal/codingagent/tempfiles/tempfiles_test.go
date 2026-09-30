@@ -91,4 +91,23 @@ func TestCleanupDeletesOnlyWhatIsSafe(t *testing.T) {
 	if !exists(live) || exists(dead) {
 		t.Fatalf("sweep: live=%v dead=%v, want true false", exists(live), exists(dead))
 	}
+
+	// A project that lives in a temp root is the working directory: its
+	// files, and the directory itself, are never recorded or deleted.
+	project := filepath.Join(root, "project")
+	if err := os.Mkdir(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	source := file(project, "main.go", old)
+	tr.Protect(project)
+	tr.RecordPath("s4", source)
+	tr.RecordPath("s4", project)
+	_ = tr.update(func(e []Entry) []Entry {
+		return append(e, Entry{Path: project, SessionID: "s4", PID: tr.pid, ProcessStart: "not-this-process"})
+	})
+	tr.CleanSession("s4", false)
+	tr.SweepDead()
+	if !exists(source) || !exists(project) {
+		t.Fatalf("working directory: source=%v project=%v, want both kept", exists(source), exists(project))
+	}
 }

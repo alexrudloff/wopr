@@ -17,6 +17,7 @@ func (s *Session) initTempFiles() {
 		return
 	}
 	t := tempfiles.Process(s.services.AgentDir())
+	t.Protect(s.services.CWD())
 	s.temp = t
 	s.agent.AddBeforeToolCallHook(func(_ context.Context, callID, toolName string, _ json.RawMessage) agent.ToolCallHookResult {
 		if toolName == "bash" {

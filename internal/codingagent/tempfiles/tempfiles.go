@@ -50,6 +50,37 @@ type Tracker struct {
 
 	mu        sync.Mutex
 	snapshots map[string]map[string]map[string]bool // tool call ID -> root -> names
+	// protected are working directories: a project under a temp root is
+	// never temp material, so nothing inside one, and no directory holding
+	// one, is recorded.
+	protected []string
+}
+
+// Protect keeps dir, everything inside it, and every directory holding it
+// out of the records.
+func (t *Tracker) Protect(dir string) {
+	if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = resolved
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if !slices.Contains(t.protected, dir) {
+		t.protected = append(t.protected, dir)
+	}
+}
+
+// isProtected reports whether path is a protected directory, inside one,
+// or holds one.
+func (t *Tracker) isProtected(path string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	sep := string(filepath.Separator)
+	for _, dir := range t.protected {
+		if path == dir || strings.HasPrefix(path, dir+sep) || strings.HasPrefix(dir, path+sep) {
+			return true
+		}
+	}
+	return false
 }
 
 // New returns a tracker for this process, recording into agentDir.
@@ -161,6 +192,7 @@ func (t *Tracker) inRoot(path string) (string, bool) {
 }
 
 func (t *Tracker) record(sessionID string, paths ...string) {
+	paths = slices.DeleteFunc(paths, t.isProtected)
 	if len(paths) == 0 || sessionID == "" {
 		return
 	}
@@ -249,6 +281,10 @@ func (t *Tracker) clean(recent bool, selected func(Entry) bool, sessionID string
 			}
 			if recent && usedRecently(e.Path, time.Now()) {
 				kept = append(kept, e)
+				continue
+			}
+			if t.isProtected(e.Path) {
+				// A working directory, or one holding it: never temp material.
 				continue
 			}
 			if removeSafely(t.roots, e.Path) {
