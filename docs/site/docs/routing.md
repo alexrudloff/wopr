@@ -215,7 +215,11 @@ every other model you set up (subscriptions, API keys, and your own
 endpoints, pay-per-token included) answers the same request independently,
 in parallel, each at its own maximum thinking. Members work read-only (read,
 grep, find, ls, read-only shell) from the request and a short brief of the
-conversation; wopr checks the lines they quote. Their proposals reach the
+conversation, and can search the web and fetch pages with the same search
+order as the top model (your key, else their provider's own search, else
+DuckDuckGo, paced so a council doesn't trip its rate limit). wopr checks the
+lines they quote and that each page they cite showed up in their searches;
+the round lists every member's web sources. Their proposals reach the
 top model in one message, which builds its plan or answer from the best
 parts, says where they disagree, and then does the work as usual. The
 transcript shows the round as **War council: N proposals (…)**, which expands
@@ -235,7 +239,9 @@ and that tool, never on searches, reads, or edits.
 - **Skipped members**: a model that's unreachable, resting after errors, or
   not signed in is skipped and named.
 - **Private mode**: started from private mode, the session stays private:
-  the top model and every member come from private connections.
+  the top model and every member come from private connections, and members
+  search only through a SearXNG you marked private, never fetching pages.
+  Without one they have no web access.
 - **Cost**: every prompt runs every member, so a round costs about as much as
   all of them answering; it's as slow as the slowest member within the limit.
 - The council stays on for that session, including after `/resume`.

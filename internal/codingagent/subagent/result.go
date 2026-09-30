@@ -43,6 +43,7 @@ type Result struct {
 type Evidence struct {
 	Raw     string
 	Command string // set for "cmd:" evidence
+	URL     string // set for "web:" evidence
 	Path    string // set for file evidence
 	Start   int
 	End     int
@@ -130,6 +131,12 @@ func parseEvidence(line string) Evidence {
 		e.Quote = quote
 	}
 	head = strings.TrimSpace(head)
+	if rest, isWeb := strings.CutPrefix(head, "web:"); isWeb {
+		if fields := strings.Fields(strings.Trim(strings.TrimSpace(rest), "`<>")); len(fields) > 0 {
+			e.URL = strings.TrimRight(fields[0], ".,;:)>")
+		}
+		return e
+	}
 	if rest, isCmd := strings.CutPrefix(head, "cmd:"); isCmd {
 		e.Command = strings.Trim(strings.TrimSpace(rest), "`")
 		e.splits = commandSplits(line)
@@ -211,6 +218,16 @@ func (r *Result) Verify(cwd string, outputs []string) (ok, total int) {
 }
 
 func verifyOne(e *Evidence, cwd string, outputs []string, files map[string]string) {
+	if e.URL != "" {
+		// A web source counts when the member's searches or fetches saw
+		// the page; a provider-run search returns pages, not their text.
+		if slices.ContainsFunc(outputs, func(out string) bool { return strings.Contains(out, e.URL) }) {
+			e.Verified = true
+		} else {
+			e.Problem = "page not in the member's searches or fetches"
+		}
+		return
+	}
 	quotes := quoteForms(e.Quote)
 	if len(quotes) == 0 {
 		e.Problem = "no quote"

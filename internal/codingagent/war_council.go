@@ -61,5 +61,23 @@ func newCouncilBlock(content string, details any, hint string) *councilBlock {
 		}
 		title = fmt.Sprintf("War council: %d %s (%s)", n, noun, strings.Join(models, ", "))
 	}
+	// Each proposal lists its web sources when expanded; the title counts
+	// them.
+	pages := 0
+	switch v := d["sources"].(type) {
+	case map[string][]string:
+		for _, list := range v {
+			pages += len(list)
+		}
+	case map[string]any:
+		for _, list := range v {
+			if l, ok := list.([]any); ok {
+				pages += len(l)
+			}
+		}
+	}
+	if pages > 0 {
+		title += fmt.Sprintf(" · %d web sources", pages)
+	}
 	return &councilBlock{title: title, content: content, hint: hint}
 }

@@ -274,6 +274,16 @@ func transcript(messages []agent.AgentMessage) (outputs []string, text string) {
 					fmt.Fprintf(&b, "→ %s %s\n", c.Name, args)
 				}
 			}
+			// A search the provider ran on its own servers leaves no tool
+			// result; its pages count as output so web evidence can cite them.
+			for _, d := range m.Assistant.Diagnostics {
+				if d.Type != ai.DiagnosticServerWebSearch {
+					continue
+				}
+				out := serverSearchText(d.Details)
+				outputs = append(outputs, out)
+				b.WriteString("## web search (provider)\n" + out + "\n")
+			}
 		case m.ToolResult != nil:
 			out := m.ToolResult.Text()
 			outputs = append(outputs, out)
@@ -281,6 +291,22 @@ func transcript(messages []agent.AgentMessage) (outputs []string, text string) {
 		}
 	}
 	return outputs, b.String()
+}
+
+// serverSearchText lists a provider-run search's query and pages.
+func serverSearchText(details map[string]any) string {
+	query, _ := details["query"].(string)
+	var b strings.Builder
+	b.WriteString("query: " + query + "\n")
+	results, _ := details["results"].([]any)
+	for _, r := range results {
+		if m, ok := r.(map[string]any); ok {
+			title, _ := m["title"].(string)
+			u, _ := m["url"].(string)
+			b.WriteString(title + " " + u + "\n")
+		}
+	}
+	return b.String()
 }
 
 // describeCall is a short "Tool arg" label for progress rows.

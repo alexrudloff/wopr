@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -16,6 +17,7 @@ import (
 	icodingagent "github.com/alexrudloff/wopr/internal/codingagent"
 	"github.com/alexrudloff/wopr/internal/codingagent/router"
 	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
+	"github.com/alexrudloff/wopr/internal/codingagent/web"
 	"github.com/alexrudloff/wopr/internal/text"
 )
 
@@ -96,6 +98,8 @@ func (s *Session) setCouncilTool(on bool) {
 type councilProposal struct {
 	name, spec string
 	text       string
+	// sources are the web pages the proposal cites.
+	sources []string
 }
 
 // CouncilResult is one council round: the proposals and who could not
@@ -112,6 +116,33 @@ func (r CouncilResult) Models() []string {
 	out := make([]string, len(r.Proposals))
 	for i, p := range r.Proposals {
 		out[i] = p.name
+	}
+	return out
+}
+
+// Sources are each answering member's cited web pages, by member name;
+// members that cited none are left out.
+func (r CouncilResult) Sources() map[string][]string {
+	out := map[string][]string{}
+	for _, p := range r.Proposals {
+		if len(p.sources) > 0 {
+			out[p.name] = p.sources
+		}
+	}
+	return out
+}
+
+// webSourceRe finds the page of a "web:" evidence line in a rendered
+// proposal.
+var webSourceRe = regexp.MustCompile(`web:\s*<?(https?://[^\s"'<>` + "`" + `]+)`)
+
+// webSources lists the distinct pages a proposal cites, in order.
+func webSources(answer string) []string {
+	var out []string
+	for _, m := range webSourceRe.FindAllStringSubmatch(answer, -1) {
+		if u := strings.TrimRight(m[1], ".,;:)"); !slices.Contains(out, u) {
+			out = append(out, u)
+		}
 	}
 	return out
 }
@@ -166,9 +197,16 @@ func (s *Session) runCouncil(ctx context.Context, question string) CouncilResult
 		name := cmp.Or(model.DisplayName, member.Ref.Spec())
 		calls = append(calls, councilCall{name: name, spec: route.Spec, run: func(ctx context.Context) (string, error) {
 			spec := subagent.Spec{Type: subagent.TypePropose, Description: "council · " + name, Brief: brief, Effort: subagent.EffortThorough}
-			id := subagent.NewTaskID(fmt.Sprintf("council\x00%s\x00%d\x00%s", route.Spec, time.Now().UnixNano(), question))
-			_, answer, err := s.councilRunner(route).Run(ctx, id, spec, nil)
-			return answer, err
+			for attempt := 0; ; attempt++ {
+				id := subagent.NewTaskID(fmt.Sprintf("council\x00%s\x00%d\x00%s", route.Spec, time.Now().UnixNano(), question))
+				details, answer, err := s.councilRunner(route).Run(ctx, id, spec, nil)
+				// A provider that refuses its server search answers again
+				// with DuckDuckGo, as the orchestrator does.
+				if attempt == 0 && details.State != subagent.StatusDone && s.refuseServerSearch(member.Ref.Provider, answer, err) {
+					continue
+				}
+				return answer, err
+			}
 		}})
 	}
 	proposals, late := gatherCouncil(ctx, calls, timeout)
@@ -218,7 +256,7 @@ func gatherCouncil(ctx context.Context, calls []councilCall, timeout time.Durati
 		r := results[i]
 		switch {
 		case r != nil && r.err == nil:
-			proposals = append(proposals, councilProposal{name: call.name, spec: call.spec, text: r.answer})
+			proposals = append(proposals, councilProposal{name: call.name, spec: call.spec, text: r.answer, sources: webSources(r.answer)})
 		case ctx.Err() != nil:
 			missing = append(missing, call.name+" (stopped)")
 		case r == nil || errors.Is(callCtx.Err(), context.DeadlineExceeded):
@@ -234,7 +272,14 @@ func gatherCouncil(ctx context.Context, calls []councilCall, timeout time.Durati
 // session's task registry (the sidebar lists members as live agents) and
 // provider limits.
 func (s *Session) councilRunner(route subagent.Route) *subagent.Tool {
-	t := &subagent.Tool{Host: councilHost{taskHost: taskHost{s: s}, route: route}, SessionID: s.ID(), StreamFn: s.council.streamFn}
+	stream := s.council.streamFn
+	if stream == nil {
+		stream = func(ctx context.Context, model *ai.Model, transcript ai.TranscriptContext, options ai.StreamOptions) (*ai.AssistantMessageEventStream, error) {
+			options.ServerWebSearch = s.councilWeb() == councilWebOpen && s.useServerSearch(model, transcript)
+			return model.Provider.Stream(ctx, transcript, options)
+		}
+	}
+	t := &subagent.Tool{Host: councilHost{taskHost: taskHost{s: s}, route: route}, SessionID: s.ID(), StreamFn: stream}
 	if s.tasks.tool != nil {
 		t.Limiter, t.Registry = s.tasks.tool.Limiter, s.tasks.tool.Registry
 	}
@@ -249,6 +294,57 @@ func (s *Session) councilRunner(route subagent.Route) *subagent.Tool {
 type councilHost struct {
 	taskHost
 	route subagent.Route
+}
+
+// Tools are the explore tools plus the web tools the council may use: both
+// normally, only a private search in a private council.
+func (h councilHost) Tools() []agent.AgentTool {
+	out := h.taskHost.Tools()
+	switch h.s.councilWeb() {
+	case councilWebOpen:
+		for _, name := range []string{web.SearchToolName, web.FetchToolName} {
+			if tool := h.s.toolNamed(name); tool != nil {
+				out = append(out, tool)
+			}
+		}
+	case councilWebPrivate:
+		if tool := h.s.toolNamed(web.SearchToolName); tool != nil {
+			out = append(out, tool)
+		}
+	}
+	return out
+}
+
+// councilWebAccess is what web the council members get.
+type councilWebAccess int
+
+const (
+	councilWebNone    councilWebAccess = iota // a private council without a private search
+	councilWebPrivate                         // a private council: the private SearXNG only
+	councilWebOpen                            // web_search and web_fetch
+)
+
+// councilWeb is the council's web access. A private council keeps to a
+// SearXNG marked private and never fetches pages, since a fetch sends the
+// URL out.
+func (s *Session) councilWeb() councilWebAccess {
+	if !s.council.private.Load() {
+		return councilWebOpen
+	}
+	if s.webSearch.tool != nil && s.webSearch.tool.Backend.Private() {
+		return councilWebPrivate
+	}
+	return councilWebNone
+}
+
+// refuseServerSearch turns server search off for provider when a member's
+// failure came from it, and reports whether to ask the member again.
+func (s *Session) refuseServerSearch(provider, answer string, err error) bool {
+	text := answer
+	if err != nil {
+		text += " " + err.Error()
+	}
+	return s.serverSearchRefused(&agent.AssistantMessage{Provider: provider, StopReason: ai.StopReasonError, ErrorMessage: text})
 }
 
 func (h councilHost) Route(context.Context, subagent.Request) (subagent.Route, error) {
@@ -291,6 +387,12 @@ func (s *Session) councilBrief(question string) string {
 	if files := s.fileWatch.paths(); len(files) > 0 {
 		b.WriteString("\nFILES THE SESSION HAS WORKED WITH:\n- " + strings.Join(files, "\n- ") + "\n")
 	}
+	switch s.councilWeb() {
+	case councilWebNone:
+		b.WriteString("\nNo web access in this private session: answer from the code and what you know.\n")
+	default:
+		b.WriteString("\nSearch the web when the request needs current information; cite a page as - web: <url> \"<text>\".\n")
+	}
 	return b.String()
 }
 
@@ -308,6 +410,9 @@ func councilMessage(r CouncilResult) agent.AgentMessage {
 		fmt.Fprintf(&b, "War council: %d proposals for the request above, each from another model working independently. Synthesize the best parts into your plan or answer; don't just pick one. Say where they disagree and why your choice wins. wopr checked their quotes; unverified ones are marked.\n", len(r.Proposals))
 		for i, p := range r.Proposals {
 			fmt.Fprintf(&b, "\n### Proposal %d: %s (%s)\n%s\n", i+1, p.name, p.spec, strings.TrimSpace(p.text))
+			if len(p.sources) > 0 {
+				b.WriteString("Sources: " + strings.Join(p.sources, ", ") + "\n")
+			}
 		}
 	}
 	if len(r.Skipped) > 0 {
@@ -318,7 +423,7 @@ func councilMessage(r CouncilResult) agent.AgentMessage {
 		"customType": CouncilMessageType,
 		"content":    b.String(),
 		"display":    true,
-		"details":    map[string]any{"models": r.Models(), "skipped": r.Skipped},
+		"details":    map[string]any{"models": r.Models(), "skipped": r.Skipped, "sources": r.Sources()},
 		"timestamp":  time.Now().UnixMilli(),
 	}}
 }

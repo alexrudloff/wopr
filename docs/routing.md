@@ -410,8 +410,10 @@ once in ranking order, minus the orchestrator and the models in
 `settings.json` `warCouncil.excluded`, only private connections when the
 session was private, and marks unreachable (probe failed), resting, and
 signed-out members as skipped. Each member runs as a `propose` subagent
-(`subagent.TypePropose`: read-only tools, the proposal system prompt, quotes
-verified, no escalation or failover) on its own model at its maximum
+(`subagent.TypePropose`: read-only tools plus `web_search` and `web_fetch`,
+the proposal system prompt, quotes and `web:` sources verified, no
+escalation or failover; a private council gets only a private SearXNG
+search, or no web tools) on its own model at its maximum
 thinking, through the session's task registry and provider limits.
 `gatherCouncil` stops collecting at the time limit
 (`warCouncil.timeoutSeconds`, default 300) and drops late members. The

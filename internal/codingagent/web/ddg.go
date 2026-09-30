@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -24,7 +26,44 @@ const (
 // ErrDDGNoResults is what a DuckDuckGo search without results reports.
 var ErrDDGNoResults = fmt.Errorf("DuckDuckGo returned no results (possibly rate-limited); try different terms or web_fetch a known URL")
 
+// ddgSlots and ddgSpacing pace searches across the process: a war council
+// searches from several members at once, and DuckDuckGo blocks bursts.
+var (
+	ddgSlots   = make(chan struct{}, 2)
+	ddgMu      sync.Mutex
+	ddgNext    time.Time
+	ddgSpacing = 750 * time.Millisecond
+)
+
+// ddgTurn waits for a free slot and the spacing since the last search
+// started; release frees the slot.
+func ddgTurn(ctx context.Context) (release func(), err error) {
+	select {
+	case ddgSlots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	ddgMu.Lock()
+	wait := time.Until(ddgNext)
+	ddgNext = time.Now().Add(max(wait, 0) + ddgSpacing)
+	ddgMu.Unlock()
+	if wait > 0 {
+		select {
+		case <-time.After(wait):
+		case <-ctx.Done():
+			<-ddgSlots
+			return nil, ctx.Err()
+		}
+	}
+	return func() { <-ddgSlots }, nil
+}
+
 func (b *Backend) searchDDG(ctx context.Context, query string, n int) ([]Result, error) {
+	release, err := ddgTurn(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.endpoint+"?"+url.Values{"q": {query}}.Encode(), nil)
 	if err != nil {
 		return nil, err
