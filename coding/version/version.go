@@ -3,4 +3,4 @@
 package version
 
 // Version is wopr's release line.
-const Version = "0.1.0"
+const Version = "0.1.5"
