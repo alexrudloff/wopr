@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/alexrudloff/wopr/tui"
+
+	"github.com/alexrudloff/wopr/internal/codingagent/sessionblob"
 )
 
 const appName = "wopr"
@@ -186,7 +188,7 @@ func ExportFromFile(inputPath, outputPath string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("read session: %w", err)
 	}
-	sd, err := FromJSONL(data)
+	sd, err := FromJSONL(sessionblob.ResolveFile(inputPath, data))
 	if err != nil {
 		return "", fmt.Errorf("parse session: %w", err)
 	}

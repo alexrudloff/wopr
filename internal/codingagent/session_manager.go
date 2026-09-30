@@ -13,6 +13,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/alexrudloff/wopr/internal/codingagent/sessionblob"
 )
 
 // ─── SessionManager ───────────────────────────────────────────────────────────
@@ -28,10 +30,12 @@ type SessionManager struct {
 
 // NewSessionManager creates a SessionManager for the given working dir.
 func NewSessionManager(cwd string) *SessionManager {
-	return &SessionManager{
+	sm := &SessionManager{
 		cwd:        cwd,
 		sessionDir: defaultSessionDir(cwd),
 	}
+	sessionblob.SweepDaily(sm.sessionDir)
+	return sm
 }
 
 // NewSessionManagerWithDir overrides the default session directory
@@ -141,6 +145,9 @@ func loadSessionFile(path string) (*Session, error) {
 			}
 			return nil
 		}
+		// Images stored in the blob store come back inline, so the entries
+		// in memory match what was written.
+		line = sessionblob.Resolve(path, line)
 		var base SessionEntryBase
 		if err := json.Unmarshal(line, &base); err != nil {
 			return nil // malformed entry: skip but keep parsing the rest
@@ -231,7 +238,7 @@ func (sm *SessionManager) writeDerivedSession(op, parentSession string, entries 
 		return nil, err
 	}
 	for _, entry := range entries {
-		if _, err := fmt.Fprintf(f, "%s\n", entry); err != nil {
+		if _, err := fmt.Fprintf(f, "%s\n", sessionblob.Externalize(newPath, entry)); err != nil {
 			return nil, err
 		}
 	}
@@ -281,7 +288,8 @@ func (sm *SessionManager) ForkFromFile(sourcePath string) (*Session, error) {
 		if err := json.Unmarshal([]byte(line), &probe); err == nil && probe.Type == "session" {
 			continue
 		}
-		entries = append(entries, []byte(line))
+		// The source may keep its images in another directory's blob store.
+		entries = append(entries, sessionblob.Resolve(abs, []byte(line)))
 	}
 	return sm.writeDerivedSession("fork", abs, entries)
 }
@@ -301,7 +309,12 @@ func (sm *SessionManager) DeleteSession(path string) error {
 	if !strings.HasPrefix(absPath, absDir) {
 		return fmt.Errorf("sessionmanager: refusing to delete file outside session dir")
 	}
-	return os.Remove(path)
+	if err := os.Remove(path); err != nil {
+		return err
+	}
+	// Images only the deleted session used can go too.
+	go func() { _ = sessionblob.Sweep(absDir, time.Hour) }()
+	return nil
 }
 
 // RenameSession updates the session name by appending a session_info entry.

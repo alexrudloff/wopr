@@ -13,6 +13,14 @@ sessions for different projects never mix.
 Each session is one JSON Lines file: one entry per line, appended as the session
 runs. A crash costs at most the last line, because nothing is rewritten.
 
+Images (screenshots a model reads, images you paste) are kept once in a `blobs`
+folder beside the session files, named by their SHA-256, and the session file
+holds a reference. Sessions in the project share it, so a fork or clone stores
+no second copy. Blobs no session references are removed when a session is
+deleted and by a daily sweep. A session whose image blob is gone still loads,
+with `[image missing: …]` in its place; older sessions with images inline load
+as before.
+
 Set `sessionDir` in [settings](settings.md) to store sessions elsewhere.
 
 ## Working with sessions
@@ -68,6 +76,11 @@ says where. The model is told about the undo at its next turn.
 Changes made by shell commands (`sed -i`, `mv`, a script) aren't covered, and
 files larger than 5 MB aren't copied. The copies live with the session and go
 when it does.
+
+A `write` that would replace a file the session found already there, hasn't
+changed, and shares almost nothing with (under a fifth of its lines, ignoring
+bare tags and brackets, in a file of three lines or more) is refused to the model, which then writes to a new path or passes
+`overwrite: true`. Rewrites of files the session is working on aren't affected.
 
 ## Naming and finding
 

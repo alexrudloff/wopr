@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +19,8 @@ import (
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/internal/codingagent/export"
 	"github.com/alexrudloff/wopr/tui"
+
+	"github.com/alexrudloff/wopr/internal/codingagent/sessionblob"
 )
 
 // appendMarkdown and appendPlain add slash command output to the
@@ -501,7 +502,7 @@ func exportSession(s *Session, arg string) (string, error) {
 	if err != nil {
 		return fmt.Sprintf("Export failed: %v", err), nil
 	}
-	sd, err := export.FromJSONL(data)
+	sd, err := export.FromJSONL(sessionblob.ResolveFile(s.Path(), data))
 	if err != nil {
 		return fmt.Sprintf("Export parse failed: %v", err), nil
 	}
@@ -539,7 +540,8 @@ func (m *InteractiveMode) importCommand(args string) error {
 		dstPath = filepath.Join(filepath.Dir(session.Path()), filepath.Base(srcPath))
 	}
 	if dstPath != srcPath {
-		if err := copyFile(srcPath, dstPath); err != nil {
+		// Relocate carries the session's images into this directory's store.
+		if err := sessionblob.Relocate(srcPath, dstPath); err != nil {
 			m.appendMarkdown(fmt.Sprintf("Import failed (copy): %v", err))
 			return nil
 		}
@@ -549,27 +551,6 @@ func (m *InteractiveMode) importCommand(args string) error {
 	}
 	m.chatContainer.Clear()
 	m.showStatus("Session imported from: " + args)
-	return nil
-}
-
-// copyFile copies src to dst, creating directories as needed.
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("mkdir: %w", err)
-	}
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open src: %w", err)
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("create dst: %w", err)
-	}
-	defer func() { _ = out.Close() }()
-	if _, err := io.Copy(out, in); err != nil {
-		return fmt.Errorf("copy: %w", err)
-	}
 	return nil
 }
 

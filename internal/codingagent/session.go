@@ -16,6 +16,8 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+
+	"github.com/alexrudloff/wopr/internal/codingagent/sessionblob"
 )
 
 // CurrentSessionVersion is the session file format version.
@@ -568,7 +570,7 @@ func appendSessionLine(path string, raw []byte) error {
 		return fmt.Errorf("session: open for append: %w", err)
 	}
 	defer func() { _ = f.Close() }()
-	if _, err := fmt.Fprintf(f, "%s\n", raw); err != nil {
+	if _, err := fmt.Fprintf(f, "%s\n", sessionblob.Externalize(path, raw)); err != nil {
 		return fmt.Errorf("session: append write: %w", err)
 	}
 	return nil
@@ -583,7 +585,7 @@ func writeSessionLines(path string, lines [][]byte) error {
 	}
 	defer func() { _ = f.Close() }()
 	for _, line := range lines {
-		if _, err := fmt.Fprintf(f, "%s\n", line); err != nil {
+		if _, err := fmt.Fprintf(f, "%s\n", sessionblob.Externalize(path, line)); err != nil {
 			return fmt.Errorf("session: flush write: %w", err)
 		}
 	}
