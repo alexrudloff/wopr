@@ -257,7 +257,15 @@ func Live(opts LiveOptions) (*LiveReport, error) {
 		wg.Go(func() {
 			slots <- struct{}{}
 			defer func() { <-slots }()
-			r, err := RunTask(opts.Binary, j.t, j.cfg, filepath.Join(work, fmt.Sprintf("%d-%s", i+1, j.t.ID)), opts.Timeout)
+			// Each run gets its own root, removed once it is judged, so no other
+			// copy of the task (solved or not) is on disk while it runs.
+			root, err := os.MkdirTemp(work, "run-")
+			if err != nil {
+				results[i], errs[i] = TaskResult{}, err
+				return
+			}
+			r, err := RunTask(opts.Binary, j.t, j.cfg, filepath.Join(root, "repo"), opts.Timeout)
+			_ = os.RemoveAll(root)
 			r.Run = j.run
 			if err == nil && opts.Transcripts != "" {
 				name := strings.NewReplacer("/", "_", " ", "_").Replace(fmt.Sprintf("%s-%s-%d.jsonl", j.cfg.Label(), j.t.ID, j.run))
@@ -318,7 +326,7 @@ func RunTask(binary string, t Task, cfg Config, repo string, timeout time.Durati
 	if timeout == 0 {
 		timeout = time.Duration(t.Timeout) * time.Second
 	}
-	run := RunProc(argv, append(os.Environ(), env...), repo, timeout)
+	run := RunProc(argv, append(sandboxEnv(filepath.Dir(repo)), env...), repo, timeout)
 	check := RunCheck(t, repo)
 	tampered := Digest(repo, t.Protected) != before
 	output := check.Output
@@ -388,3 +396,37 @@ func Wilson(passed, n int) (low, high float64) {
 }
 
 func round2(v float64) float64 { return math.Round(v*100) / 100 }
+
+// sandboxEnv is the environment a live run starts with: HOME inside the
+// run's root, so the agent's view of home holds nothing but the task, while
+// wopr's own configuration and credentials (WOPR_HOME) and Go's module and
+// build caches keep pointing at the real ones.
+func sandboxEnv(root string) []string {
+	home := filepath.Join(root, "home")
+	_ = os.MkdirAll(home, 0o700)
+	keep := map[string]string{}
+	if v := os.Getenv("WOPR_HOME"); v != "" {
+		keep["WOPR_HOME"] = v
+	} else if v := os.Getenv("XDG_CONFIG_HOME"); v != "" {
+		keep["WOPR_HOME"] = filepath.Join(v, "wopr")
+	} else if real, err := os.UserHomeDir(); err == nil {
+		keep["WOPR_HOME"] = filepath.Join(real, ".wopr")
+	}
+	for _, name := range []string{"GOMODCACHE", "GOCACHE", "GOPATH"} {
+		if out, err := exec.Command("go", "env", name).Output(); err == nil {
+			if v := strings.TrimSpace(string(out)); v != "" {
+				keep[name] = v
+			}
+		}
+	}
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		_, overridden := keep[name]
+		return name == "HOME" || overridden
+	})
+	env = append(env, "HOME="+home)
+	for name, v := range keep {
+		env = append(env, name+"="+v)
+	}
+	return env
+}

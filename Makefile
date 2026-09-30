@@ -33,6 +33,9 @@ EVAL_RESULTS ?= tmp/evals/overhead.json
 LIVE_RUNS ?= 3
 LIVE_PARALLEL ?= 1
 EVAL_TASKS_DIR ?=
+# Mutation tasks live outside the source tree, so a model can't read the
+# original next to the mutation.
+MUTATION_DIR ?= $(or $(TMPDIR),/tmp)/wopr-eval-mutation-tasks
 LIVE_RESULTS ?=
 MUTATIONS ?= 30
 SEED ?= 1
@@ -171,8 +174,8 @@ evals: wopr ## Measure wopr's overhead (startup, round trips per protocol, resum
 evals-live: wopr ## Run evals/tasks with real models: MODE=auto,speed,quality and/or MODEL=provider/model,... and/or GTW=1 (LIVE_RUNS=3, LIVE_PARALLEL=1, TASKS=all)
 	@$(WOPR_EVAL) live --mode "$(MODE)" --model "$(MODEL)" $(if $(GTW),--gtw) --runs $(LIVE_RUNS) --parallel $(LIVE_PARALLEL) --tasks "$(TASKS)" $(if $(EVAL_TASKS_DIR),--tasks-dir $(EVAL_TASKS_DIR)) --out tmp/evals/live.json
 
-evals-mutate: ## Generate seeded bug-fix tasks from wopr's Go source (MUTATIONS=30 SEED=1) into tmp/evals/mutation-tasks
-	@$(WOPR_EVAL) mutate --count $(MUTATIONS) --seed $(SEED) --out tmp/evals/mutation-tasks
+evals-mutate: ## Generate seeded bug-fix tasks from wopr's Go source (MUTATIONS=30 SEED=1) into $(MUTATION_DIR), outside the source tree
+	@$(WOPR_EVAL) mutate --count $(MUTATIONS) --seed $(SEED) --out $(MUTATION_DIR)
 
 evals-publish: ## Copy a reviewed EVAL_RESULTS run (and LIVE_RESULTS, if set) to evals/results and regenerate docs/site/docs/evals.md
 	@test -f "$(EVAL_RESULTS)" || { echo "evals-publish: $(EVAL_RESULTS) not found; run make evals first" >&2; exit 2; }

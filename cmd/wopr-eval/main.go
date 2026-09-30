@@ -181,7 +181,7 @@ func mutate(args []string) error {
 	count := fs.Int("count", 30, "tasks to generate")
 	seed := fs.Uint64("seed", 1, "random seed")
 	roots := fs.String("roots", "agent,ai,tui,coding", "comma-separated corpus directories")
-	out := fs.String("out", "tmp/evals/mutation-tasks", "task directory to write")
+	out := fs.String("out", filepath.Join(os.TempDir(), "wopr-eval-mutation-tasks"), "task directory to write, outside the source tree")
 	_ = fs.Parse(args)
 	ids, err := evals.Mutate(".", splitList(*roots), *out, *count, *seed)
 	if err != nil {
