@@ -73,8 +73,18 @@ If the file changed after the tool's change (you edited it, or a shell command
 did), `/undo` still restores it and saves the newer version in the archive, and
 says where. The model is told about the undo at its next turn.
 
-Changes made by shell commands (`sed -i`, `mv`, a script) aren't covered, and
-files larger than 5 MB aren't copied. The copies live with the session and go
+Changes made by shell commands (`sed -i`, a Python rewrite, `cat > file`) are
+covered too, and the bash card shows their diff. WOPR keeps a copy of every file
+the model reads or writes, so a shell change to one of them can be undone. In a
+git repository it also compares `git status` before and after each command: a
+tracked file that was clean before is restored from git's index, and a new
+untracked file counts as created. Outside git, a new file counts as created only
+when the command names it. A file that already had uncommitted changes before
+the command, and that the model never read, can't be restored and isn't
+recorded. For a file WOPR has no change for, `/undo <path>` says when
+`git restore` would reset it, and doesn't run it.
+
+Files larger than 5 MB aren't copied. The copies live with the session and go
 when it does.
 
 A `write` that would replace a file the session found already there, hasn't

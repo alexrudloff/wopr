@@ -348,6 +348,7 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		// Attach a per-tool body renderer so Ctrl+O reveals a diff /
 		// line-numbered view instead of raw text.
 		comp.BodyRenderer = toolBodyRenderer(e.ToolName, e.Result, took)
+		comp.ShellChanges = shellChangesRenderer(e.Result.Details)
 		// Wire image blocks from tool results so they render inline.
 		if len(e.Result.Images) > 0 {
 			blocks := make([]tui.ImageBlock, len(e.Result.Images))

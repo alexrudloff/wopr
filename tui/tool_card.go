@@ -388,6 +388,9 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 				body = append(body, colorLines(th, "text", lines)...)
 			}
 		}
+		if c.ShellChanges != nil {
+			body = append(body, c.ShellChanges(bodyWidth, expanded)...)
+		}
 	case c.Name == "edit":
 		title = icon + " " + text
 		body = flattenVisualRows(c.BodyRenderer(bodyWidth, true))

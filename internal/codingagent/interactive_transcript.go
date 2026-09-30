@@ -276,6 +276,7 @@ func (m *InteractiveMode) renderSessionEntries() {
 			images := r.Images()
 			result := agent.AgentToolResult{Content: r.Text(), Details: r.Details, IsError: r.IsError, Images: images}
 			comp.BodyRenderer = toolBodyRendererForCall(call, result)
+			comp.ShellChanges = shellChangesRenderer(result.Details)
 			if len(images) > 0 {
 				blocks := make([]tui.ImageBlock, len(images))
 				for i, img := range images {

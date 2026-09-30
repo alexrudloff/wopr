@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -234,6 +235,9 @@ func (s *Session) Undo(target string) ([]icodingagent.UndoChange, error) {
 	s.undo.mu.Lock()
 	out, err := undoIn(dir, s.services.CWD(), target)
 	s.undo.mu.Unlock()
+	if len(out) == 0 && err != nil {
+		err = s.gitRestoreHint(target, err)
+	}
 	if len(out) > 0 {
 		var names []string
 		for _, c := range out {
@@ -350,4 +354,32 @@ func relativeTo(cwd, path string) string {
 		return rel
 	}
 	return path
+}
+
+// gitRestoreHint adds to an undo that found nothing for a path: when git sees
+// the file changed since the last commit, git restore would reset it. wopr
+// doesn't run it, since it discards every uncommitted change to the file.
+func (s *Session) gitRestoreHint(target string, err error) error {
+	target = strings.TrimSpace(target)
+	if target == "" || target == "prompt" {
+		return err
+	}
+	ctx := context.Background()
+	c, _ := s.shellCapture()
+	root := c.gitRoot(ctx)
+	if root == "" {
+		return err
+	}
+	path := canonical(tools.ResolvePath(s.services.CWD(), target))
+	rel, relErr := filepath.Rel(root, path)
+	if relErr != nil || strings.HasPrefix(rel, "..") {
+		return err
+	}
+	// git diff --quiet exits 1 when the file differs; anything else is no
+	// difference or no answer.
+	var exit *exec.ExitError
+	if _, diffErr := gitOutput(ctx, root, "diff", "--quiet", "HEAD", "--", rel); !errors.As(diffErr, &exit) || exit.ExitCode() != 1 {
+		return err
+	}
+	return fmt.Errorf("no change wopr recorded for %s; `git restore %s` would reset it to the last commit (this discards all its uncommitted changes)", target, target)
 }

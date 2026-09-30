@@ -20,10 +20,14 @@ import (
 // bashPreviewLines is the collapsed shell output preview height.
 const bashPreviewLines = 5
 
+// shellDiffRows caps the diff rows a collapsed card shows per changed file.
+const shellDiffRows = 12
+
 // shellResultDetails is the part of BashToolDetails the renderer reads.
 type shellResultDetails struct {
 	Truncation     *tools.TruncationResult
 	FullOutputPath string
+	Changes        []tools.ShellFileChange
 }
 
 // shellDetailsFrom reads BashToolDetails from a live result (*tools.BashDetails)
@@ -35,10 +39,17 @@ func shellDetailsFrom(details any) shellResultDetails {
 		if d == nil {
 			return shellResultDetails{}
 		}
-		return shellResultDetails{Truncation: d.Truncation, FullOutputPath: d.FullOutputPath}
+		return shellResultDetails{Truncation: d.Truncation, FullOutputPath: d.FullOutputPath, Changes: d.Changes}
 	case map[string]any:
 		out := shellResultDetails{}
 		out.FullOutputPath, _ = d["fullOutputPath"].(string)
+		if raw, ok := d["changes"].([]any); ok {
+			for _, item := range raw {
+				if c, ok := decodeAs[tools.ShellFileChange](item); ok {
+					out.Changes = append(out.Changes, c)
+				}
+			}
+		}
 		if raw, ok := d["truncation"].(map[string]any); ok {
 			type truncationWire struct {
 				Truncated   bool   `json:"truncated"`
@@ -119,6 +130,8 @@ func shellResultLines(content string, d shellResultDetails, isPartial, expanded 
 		}
 	}
 
+	lines = append(lines, shellChangeLines(d.Changes, expanded, width)...)
+
 	if truncated || d.FullOutputPath != "" {
 		var warnings []string
 		if d.FullOutputPath != "" {
@@ -135,6 +148,33 @@ func shellResultLines(content string, d shellResultDetails, isPartial, expanded 
 		}
 		warning := themeFg(theme.Warning, "["+strings.Join(warnings, ". ")+"]")
 		lines = append(lines, tui.NewPaddedText("\n"+warning, 0, 0, nil).Render(width)...)
+	}
+	return lines
+}
+
+// shellChangesRenderer renders the files a shell result's command changed,
+// or is nil when it changed none.
+func shellChangesRenderer(details any) func(width int, expanded bool) []string {
+	changes := shellDetailsFrom(details).Changes
+	if len(changes) == 0 {
+		return nil
+	}
+	return func(width int, expanded bool) []string { return shellChangeLines(changes, expanded, width) }
+}
+
+// shellChangeLines shows the files a command changed, each with its diff:
+// shellDiffRows rows per file while collapsed, all of them expanded.
+func shellChangeLines(changes []tools.ShellFileChange, expanded bool, width int) []string {
+	theme := tui.ActiveTheme()
+	var lines []string
+	for _, c := range changes {
+		lines = append(lines, "", widthx.TruncateToWidth(themeFg(theme.Muted, "± "+c.Kind+" ")+c.Path, width, "…", false))
+		rows := tui.RenderDiffRows(c.Diff, width)
+		if !expanded && len(rows) > shellDiffRows {
+			more := themeFg(theme.Muted, "... ("+strconv.Itoa(len(rows)-shellDiffRows)+" more lines,") + " " + expandKeyHint() + themeFg(theme.Muted, ")")
+			rows = append(rows[:shellDiffRows:shellDiffRows], widthx.TruncateToWidth(more, width, "...", false))
+		}
+		lines = append(lines, rows...)
 	}
 	return lines
 }

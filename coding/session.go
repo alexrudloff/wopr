@@ -65,6 +65,7 @@ type Session struct {
 	fileWatch     fileWatch
 	webSearch     webSearchState
 	undo          fileUndo
+	shell         shellEdits
 	builds        councilBuilds
 	council       sessionCouncil
 	routeNeeded   atomic.Bool
@@ -520,6 +521,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initTestCap()
 	sess.initTempFiles()
 	sess.initUndo()
+	sess.initShellEdits()
 	sess.initOverwriteGuard()
 	sess.initCouncilBuild()
 	sess.agent.AddAfterToolCallHook(sess.privateWebNote)

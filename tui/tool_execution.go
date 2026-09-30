@@ -111,6 +111,10 @@ type ToolExecutionComponent struct {
 	// `(N lines, 1.2s)` accurately reflects what the user can see.
 	BodyRenderer func(width int, expanded bool) []string
 
+	// ShellChanges renders, for a shell tool, the files the command changed
+	// with their diffs; the card appends it below the command's output.
+	ShellChanges func(width int, expanded bool) []string
+
 	// ImageBlocks holds image content blocks from tool results.
 	// When non-empty and ShowImages is true, they render after the body.
 	ImageBlocks []ImageBlock

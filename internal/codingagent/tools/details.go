@@ -49,6 +49,19 @@ type ReadDetails struct {
 type BashDetails struct {
 	Truncation     *TruncationResult
 	FullOutputPath string
+	// Changes are the files the command changed, with their diffs (for the
+	// card; not sent to the model).
+	Changes []ShellFileChange `json:"changes,omitempty"`
+}
+
+// ShellFileChange is one file a shell command changed.
+type ShellFileChange struct {
+	Path string `json:"path"`
+	// Kind is "edited", "created", or "deleted".
+	Kind string `json:"kind"`
+	// Diff is the display diff (GenerateDiffString); empty for a file too
+	// large to diff.
+	Diff string `json:"diff,omitempty"`
 }
 
 // LsDetails is attached to a LsTool result. It carries the extension SDK
