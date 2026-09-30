@@ -440,6 +440,9 @@ func (s *sidebar) routingSection(width int) []string {
 		}
 	}
 	out = append(out, orchestrator)
+	if w := m.warSession(); w != nil && w.WarCouncil() {
+		out = append(out, label("War council")+hexFg(warHex(), fmt.Sprintf("☢ %d members", w.WarCouncilSize())))
+	}
 	out = append(out, subagents...)
 	var fleet []string
 	for _, target := range m.side.targets {

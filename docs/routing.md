@@ -403,7 +403,9 @@ or `"enabled": false` turns routing off and keeps the endpoint.
 
 Global Thermonuclear War (`globalThermonuclearWar`, `ctrl+x g`) pins the top
 of the ranking at maximum thinking with routing off and turns on the war
-council for that session (custom entry `war_council_on`, restored on resume).
+council for the current session; pressed again it turns the council off and
+restores the setup it saved on entry (custom entry `war_council_on` with
+`on`, `private`, and `before`, restored on resume).
 `Session.preparePrompt` runs a round on each user prompt, and the `council`
 tool runs one on demand: `Router.CouncilMembers` lists every routed model
 once in ranking order, minus the orchestrator and the models in

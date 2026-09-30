@@ -115,6 +115,9 @@ func (m *InteractiveMode) promptPanel() *tui.PromptPanel {
 			if m.leaderPending() {
 				return tui.ActiveTheme().Fg("border")
 			}
+			if m.inWar() {
+				return tui.ThemeHexFg(warHex())
+			}
 			return tui.ThemeHexFg(phosphorHex())
 		},
 		Meta:        m.renderPromptMeta,
@@ -150,6 +153,9 @@ func (m *InteractiveMode) promptMeta(width int) string {
 		return th.FgText("primary", "Shell")
 	}
 	snap := m.statusLine.Snapshot()
+	if m.inWar() {
+		return m.warMeta(width)
+	}
 	running := ""
 	if text := m.runningAgentsText(); text != "" {
 		running = " " + th.FgText("textMuted", "·") + " " + hexFg(phosphorHex(), text)
@@ -186,6 +192,26 @@ func (m *InteractiveMode) promptMeta(width int) string {
 	return widthx.TruncateToWidth(strings.Join(parts, " ")+subagents+running, width, "…", false)
 }
 
+// warMeta is the meta line in Global Thermonuclear War, all in war red:
+// "☢ GLOBAL THERMONUCLEAR WAR · Model · thinking ▮▮▮▮▮ · council N", or
+// "☢ GTW · Model · council N" where that doesn't fit.
+func (m *InteractiveMode) warMeta(width int) string {
+	name := m.modelLabel()
+	council := ""
+	if w := m.warSession(); w != nil {
+		council = fmt.Sprintf(" · council %d", w.WarCouncilSize())
+	}
+	running := ""
+	if text := m.runningAgentsText(); text != "" {
+		running = " · " + text
+	}
+	full := "☢ GLOBAL THERMONUCLEAR WAR · " + name + " · max thinking" + council + running
+	if widthx.VisibleWidth(full) > width {
+		full = "☢ GTW · " + name + council + running
+	}
+	return bold(hexFg(warHex(), widthx.TruncateToWidth(full, width, "…", false)))
+}
+
 // promptBusy reports whether a turn or a status indicator is active.
 func (m *InteractiveMode) promptBusy() bool {
 	return !m.isIdle || m.activeStatusIndicator != nil
@@ -196,7 +222,11 @@ func (m *InteractiveMode) promptBusy() bool {
 func (m *InteractiveMode) busyIndicator() string {
 	th := tui.ActiveTheme()
 	frame := int(time.Since(m.spinnerEpoch) / (tui.BlocksSpinnerIntervalMs * time.Millisecond))
-	out := tui.BlocksSpinner(frame, phosphorHex(), themeHex("background"))
+	accent := phosphorHex()
+	if m.inWar() {
+		accent = warHex()
+	}
+	out := tui.BlocksSpinner(frame, accent, themeHex("background"))
 	switch indicator := m.activeStatusIndicator; {
 	case indicator != nil && indicator.Kind != "working" && indicator.Message != "":
 		return out + " " + th.FgText("warning", strings.TrimSpace(indicator.Message))
@@ -238,7 +268,11 @@ func (m *InteractiveMode) renderPromptStatus(width int) string {
 		}
 		left = " " + th.FgText("textMuted", snap.cwd)
 	}
-	leftIsPath := !busy && left != ""
+	if !busy && m.inWar() {
+		// The war stays named under the prompt while idle.
+		left = " " + hexFg(warHex(), "☢") + left
+	}
+	leftIsPath := !busy && left != "" && !m.inWar()
 	var right []string
 	if m.editor.IsBashMode() {
 		right = append(right, th.FgText("text", "esc")+th.FgText("textMuted", " exit shell mode"))

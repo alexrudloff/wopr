@@ -209,8 +209,8 @@ pauses it (status 1).
 ## War council
 
 Global Thermonuclear War (`ctrl+x g`) throws everything you have at the
-work. It starts a new session on the top model in your order at its maximum
-thinking, with routing off, and turns on the war council: on every prompt,
+work. It switches the session you're in to the top model in your order at
+its maximum thinking, with routing off, and turns on the war council: on every prompt,
 every other model you set up (subscriptions, API keys, and your own
 endpoints, pay-per-token included) answers the same request independently,
 in parallel, each at its own maximum thinking. Members work read-only (read,
@@ -225,6 +225,15 @@ parts, says where they disagree, and then does the work as usual. The
 transcript shows the round as **War council: N proposals (…)**, which expands
 to each proposal; while it runs, the members show in the sidebar's Agents
 list and as "N running" at the prompt.
+
+While it's on, the prompt's bar and model line turn war red and read
+"☢ GLOBAL THERMONUCLEAR WAR · model · max thinking · council N" (just
+"☢ GTW" when narrow), and the sidebar shows the council's size. Press
+`ctrl+x g` again, or pick **End Global Thermonuclear War** in the command
+palette, to end it: the council turns off and the session goes back to the
+routing, model, thinking level, and subagents it had before. Both the war
+and the setup to go back to are kept with the session, so `/resume` restores
+them.
 
 In a war council session the top model also has a `council` tool, to put a
 hard question to the council mid-task. The council runs only on your prompts

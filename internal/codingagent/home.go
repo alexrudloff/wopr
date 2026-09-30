@@ -1,7 +1,9 @@
 package codingagent
 
 import (
+	"cmp"
 	"context"
+	"encoding/json"
 	"math/rand/v2"
 	"os"
 	"os/user"
@@ -570,11 +572,47 @@ func (m *InteractiveMode) strongestModel(private bool) (spec, name string) {
 	return models[0].spec, models[0].name
 }
 
-// globalThermonuclearWar starts a new session on the strongest model at its
-// deepest thinking, with routing off and the war council on: every other
-// model the user set up proposes on each prompt, and the strongest one
-// synthesizes. A session in private mode keeps both to private connections.
+// warSession is the session side of Global Thermonuclear War.
+type warSession interface {
+	SetWarCouncil(on, private bool, before json.RawMessage)
+	WarCouncil() bool
+	WarCouncilBefore() json.RawMessage
+	WarCouncilSize() int
+}
+
+// warSetup is the session's setup before Global Thermonuclear War, restored
+// when it ends.
+type warSetup struct {
+	Mode      string `json:"mode"`
+	Objective string `json:"objective,omitempty"`
+	Model     string `json:"model,omitempty"`
+	Thinking  string `json:"thinking,omitempty"`
+	Subagents string `json:"subagents,omitempty"`
+}
+
+func (m *InteractiveMode) warSession() warSession {
+	w, _ := m.opts.SessionHandle.(warSession)
+	return w
+}
+
+// inWar reports whether this session is in Global Thermonuclear War.
+func (m *InteractiveMode) inWar() bool {
+	w := m.warSession()
+	return w != nil && w.WarCouncil()
+}
+
+// globalThermonuclearWar toggles Global Thermonuclear War for the current
+// session. On: the strongest model at its deepest thinking, with routing off
+// and the war council on, every other model the user set up proposing on
+// each prompt. A session in private mode keeps both to private connections.
+// Off: the session goes back to the routing, model, thinking, and subagents
+// it had before.
 func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
+	w := m.warSession()
+	if w != nil && w.WarCouncil() {
+		m.endWar(w)
+		return
+	}
 	r := m.sessionRouter()
 	private := r != nil && r.Auto() && r.Objective() == router.ObjectivePrivate
 	spec, name := m.strongestModel(private)
@@ -582,10 +620,12 @@ func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
 		m.showToast("warning", "", "No models are set up. Run /setup to connect one.")
 		return
 	}
-	if !m.homeVisible() {
-		m.dispatchSlash("/new")
-	}
+	before := warSetup{Model: modelSpec(m.opts.Model), Thinking: m.thinkingLevel, Subagents: m.subagentChoice(), Mode: string(router.ModeOff)}
 	if r != nil {
+		before.Mode = string(r.Mode())
+		if r.Auto() {
+			before.Objective = string(r.Objective())
+		}
 		r.SetMode(router.ModeOff)
 	}
 	if m.switchModel(spec) != nil {
@@ -596,14 +636,72 @@ func (m *InteractiveMode) globalThermonuclearWar(ctx context.Context) {
 		_ = m.applyThinkingLevel(levelsForModel(m.opts.Model)[top], false)
 	}
 	detail := name + " · max thinking"
-	if council, ok := m.opts.SessionHandle.(interface{ EnableWarCouncil(bool) }); ok {
-		council.EnableWarCouncil(private)
+	if w != nil {
+		saved, _ := json.Marshal(before)
+		w.SetWarCouncil(true, private, saved)
 		detail += " · war council on"
 	}
 	if private {
 		detail += " · private"
 	}
 	m.showToast("error", "GLOBAL THERMONUCLEAR WAR", detail)
+	m.tuiInst.RequestRender()
+}
+
+// endWar turns the war council off and restores the session's setup from
+// before Global Thermonuclear War.
+func (m *InteractiveMode) endWar(w warSession) {
+	var before warSetup
+	saved := w.WarCouncilBefore()
+	w.SetWarCouncil(false, false, nil)
+	if len(saved) == 0 || json.Unmarshal(saved, &before) != nil {
+		m.showToast("info", "Global Thermonuclear War ended", "The war council is off.")
+		m.tuiInst.RequestRender()
+		return
+	}
+	if before.Model != "" && before.Model != modelSpec(m.opts.Model) {
+		_ = m.switchModel(before.Model)
+	}
+	if r := m.sessionRouter(); r != nil {
+		r.SetMode(router.Mode(before.Mode))
+		if o, ok := router.ParseObjective(before.Objective); ok && before.Objective != "" {
+			m.selectRoutingMode(o, false)
+		}
+	}
+	if c := m.subagentChooser(); c != nil && before.Subagents != "" {
+		_ = c.SetSubagentChoice(before.Subagents)
+	}
+	if before.Thinking != "" {
+		_ = m.applyThinkingLevel(before.Thinking, false)
+	}
+	m.saveRouting()
+	back := m.modelLabel()
+	if r := m.sessionRouter(); m.routingEnabled() && r != nil {
+		back = modeTitle(r.Objective())
+	}
+	m.showToast("info", "Global Thermonuclear War ended", "Back to "+back+".")
+	m.tuiInst.RequestRender()
+}
+
+// modelLabel names the orchestrating model.
+func (m *InteractiveMode) modelLabel() string {
+	if model := m.opts.Model; model != nil {
+		return cmp.Or(model.DisplayName, model.ID)
+	}
+	return "your model"
+}
+
+// warHex is the war red: bright on dark themes, the theme's error color on
+// light ones so it stays readable.
+func warHex() string {
+	colors := tui.ActiveTheme().Colors()
+	if isDarkHex(colors["background"]) {
+		return warRed
+	}
+	if hex := themeHex("error"); hex != "" {
+		return hex
+	}
+	return warRed
 }
 
 // centered places component in the middle of the row, at most maxWidth wide.

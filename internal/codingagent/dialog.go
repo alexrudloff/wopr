@@ -105,6 +105,10 @@ type paletteCommand struct {
 func (m *InteractiveMode) openCommandPalette(ctx context.Context) {
 	slash := func(command string) func() { return func() { m.dispatchSlash(command) } }
 	leader := func(key string) string { return "ctrl+x " + key }
+	warTitle := "Global Thermonuclear War"
+	if m.inWar() {
+		warTitle = "End Global Thermonuclear War"
+	}
 	sidebarTitle := "Hide sidebar"
 	if !m.sidebarShown(m.tuiInst.Width()) {
 		sidebarTitle = "Show sidebar"
@@ -123,7 +127,7 @@ func (m *InteractiveMode) openCommandPalette(ctx context.Context) {
 		{title: "Switch model", category: "Agent", key: leader("m"), suggested: true, run: m.handleModelPicker},
 		{title: "Rename session", category: "Session", run: slash("/name")},
 		{title: "Jump to message", category: "Session", key: leader("j"), run: slash("/tree")},
-		{title: "Global Thermonuclear War", category: "Agent", key: leader("g"), run: func() { m.globalThermonuclearWar(ctx) }},
+		{title: warTitle, category: "Agent", key: leader("g"), run: func() { m.globalThermonuclearWar(ctx) }},
 		{title: "Fork session", category: "Session", run: slash("/fork")},
 		{title: "Undo last change", category: "Session", run: slash("/undo")},
 		{title: "Compact session", category: "Session", key: leader("c"), run: slash("/compact")},

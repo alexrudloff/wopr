@@ -28,6 +28,8 @@ differently, change the source.
   builds from the best of their proposals. For a significant change, each
   member builds it in its own git worktree and wopr runs the tests; the top
   model applies or merges the best candidate. Slow and expensive on purpose.
+  It works on the session you're in, the prompt turns war red while it's on,
+  and `ctrl+x g` again ends it and restores your previous setup.
 - **Token efficiency, on by default.** The mechanisms below cut what each
   request carries, and wopr tunes them per model from how each of your models
   actually behaves.

@@ -34,6 +34,9 @@ const warCouncilEntryType = "war_council_on"
 type sessionCouncil struct {
 	on      atomic.Bool
 	private atomic.Bool
+	// before is the caller's record of the session's setup before the
+	// council came on, restored when it goes off.
+	before atomic.Pointer[json.RawMessage]
 	// timeout overrides the settings' time limit (tests).
 	timeout time.Duration
 	// streamFn overrides member provider streams (tests).
@@ -42,21 +45,50 @@ type sessionCouncil struct {
 
 // EnableWarCouncil turns the war council on for this session. private keeps
 // it to private connections, as private mode does.
-func (s *Session) EnableWarCouncil(private bool) {
-	s.council.on.Store(true)
-	s.council.private.Store(private)
-	if s.inner != nil {
-		_ = s.inner.AppendCustomEntry(warCouncilEntryType, map[string]bool{"on": true, "private": private})
+func (s *Session) EnableWarCouncil(private bool) { s.SetWarCouncil(true, private, nil) }
+
+// SetWarCouncil turns the war council on or off for this session and records
+// it, so a resumed session keeps it. before is the caller's record of the
+// setup to restore when it goes off; it is kept with the session until then.
+func (s *Session) SetWarCouncil(on, private bool, before json.RawMessage) {
+	if !on {
+		private, before = false, nil
 	}
-	s.setCouncilTool(true)
+	s.council.on.Store(on)
+	s.council.private.Store(private)
+	if before == nil {
+		s.council.before.Store(nil)
+	} else {
+		s.council.before.Store(&before)
+	}
+	if s.inner != nil {
+		_ = s.inner.AppendCustomEntry(warCouncilEntryType, map[string]any{"on": on, "private": private, "before": before})
+	}
+	s.setCouncilTool(on)
 }
 
 // WarCouncil reports whether the war council is on for this session.
 func (s *Session) WarCouncil() bool { return s.council.on.Load() }
 
+// WarCouncilSize is how many members the council would ask now.
+func (s *Session) WarCouncilSize() int {
+	members, _ := s.councilMembers()
+	return len(members)
+}
+
+// WarCouncilBefore is the record SetWarCouncil kept when the council came
+// on, or nil.
+func (s *Session) WarCouncilBefore() json.RawMessage {
+	if p := s.council.before.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
 // restoreWarCouncil turns the council on or off as the session recorded.
 func (s *Session) restoreWarCouncil(inner *icodingagent.Session) {
 	on, private := false, false
+	var before json.RawMessage
 	if inner != nil {
 		for _, entry := range inner.Entries() {
 			if entry.Base.Type != "custom" {
@@ -65,17 +97,23 @@ func (s *Session) restoreWarCouncil(inner *icodingagent.Session) {
 			var custom struct {
 				CustomType string `json:"customType"`
 				Data       struct {
-					On      bool `json:"on"`
-					Private bool `json:"private"`
+					On      bool            `json:"on"`
+					Private bool            `json:"private"`
+					Before  json.RawMessage `json:"before"`
 				} `json:"data"`
 			}
 			if json.Unmarshal(entry.Raw(), &custom) == nil && custom.CustomType == warCouncilEntryType {
-				on, private = custom.Data.On, custom.Data.Private
+				on, private, before = custom.Data.On, custom.Data.Private, custom.Data.Before
 			}
 		}
 	}
 	s.council.on.Store(on)
 	s.council.private.Store(private)
+	if on && len(before) > 0 && string(before) != "null" {
+		s.council.before.Store(&before)
+	} else {
+		s.council.before.Store(nil)
+	}
 	s.setCouncilTool(on)
 }
 
