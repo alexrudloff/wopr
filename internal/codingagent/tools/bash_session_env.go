@@ -3,9 +3,12 @@ package tools
 import (
 	"context"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/alexrudloff/wopr/agent"
 )
@@ -21,7 +24,7 @@ const sessionGuideline = "You can inspect WOPR_* environment variables for curre
 // prepended to PATH unless PATH already lists it. The PATH key is matched
 // case-insensitively, as on Windows. An empty binDir leaves PATH unchanged.
 func GetShellEnv(binDir string) []string {
-	env := os.Environ()
+	env := withPythonShims(os.Environ())
 	if binDir == "" {
 		return env
 	}
@@ -80,4 +83,68 @@ func sessionEnvironment(ctx context.Context, expose bool, binDir string) []strin
 		}
 	}
 	return env
+}
+
+// pythonShims maps a command models reach for to the one to run when only
+// the latter is installed, as on macOS: python → python3, pip → pip3.
+var pythonShims = [][2]string{{"python", "python3"}, {"pip", "pip3"}}
+
+var (
+	shimOnce sync.Once
+	shimDir  string
+)
+
+// withPythonShims appends to PATH a directory linking python and pip to
+// python3 and pip3 when only those exist. Appended last, it never shadows a
+// real python.
+func withPythonShims(env []string) []string {
+	shimOnce.Do(func() { shimDir = makePythonShims() })
+	if shimDir == "" {
+		return env
+	}
+	for i, kv := range env {
+		if name, current, _ := strings.Cut(kv, "="); strings.EqualFold(name, "path") {
+			env[i] = name + "=" + current + string(os.PathListSeparator) + shimDir
+			return env
+		}
+	}
+	return append(env, "PATH="+shimDir)
+}
+
+// makePythonShims creates the shim directory under the user cache and
+// returns it, or "" when no shim is needed or it can't be made.
+func makePythonShims() string {
+	if runtime.GOOS == "windows" {
+		return ""
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(cache, "wopr", "shims")
+	made := false
+	for _, shim := range pythonShims {
+		if _, err := exec.LookPath(shim[0]); err == nil {
+			continue
+		}
+		target, err := exec.LookPath(shim[1])
+		if err != nil {
+			continue
+		}
+		if os.MkdirAll(dir, 0o755) != nil {
+			return ""
+		}
+		link := filepath.Join(dir, shim[0])
+		if current, err := os.Readlink(link); err != nil || current != target {
+			_ = os.Remove(link)
+			if os.Symlink(target, link) != nil {
+				continue
+			}
+		}
+		made = true
+	}
+	if !made {
+		return ""
+	}
+	return dir
 }
