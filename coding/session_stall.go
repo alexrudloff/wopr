@@ -27,6 +27,8 @@ const (
 	// turns alone never nudges.
 	stallIdleTurns = 10
 	stallIdleTime  = 3 * time.Minute
+	// stallGapCap is the most one idle turn adds to the idle time.
+	stallGapCap = time.Minute
 	// stallMaxNudges bounds the nudges in one run.
 	stallMaxNudges = 3
 	// stallMessageType is the custom message type of a nudge.
@@ -164,10 +166,22 @@ func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bo
 	seen := map[string]bool{}
 	var last string
 	idle := 0
+	// idleTime adds each idle turn's gap, capped, so one long command
+	// (a five-minute probe) can't make up the idle time on its own.
+	var idleTime time.Duration
+	prev := since
+	gap := func(to int64) time.Duration {
+		if prev == 0 || to < prev {
+			return 0
+		}
+		return min(time.Duration(to-prev)*time.Millisecond, stallGapCap)
+	}
 	for _, m := range context[start:] {
 		if m.Assistant == nil {
 			continue
 		}
+		turnGap := gap(m.Assistant.Timestamp)
+		prev = m.Assistant.Timestamp
 		changed, found := false, false
 		for _, block := range m.Assistant.Content {
 			call, ok := block.(ai.ToolCall)
@@ -184,21 +198,26 @@ func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bo
 					found = true
 				}
 			}
+			// A read-only shell command not run before in this run (rg, sed
+			// -n, cat, git log) is exploring, like a read.
+			if command, _ := call.Arguments["command"].(string); call.Name == "bash" && readOnlyCommandRE.MatchString(command) && !seen["bash "+command] {
+				seen["bash "+command] = true
+				found = true
+			}
 		}
 		switch {
 		case changed:
 			// A repeat after a file change can see a new result.
-			idle = 0
+			idle, idleTime = 0, 0
 			clear(calls)
-			since = m.Assistant.Timestamp
 		case found:
-			idle = 0
-			since = m.Assistant.Timestamp
+			idle, idleTime = 0, 0
 		default:
 			idle++
+			idleTime += turnGap
 		}
 	}
-	elapsed := now.Sub(time.UnixMilli(since))
+	elapsed := idleTime + gap(now.UnixMilli())
 	switch {
 	case last != "" && calls[last] >= stallRepeats:
 		return "repeat " + last, fmt.Sprintf("You have made this exact tool call %d times without changing a file in between: %s. Its result will not change. Step back, say what you learned, and try a different approach, or finish if the task is done.", calls[last], truncateRunes(last, 200))

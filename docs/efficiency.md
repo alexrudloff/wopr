@@ -121,9 +121,12 @@ More keys in `efficiency.json`, each on by default:
   between, or ten turns and three minutes without progress, the model gets
   one message telling it to change approach or finish (at most three per
   prompt). Progress is a file change, including one a shell command made to a
-  file the model read or wrote, or a web search, fetch, or file read it
-  hasn't made before in the run. The clock starts at the model's first reply
-  to the prompt, so a war council or a long first think isn't idle time.
+  file the model read or wrote, or a web search, fetch, file read, or
+  read-only shell command (`rg`, `sed -n`, `cat`, `git log`, …) it hasn't
+  made before in the run. The clock starts at the model's first reply to the
+  prompt, so a war council or a long first think isn't idle time, and each
+  idle turn adds at most a minute, so one long command can't fill the three
+  minutes alone.
 - `testRerunCap`: a test command (`go test`, `pytest`, `npm test`, `cargo
   test`, `make test`, and the like) that already passed is not run again
   while no file has changed since; the call is answered with a note instead.

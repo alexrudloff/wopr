@@ -63,19 +63,29 @@ func TestStallIdleNeedsTimeAndIgnoresNewResearch(t *testing.T) {
 		t.Fatalf("new searches nudged as %q", key)
 	}
 
-	var reads, fast, slow, afterWait []agent.AgentMessage
+	var reads, fast, slow, afterWait, exploring, oneLong []agent.AgentMessage
 	for i := range 11 {
 		reads = append(reads, turn(start.Add(time.Duration(i)*30*time.Second), "read", ai.JsonObject{"path": fmt.Sprint("f", i)}))
-		fast = append(fast, turn(start.Add(time.Duration(i)*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("ls ", i)}))
-		slow = append(slow, turn(start.Add(time.Duration(i)*30*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("ls ", i)}))
+		fast = append(fast, turn(start.Add(time.Duration(i)*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("python3 probe.py ", i)}))
+		slow = append(slow, turn(start.Add(time.Duration(i)*30*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("python3 probe.py ", i)}))
 		// The first reply comes after a 10-minute war council.
-		afterWait = append(afterWait, turn(start.Add(10*time.Minute+time.Duration(i)*5*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("ls ", i)}))
+		afterWait = append(afterWait, turn(start.Add(10*time.Minute+time.Duration(i)*5*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("python3 probe.py ", i)}))
+		exploring = append(exploring, turn(start.Add(time.Duration(i)*30*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("cd app && rg -n handler", i, " src")}))
+		// One five-minute command, then fast turns.
+		oneLong = append(oneLong, turn(start.Add(5*time.Minute+time.Duration(i)*5*time.Second), "bash", ai.JsonObject{"command": fmt.Sprint("python3 probe.py ", i)}))
 	}
 	if key, _ := stallCheck(withPrompt(reads), never, start.Add(6*time.Minute)); key != "" {
 		t.Fatalf("reads of new files nudged as %q", key)
 	}
 	if key, _ := stallCheck(withPrompt(afterWait), never, start.Add(11*time.Minute)); key != "" {
 		t.Fatalf("time before the first reply counted as idle: %q", key)
+	}
+	if key, _ := stallCheck(withPrompt(exploring), never, start.Add(6*time.Minute)); key != "" {
+		t.Fatalf("read-only shell exploring nudged as %q", key)
+	}
+	first := turn(start, "bash", ai.JsonObject{"command": "python3 probe.py start"})
+	if key, _ := stallCheck(withPrompt(append([]agent.AgentMessage{first}, oneLong...)), never, start.Add(6*time.Minute)); key != "" {
+		t.Fatalf("one long command made up the idle time: %q", key)
 	}
 	if key, _ := stallCheck(withPrompt(fast), never, start.Add(15*time.Second)); key != "" {
 		t.Fatalf("fast idle turns nudged as %q", key)
