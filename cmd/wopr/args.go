@@ -76,6 +76,9 @@ type CLIFlags struct {
 	APIKey string
 	// Offline disables startup network operations.
 	Offline bool
+	// GTW runs a print or JSON session in Global Thermonuclear War (--gtw or
+	// WOPR_GTW=1).
+	GTW bool
 	// ProjectTrustOverride controls project-local resource loading for this run.
 	// nil uses saved/default trust; true is --approve; false is --no-approve.
 	ProjectTrustOverride *bool
@@ -139,6 +142,7 @@ func parseFlags(args []string) CLIFlags {
 		"--no-themes":        &flags.NoThemes,
 		"--no-context-files": &flags.NoContextFiles, "-nc": &flags.NoContextFiles,
 		"--offline": &flags.Offline,
+		"--gtw":     &flags.GTW,
 		"--verbose": &flags.Verbose,
 	}
 	// Value flags consume the next argument; without one they fall through

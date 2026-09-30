@@ -128,6 +128,7 @@ func live(args []string) error {
 	bin := fs.String("bin", "bin/wopr", "wopr binary")
 	modes := fs.String("mode", "", "comma-separated routing modes to compare (auto, cost, speed, quality, uncensored)")
 	models := fs.String("model", "", "comma-separated provider/model pins to compare, each with routing off")
+	gtw := fs.Bool("gtw", false, "also compare Global Thermonuclear War (top model at max thinking with the war council)")
 	tasks := fs.String("tasks", "all", "comma-separated task ids")
 	tasksDir := fs.String("tasks-dir", "evals/tasks", "task directory; wopr-eval mutate writes one")
 	runs := fs.Int("runs", 1, "runs per task and configuration")
@@ -148,6 +149,9 @@ func live(args []string) error {
 			return fmt.Errorf("model %q must be provider/model", model)
 		}
 		configs = append(configs, evals.Config{Model: model})
+	}
+	if *gtw {
+		configs = append(configs, evals.Config{GTW: true})
 	}
 	if len(configs) == 0 {
 		configs = []evals.Config{{}}

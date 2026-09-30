@@ -74,6 +74,8 @@ type printModeOptions struct {
 	InitialMessage string
 	// InitialImages are attached to the initial message.
 	InitialImages []ai.ImageContent
+	// GTW starts the session in Global Thermonuclear War.
+	GTW bool
 
 	// stdout and stderr default to the process's raw stdout and stderr.
 	stdout io.Writer
@@ -143,6 +145,16 @@ func runPrintMode(ctx context.Context, host printModeRuntime, opts printModeOpti
 		return fmt.Errorf("construct session: %w", err)
 	}
 	defer func() { _ = sess.Close() }()
+
+	if opts.GTW {
+		spec, err := sess.StartWar()
+		if err != nil {
+			return fmt.Errorf("global thermonuclear war: %w", err)
+		}
+		if opts.Mode != "json" {
+			_, _ = fmt.Fprintf(opts.stderr, "Global Thermonuclear War: %s at max thinking, war council on\n", spec)
+		}
+	}
 
 	// Persist --name to session_info so the display name survives resume.
 	// This runs when the session is created, before any mode starts.

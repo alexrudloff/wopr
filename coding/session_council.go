@@ -585,3 +585,43 @@ func turnText(m agent.AgentMessage) string {
 	}
 	return strings.Join(parts, "\n")
 }
+
+// StartWar puts a headless session in Global Thermonuclear War, as ctrl+x g
+// does interactively: the top usable model in the router's order (private
+// connections only in private mode) at its deepest thinking, routing off,
+// and the war council on. It returns the model's spec.
+func (s *Session) StartWar() (string, error) {
+	if s.router == nil {
+		return "", errors.New("it needs model routing set up (router.json)")
+	}
+	private := s.router.Auto() && s.router.Objective() == router.ObjectivePrivate
+	cfg := s.router.Config()
+	order := slices.Clone([]string(cfg.Ranking))
+	for _, tier := range cfg.Tiers {
+		for _, ref := range tier.Models {
+			if spec := ref.Provider + "/" + ref.Model; !slices.Contains(order, spec) {
+				order = append(order, spec)
+			}
+		}
+	}
+	for _, spec := range order {
+		if private && !s.router.IsPrivacySafe(spec) {
+			continue
+		}
+		provider, model, _ := strings.Cut(spec, "/")
+		m, err := s.routeModel(provider, model)
+		if err != nil {
+			continue
+		}
+		s.router.SetMode(router.ModeOff)
+		if err := s.SetModel(m); err != nil {
+			return "", err
+		}
+		if levels := ai.GetSupportedThinkingLevels(m); len(levels) > 1 {
+			_ = s.SetThinkingLevel(levels[len(levels)-1])
+		}
+		s.SetWarCouncil(true, private, nil)
+		return spec, nil
+	}
+	return "", errors.New("no model in the router's order can be used")
+}

@@ -6,7 +6,7 @@
 |---|---|
 | `make evals` | Overhead against a mock model: startup, one prompt round trip over each wire protocol, and a resumed 2,000-exchange Session. `RUNS=10`. Writes `tmp/evals/overhead.json` and `.md`. |
 | `make perf-check` | Applies `budgets.toml` to the last overhead run (`EVAL_RESULTS`). |
-| `make evals-live` | Runs `tasks/` with real models and judges each result. `MODE=auto,speed,quality` and/or `MODEL=provider/model,...` give one configuration each; `LIVE_RUNS=3`, `LIVE_PARALLEL=1` (runs at once), `TASKS=all`. Writes `tmp/evals/live.json` and `.md`. |
+| `make evals-live` | Runs `tasks/` with real models and judges each result. `MODE=auto,speed,quality`, `MODEL=provider/model,...`, and/or `GTW=1` (Global Thermonuclear War, via `wopr --gtw`) give one configuration each; `LIVE_RUNS=3`, `LIVE_PARALLEL=1` (runs at once), `TASKS=all`. Writes `tmp/evals/live.json` and `.md`. |
 | `make evals-mutate` | Generates seeded bug-fix tasks from wopr's own Go source (`MUTATIONS=30 SEED=1`) into `tmp/evals/mutation-tasks`; run them with `make evals-live EVAL_TASKS_DIR=tmp/evals/mutation-tasks`. |
 | `make evals-publish` | Copies a reviewed overhead run (and `LIVE_RESULTS`, if set) to `results/` and regenerates `docs/site/docs/evals.md`. |
 | `make profile`, `make pgo` | Profiles round trips against the mock with `WOPR_PROFILE`; `pgo` merges CPU profiles for a profile-guided build. |

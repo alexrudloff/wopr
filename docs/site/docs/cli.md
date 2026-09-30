@@ -66,6 +66,7 @@ These options apply to `wopr [options] [prompt]`. Run `wopr --help` for the full
 | `--approve`, `-a` | Trust project-local files for this run. |
 | `--no-approve`, `-na` | Ignore project-local files for this run. |
 | `--offline` | Turn off startup network operations, as `WOPR_OFFLINE=1` does. |
+| `--gtw` | In print or JSON mode, run the session in Global Thermonuclear War, as `WOPR_GTW=1` does: the top model in your routing order at its maximum thinking, routing off, and the war council on. Needs model routing set up. |
 
 ## Tools
 

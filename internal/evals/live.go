@@ -25,11 +25,16 @@ type Config struct {
 	Mode string `json:"mode,omitempty"`
 	// Model pins provider/model with routing off.
 	Model string `json:"model,omitempty"`
+	// GTW runs wopr in Global Thermonuclear War (--gtw): the top model at
+	// max thinking with the war council.
+	GTW bool `json:"gtw,omitempty"`
 }
 
 // Label names the configuration in reports.
 func (c Config) Label() string {
 	switch {
+	case c.GTW:
+		return "gtw"
 	case c.Model != "":
 		return c.Model
 	case c.Mode != "":
@@ -41,6 +46,8 @@ func (c Config) Label() string {
 // Args returns the wopr arguments and extra environment for c.
 func (c Config) Args() (args, env []string) {
 	switch {
+	case c.GTW:
+		return []string{"--gtw"}, nil
 	case c.Model != "":
 		return []string{"--model", c.Model}, []string{"WOPR_ROUTER=off"}
 	case c.Mode != "":

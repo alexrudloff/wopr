@@ -168,8 +168,8 @@ check: build vet lint test test-race test-integration go-fix-clean docs-drift ##
 evals: wopr ## Measure wopr's overhead (startup, round trips per protocol, resumed Session) against a mock model (RUNS=10)
 	@$(WOPR_EVAL) overhead --runs $(RUNS) --out $(EVAL_RESULTS)
 
-evals-live: wopr ## Run evals/tasks with real models: MODE=auto,speed,quality and/or MODEL=provider/model,... (LIVE_RUNS=3, LIVE_PARALLEL=1, TASKS=all)
-	@$(WOPR_EVAL) live --mode "$(MODE)" --model "$(MODEL)" --runs $(LIVE_RUNS) --parallel $(LIVE_PARALLEL) --tasks "$(TASKS)" $(if $(EVAL_TASKS_DIR),--tasks-dir $(EVAL_TASKS_DIR)) --out tmp/evals/live.json
+evals-live: wopr ## Run evals/tasks with real models: MODE=auto,speed,quality and/or MODEL=provider/model,... and/or GTW=1 (LIVE_RUNS=3, LIVE_PARALLEL=1, TASKS=all)
+	@$(WOPR_EVAL) live --mode "$(MODE)" --model "$(MODEL)" $(if $(GTW),--gtw) --runs $(LIVE_RUNS) --parallel $(LIVE_PARALLEL) --tasks "$(TASKS)" $(if $(EVAL_TASKS_DIR),--tasks-dir $(EVAL_TASKS_DIR)) --out tmp/evals/live.json
 
 evals-mutate: ## Generate seeded bug-fix tasks from wopr's Go source (MUTATIONS=30 SEED=1) into tmp/evals/mutation-tasks
 	@$(WOPR_EVAL) mutate --count $(MUTATIONS) --seed $(SEED) --out tmp/evals/mutation-tasks
