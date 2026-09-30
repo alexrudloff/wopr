@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -144,6 +145,12 @@ type ToolExecutionComponent struct {
 
 	// argsComplete is set when the message stream ends and args JSON is finalized.
 	argsComplete bool
+	// While args stream in: the header built from the path once it has
+	// arrived, how much of the args has been scanned for line breaks, and
+	// the lines of a write's content so far.
+	streamHeader  string
+	streamScanned int
+	streamLines   int
 }
 
 // ImageBlock describes one image from a tool result for rendering.
@@ -268,18 +275,56 @@ func (c *ToolExecutionComponent) SetStreaming(snapshot string) {
 	c.Invalidate()
 }
 
+// streamingPathRE finds a path argument in args JSON that is still streaming.
+var streamingPathRE = regexp.MustCompile(`"(?:path|file_path)"\s*:\s*"((?:[^"\\]|\\.)*)"`)
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // UpdateArgs updates the displayed header from partial/complete args.
 // Called progressively during streaming as ToolCallDelta events arrive.
 func (c *ToolExecutionComponent) UpdateArgs(name string, partialArgsJSON string) {
 	if name != "" {
 		c.Name = name
 	}
-	// Try to parse the partial JSON to get a header. Partial JSON will
-	// fail to parse: that's OK, we fall back to the tool name.
-	var raw json.RawMessage
-	if json.Unmarshal([]byte(partialArgsJSON), &raw) == nil {
-		c.args = append(c.args[:0], raw...)
-		c.ArgsPreview = HeaderForTool(c.Name, raw, c.Cwd)
+	// Complete args end in a brace; only then is a full parse worth trying,
+	// so a long write's streaming args aren't reparsed on every chunk.
+	if strings.HasSuffix(strings.TrimSpace(partialArgsJSON), "}") {
+		var raw json.RawMessage
+		if json.Unmarshal([]byte(partialArgsJSON), &raw) == nil {
+			c.args = append(c.args[:0], raw...)
+			c.ArgsPreview = HeaderForTool(c.Name, raw, c.Cwd)
+			c.Invalidate()
+			return
+		}
+	}
+	// Still streaming: show the path as soon as it arrives, and for a write
+	// how many lines of content have come in.
+	if c.streamHeader == "" {
+		head := partialArgsJSON[:min(len(partialArgsJSON), 4096)]
+		if m := streamingPathRE.FindStringSubmatch(head); m != nil {
+			var path string
+			if json.Unmarshal([]byte(`"`+m[1]+`"`), &path) == nil {
+				raw, _ := json.Marshal(map[string]string{"path": path})
+				c.streamHeader = HeaderForTool(c.Name, raw, c.Cwd)
+			}
+		}
+	}
+	if c.Name == "write" && c.streamScanned < len(partialArgsJSON) {
+		chunk := partialArgsJSON[c.streamScanned:]
+		c.streamLines += strings.Count(chunk, `\n`)
+		// A trailing backslash may begin an escape the next chunk finishes.
+		c.streamScanned = len(partialArgsJSON) - boolInt(strings.HasSuffix(chunk, `\`))
+	}
+	if c.streamHeader != "" || c.streamLines > 0 {
+		c.ArgsPreview = cmp.Or(c.streamHeader, HeaderForTool(c.Name, nil, c.Cwd))
+		if c.streamLines > 0 {
+			c.ArgsPreview += fmt.Sprintf(" · %d lines so far", c.streamLines)
+		}
 	}
 	c.Invalidate()
 }
