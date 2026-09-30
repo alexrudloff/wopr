@@ -230,12 +230,40 @@ In a war council session the top model also has a `council` tool, to put a
 hard question to the council mid-task. The council runs only on your prompts
 and that tool, never on searches, reads, or edits.
 
+**Council builds.** For a significant code change (a feature, a hard fix, a
+refactor), or when you ask the council to build something, the top model can
+have every member build it:
+
+- Each member gets its own git worktree, a separate checkout of your
+  repository at the current commit plus your uncommitted and untracked
+  files, so it starts from what you see. Worktrees live in the session's temp
+  directory and share your repository's history; nothing is copied in full.
+- Members have the full tools there (read, write, edit or `apply_patch`,
+  shell, and the web tools) and build the change and run the tests. Their
+  file tools refuse any path outside their worktree. The shell starts in the
+  worktree but isn't sandboxed: it's the same trust as the main agent's.
+- When a member finishes, wopr runs the test command itself in that
+  worktree: the one the top model names, else the session's last passing test
+  command, else one detected from the project (`go test ./...`, `cargo test`,
+  `npm test`, `make test`, `pytest`).
+- The top model gets every candidate's diff, diff stat, test result and the
+  end of its test output, and applies the best (`council` action `apply`,
+  undoable with `/undo`) or merges the best parts with its edit tools. Your
+  files are untouched until then. The transcript shows **War council built:
+  N candidates (M passing)**.
+- A model whose context window is under 64K sits builds out. Worktrees are
+  removed when the round ends, and on exit or at the next start if wopr was
+  killed.
+- Builds need a git repository; in a folder that isn't one, the top model is
+  told to make the change itself.
+
 - **Who's in**: **War council** on `/setup`'s main screen lists every model
   you set up, all checked; uncheck one to leave it out. A model you add later
   joins automatically. The top model itself sits out, since it synthesizes.
 - **Time limit**: each member gets 5 minutes by default (2, 5, 10, or 20 on
   that screen); a member still working then is dropped, never waited for,
-  and named in the round.
+  and named in the round. A build gets its own limit, 15 minutes by default
+  (5, 10, 15, 30, or 60), covering the change and wopr's test run.
 - **Skipped members**: a model that's unreachable, resting after errors, or
   not signed in is skipped and named.
 - **Private mode**: started from private mode, the session stays private:
@@ -245,11 +273,6 @@ and that tool, never on searches, reads, or edits.
 - **Cost**: every prompt runs every member, so a round costs about as much as
   all of them answering; it's as slow as the slowest member within the limit.
 - The council stays on for that session, including after `/resume`.
-
-Next: code candidates. For a significant code change, each member would make
-its attempt in its own git worktree and run the build and tests; the top
-model would compare the diffs with their test results and pick or merge. Not
-built yet.
 
 ## What stays private
 

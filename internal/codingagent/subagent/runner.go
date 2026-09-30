@@ -32,6 +32,18 @@ const (
 	EffortThorough = "thorough"
 )
 
+// buildBudget bounds a council build candidate; the council's build time
+// limit ends it sooner.
+var buildBudget = Budget{Turns: 80, Time: 2 * time.Hour, Tokens: 6_000_000, ToolCalls: 160}
+
+// budgetFor is a request's budget: its effort's, or a build candidate's.
+func budgetFor(req Request) Budget {
+	if req.Type == TypeBuild {
+		return buildBudget
+	}
+	return BudgetFor(req.Effort)
+}
+
 // BudgetFor returns the explore budget for an effort (default medium).
 func BudgetFor(effort string) Budget {
 	switch effort {

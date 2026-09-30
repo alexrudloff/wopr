@@ -420,11 +420,26 @@ thinking, through the session's task registry and provider limits.
 proposals reach the orchestrator as one `war_council` custom message that
 asks it to synthesize, not select.
 
-Code candidates (next, not built): for a significant change, each member
-works in its own git worktree, runs the build and tests, and returns its
-diff with the results; the orchestrator picks or merges from the diffs and
-test outcomes. Execution results replace a judge's opinion, the pattern that
-works best for code.
+Council builds (`council` action `build`, `coding/session_council_build.go`):
+`Session.runCouncilBuild` gives each member with a context window of at
+least 64K its own detached worktree (`git worktree add --detach` under the
+session's temp directory, plus the user's `git diff --binary HEAD` and
+untracked files), and runs it as a `build` subagent (`subagent.TypeBuild`:
+the full coding tools wrapped by `confinedTool`, which refuses paths outside
+the worktree, `apply_patch` in place of `edit` for GPT and Codex models, the
+council's web tools; the build budget; the council build time limit,
+`warCouncil.buildTimeoutSeconds`, default 900). The subagent's `Finish` hook
+runs the test command in the worktree (named, else the session's last
+passing test command, else detected). The candidate is the diff between the
+tree it started from and its final tree. The round's result lists each
+candidate's diff (archived for `obs_recall` over 12 KB), stat, test result,
+and the tail of the test output; action `apply` checks and applies one with
+`git apply` and snapshots the files for `/undo`. Worktrees are removed with
+`git worktree remove --force` and `prune` when the round ends; a killed
+process leaves them in its temp directory, which the temp-file sweep deletes,
+and the next round prunes their metadata. The shell isn't sandboxed beyond
+starting in the worktree. Execution results replace a judge's opinion, the
+pattern that works best for code.
 
 ## Commands
 

@@ -2,11 +2,16 @@ package coding
 
 import (
 	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/alexrudloff/wopr/internal/codingagent/router"
+	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 )
 
 type councilTestHost map[string]bool
@@ -60,5 +65,76 @@ func TestWarCouncilMembership(t *testing.T) {
 	}
 	if len(missing) != 1 || !strings.Contains(missing[0], "slow (late") {
 		t.Fatalf("missing = %q, want the slow member dropped as late", missing)
+	}
+}
+
+// A council build member works in its own worktree: its file tools can't
+// reach the user's files, the user's tree is untouched until apply, apply
+// lands exactly the member's change, and the worktree is gone afterwards.
+func TestCouncilBuildWorktree(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	ctx := context.Background()
+	root := t.TempDir()
+	run := func(args ...string) string {
+		out, err := git(ctx, root, nil, append([]string{"-c", "user.name=t", "-c", "user.email=t@t"}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	read := func(path string) string {
+		data, _ := os.ReadFile(path)
+		return string(data)
+	}
+	run("init", "-q")
+	must(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("one\n"), 0o644))
+	run("add", "a.txt")
+	run("commit", "-qm", "base")
+	// The user's uncommitted work: a changed file and an untracked one.
+	must(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("two\n"), 0o644))
+	must(t, os.WriteFile(filepath.Join(root, "b.txt"), []byte("new\n"), 0o644))
+
+	w, err := newCouncilWorktree(ctx, root, filepath.Join(t.TempDir(), "council", "1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read(filepath.Join(w.dir, "a.txt")) != "two\n" || read(filepath.Join(w.dir, "b.txt")) != "new\n" {
+		t.Fatal("the worktree doesn't start from the user's uncommitted files")
+	}
+	write := confinedTool{AgentTool: &tools.WriteTool{CWD: w.dir, Queue: tools.NewFileMutationQueue()}, root: w.dir, cwd: w.dir}
+	if _, err := write.Execute(ctx, "1", []byte(`{"path":`+strconv.Quote(filepath.Join(root, "a.txt"))+`,"content":"escaped\n"}`), nil); err == nil {
+		t.Fatal("a write outside the worktree was allowed")
+	}
+	if _, err := write.Execute(ctx, "2", []byte(`{"path":"a.txt","content":"three\n"}`), nil); err != nil {
+		t.Fatal(err)
+	}
+	diff, _, files, err := w.change(ctx)
+	if err != nil || len(files) != 1 || files[0] != "a.txt" {
+		t.Fatalf("change = %q, %v; want a.txt", files, err)
+	}
+	if read(filepath.Join(root, "a.txt")) != "two\n" {
+		t.Fatal("the user's file changed before apply")
+	}
+	w.remove(ctx)
+	if _, err := os.Stat(w.dir); !os.IsNotExist(err) {
+		t.Fatal("the worktree is still on disk")
+	}
+	if list := run("worktree", "list", "--porcelain"); strings.Count(list, "worktree ") != 1 {
+		t.Fatalf("git still lists the worktree:\n%s", list)
+	}
+	if err := applyCandidateDiff(ctx, root, diff); err != nil {
+		t.Fatal(err)
+	}
+	if read(filepath.Join(root, "a.txt")) != "three\n" || read(filepath.Join(root, "b.txt")) != "new\n" {
+		t.Fatal("apply didn't land exactly the member's change")
+	}
+}
+
+func must(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
 	}
 }

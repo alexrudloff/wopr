@@ -65,6 +65,7 @@ type Session struct {
 	fileWatch     fileWatch
 	webSearch     webSearchState
 	undo          fileUndo
+	builds        councilBuilds
 	council       sessionCouncil
 	routeNeeded   atomic.Bool
 	routeBoundary atomic.Bool // the next route decision starts a run
@@ -519,6 +520,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initTestCap()
 	sess.initTempFiles()
 	sess.initUndo()
+	sess.initCouncilBuild()
 	sess.agent.AddAfterToolCallHook(sess.privateWebNote)
 	sess.initQueue(opts)
 	sess.initAskUser(opts)

@@ -199,7 +199,7 @@ func (s *Session) runCouncil(ctx context.Context, question string) CouncilResult
 			spec := subagent.Spec{Type: subagent.TypePropose, Description: "council · " + name, Brief: brief, Effort: subagent.EffortThorough}
 			for attempt := 0; ; attempt++ {
 				id := subagent.NewTaskID(fmt.Sprintf("council\x00%s\x00%d\x00%s", route.Spec, time.Now().UnixNano(), question))
-				details, answer, err := s.councilRunner(route).Run(ctx, id, spec, nil)
+				details, answer, err := s.councilRunner(councilHost{s: s, route: route}).Run(ctx, id, spec, nil)
 				// A provider that refuses its server search answers again
 				// with DuckDuckGo, as the orchestrator does.
 				if attempt == 0 && details.State != subagent.StatusDone && s.refuseServerSearch(member.Ref.Provider, answer, err) {
@@ -268,10 +268,10 @@ func gatherCouncil(ctx context.Context, calls []councilCall, timeout time.Durati
 	return proposals, missing
 }
 
-// councilRunner is a task runner fixed to one member's route, sharing the
-// session's task registry (the sidebar lists members as live agents) and
-// provider limits.
-func (s *Session) councilRunner(route subagent.Route) *subagent.Tool {
+// councilRunner is a task runner on host, fixed to one member's route,
+// sharing the session's task registry (the sidebar lists members as live
+// agents) and provider limits.
+func (s *Session) councilRunner(host subagent.Host) *subagent.Tool {
 	stream := s.council.streamFn
 	if stream == nil {
 		stream = func(ctx context.Context, model *ai.Model, transcript ai.TranscriptContext, options ai.StreamOptions) (*ai.AssistantMessageEventStream, error) {
@@ -279,7 +279,7 @@ func (s *Session) councilRunner(route subagent.Route) *subagent.Tool {
 			return model.Provider.Stream(ctx, transcript, options)
 		}
 	}
-	t := &subagent.Tool{Host: councilHost{taskHost: taskHost{s: s}, route: route}, SessionID: s.ID(), StreamFn: stream}
+	t := &subagent.Tool{Host: host, SessionID: s.ID(), StreamFn: stream}
 	if s.tasks.tool != nil {
 		t.Limiter, t.Registry = s.tasks.tool.Limiter, s.tasks.tool.Registry
 	}
@@ -296,19 +296,24 @@ type councilHost struct {
 	route subagent.Route
 }
 
-// Tools are the explore tools plus the web tools the council may use: both
-// normally, only a private search in a private council.
+// Tools are the explore tools plus the council's web tools.
 func (h councilHost) Tools() []agent.AgentTool {
-	out := h.taskHost.Tools()
-	switch h.s.councilWeb() {
+	return append(h.taskHost.Tools(), h.s.councilWebTools()...)
+}
+
+// councilWebTools are the web tools the council may use: both normally,
+// only a private search in a private council.
+func (s *Session) councilWebTools() []agent.AgentTool {
+	var out []agent.AgentTool
+	switch s.councilWeb() {
 	case councilWebOpen:
 		for _, name := range []string{web.SearchToolName, web.FetchToolName} {
-			if tool := h.s.toolNamed(name); tool != nil {
+			if tool := s.toolNamed(name); tool != nil {
 				out = append(out, tool)
 			}
 		}
 	case councilWebPrivate:
-		if tool := h.s.toolNamed(web.SearchToolName); tool != nil {
+		if tool := s.toolNamed(web.SearchToolName); tool != nil {
 			out = append(out, tool)
 		}
 	}
@@ -455,24 +460,51 @@ func (councilTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolMo
 
 func (councilTool) Schema() ai.ToolSchema {
 	return ai.ToolSchema{
-		Name:        councilToolName,
-		Description: "Put a hard question to the war council: every other model the user has set up answers it independently, in parallel, at its deepest thinking, and you get all their proposals to synthesize. Slow and expensive; use it for design decisions, tricky bugs, and questions where a second opinion matters, not for lookups.",
+		Name: councilToolName,
+		Description: "The war council: every other model the user has set up, working in parallel at its deepest thinking. Slow and expensive.\n" +
+			"- ask (default): put a hard question to the council; you get every member's independent proposal to synthesize. For design decisions, tricky bugs, and questions where a second opinion matters, not for lookups.\n" +
+			"- build: have every member make a code change in its own copy of the repository and run the tests there; you get each candidate's diff and test result. For significant changes where independent attempts help (a feature, a hard fix, a refactor), or when the user asks the council to build; not for small edits. The user's files are untouched until you apply.\n" +
+			"- apply: apply one candidate from the latest build to the user's files (reversible with /undo). To combine candidates, apply the best and merge the rest with your edit tools.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"question": map[string]any{"type": "string", "description": "The question, with the facts and constraints the members need; they see this and a short brief of the conversation"},
+				"action":       map[string]any{"type": "string", "enum": []string{"ask", "build", "apply"}},
+				"question":     map[string]any{"type": "string", "description": "ask: the question, with the facts and constraints the members need; they see this and a short brief of the conversation"},
+				"task":         map[string]any{"type": "string", "description": "build: the change to make, complete enough to build without asking: goal, files involved, constraints, how to know it works"},
+				"test_command": map[string]any{"type": "string", "description": "build: the command that tests a candidate (default: the session's last passing test command, else detected from the project)"},
+				"candidate":    map[string]any{"type": "string", "description": "apply: the candidate number"},
 			},
-			"required": []string{"question"},
 		},
 	}
 }
 
-func (t councilTool) Execute(ctx context.Context, _ string, params json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
+func (t councilTool) Execute(ctx context.Context, callID string, params json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var in struct {
-		Question string `json:"question"`
+		Action      string `json:"action"`
+		Question    string `json:"question"`
+		Task        string `json:"task"`
+		TestCommand string `json:"test_command"`
+		Candidate   string `json:"candidate"`
 	}
 	if err := json.Unmarshal(params, &in); err != nil {
 		return agent.AgentToolResult{}, err
+	}
+	switch in.Action {
+	case "build":
+		if strings.TrimSpace(in.Task) == "" {
+			return agent.AgentToolResult{}, errors.New("council build needs a task")
+		}
+		content, title, err := t.s.runCouncilBuild(ctx, in.Task, strings.TrimSpace(in.TestCommand))
+		if err != nil {
+			return agent.AgentToolResult{}, err
+		}
+		return agent.AgentToolResult{Content: content, Preview: title}, nil
+	case "apply":
+		content, err := t.s.applyCouncilCandidate(ctx, callID, in.Candidate)
+		if err != nil {
+			return agent.AgentToolResult{}, err
+		}
+		return agent.AgentToolResult{Content: content, Preview: content}, nil
 	}
 	if strings.TrimSpace(in.Question) == "" {
 		return agent.AgentToolResult{}, errors.New("council needs a question")

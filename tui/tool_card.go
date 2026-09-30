@@ -211,6 +211,19 @@ func (c *ToolExecutionComponent) inlineSpec() (icon, text, pending string) {
 		return "│", joinNonEmpty(strings.ToUpper(kind[:1])+kind[1:], "—", c.arg("description")), "Delegating…"
 	case name == "websearch" || name == "web_search":
 		return "◈", fmt.Sprintf("Web Search %q", c.arg("query")), "Searching web…"
+	case name == "council":
+		// A finished call's first output line is its title ("War council
+		// built: 3 candidates (2 passing)").
+		if first, _, _ := strings.Cut(strings.TrimSpace(c.Output), "\n"); c.State == ToolStateDone && strings.HasPrefix(first, "War council built") {
+			return "☢", first, ""
+		}
+		switch c.arg("action") {
+		case "build":
+			return "☢", "War council building", "War council building…"
+		case "apply":
+			return "☢", "Apply council candidate " + c.arg("candidate"), "Applying candidate…"
+		}
+		return "☢", joinNonEmpty("War council", c.arg("question")), "Asking the war council…"
 	}
 	label := c.Name
 	if c.Label != "" {

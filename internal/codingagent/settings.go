@@ -522,10 +522,25 @@ func (s Settings) GetCleanupTempFiles() bool { return boolOr(s.CleanupTempFiles,
 type WarCouncilSettings struct {
 	Excluded       []string `json:"excluded,omitempty"`
 	TimeoutSeconds int      `json:"timeoutSeconds,omitempty"`
+	// BuildTimeoutSeconds bounds a member building a candidate change.
+	BuildTimeoutSeconds int `json:"buildTimeoutSeconds,omitempty"`
 }
 
 // DefaultWarCouncilTimeout is how long a council member may take by default.
 const DefaultWarCouncilTimeout = 5 * time.Minute
+
+// DefaultWarCouncilBuildTimeout is how long a member may take to build a
+// candidate by default.
+const DefaultWarCouncilBuildTimeout = 15 * time.Minute
+
+// GetWarCouncilBuildTimeout returns how long a member may take to build a
+// candidate.
+func (s Settings) GetWarCouncilBuildTimeout() time.Duration {
+	if c := s.WarCouncil; c != nil && c.BuildTimeoutSeconds > 0 {
+		return time.Duration(c.BuildTimeoutSeconds) * time.Second
+	}
+	return DefaultWarCouncilBuildTimeout
+}
 
 // GetWarCouncil returns the council settings with the default time limit.
 func (s Settings) GetWarCouncil() (excluded []string, timeout time.Duration) {

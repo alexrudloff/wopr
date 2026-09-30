@@ -26,6 +26,11 @@ const TypeExplore = "explore"
 // council runs it; the task tool offers explore alone.
 const TypePropose = "propose"
 
+// TypeBuild is a war council candidate: a child that makes a code change in
+// its own git worktree and runs the tests there, for the orchestrator to
+// pick from or merge. Only the council runs it.
+const TypeBuild = "build"
+
 // LevelMechanical is the router's difficulty level for lookups.
 const LevelMechanical = "mechanical"
 
@@ -154,6 +159,10 @@ type Tool struct {
 	// CanBackground reports whether a finished background task can be
 	// delivered to the orchestrator; without it background calls block.
 	CanBackground func() bool
+	// Finish runs after a successful run, before the task is marked done
+	// (a build candidate's test run); report shows its phase live, and its
+	// text is appended to the result.
+	Finish func(ctx context.Context, report func(current string)) string
 }
 
 func (t *Tool) Name() string  { return "task" }
@@ -257,14 +266,22 @@ func (t *Tool) Run(ctx context.Context, id string, spec Spec, progress func(Deta
 		defer cancel()
 		t.Registry.add(id, req.Spec, false, route, cancel)
 	}
-	details, text, err := t.execute(ctx, req, route, func(d Details) {
+	report := func(d Details) {
 		if progress != nil {
 			progress(d)
 		}
 		if t.Registry != nil {
 			t.Registry.progress(id, d)
 		}
-	})
+	}
+	details, text, err := t.execute(ctx, req, route, report)
+	if err == nil && t.Finish != nil {
+		text += t.Finish(ctx, func(current string) {
+			d := details
+			d.Running, d.Current = true, current
+			report(d)
+		})
+	}
 	if t.Registry != nil {
 		if err != nil {
 			text = err.Error()
@@ -306,7 +323,7 @@ func (t *Tool) Start(ctx context.Context, id string, spec Spec) (Agent, error) {
 // prepare validates spec and routes it.
 func (t *Tool) prepare(ctx context.Context, id string, spec Spec) (Request, Route, error) {
 	spec.Type = cmp.Or(spec.Type, TypeExplore)
-	if spec.Type != TypeExplore && spec.Type != TypePropose {
+	if spec.Type != TypeExplore && spec.Type != TypePropose && spec.Type != TypeBuild {
 		return Request{}, Route{}, fmt.Errorf("unknown task type %q (available: explore)", spec.Type)
 	}
 	if strings.TrimSpace(spec.Brief) == "" {
@@ -384,8 +401,9 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 		res = ParseResult(out.Text)
 		verified, quotes = res.Verify(t.Host.Cwd(), out.Outputs)
 		trigger = EscalationTrigger(res, verified, quotes, out)
-		if req.Type == TypePropose && trigger == "no evidence" {
-			// A proposal may be ideas or a plan with nothing to quote.
+		if (req.Type == TypePropose || req.Type == TypeBuild) && trigger == "no evidence" {
+			// A proposal may be ideas or a plan, and a candidate is judged
+			// by its diff and tests, with nothing to quote.
 			trigger = ""
 		}
 		rec.Status, rec.Confidence, rec.Verified, rec.Quotes, rec.Trigger = res.Status, res.Confidence, verified, quotes, trigger
@@ -434,7 +452,7 @@ func (t *Tool) runAttempt(ctx context.Context, req Request, route Route, notes s
 		Tools:     t.Host.Tools(),
 		System:    systemPrompt(req.Type, t.Host.Cwd()),
 		Prompt:    BriefPrompt(req, notes),
-		Budget:    BudgetFor(req.Effort),
+		Budget:    budgetFor(req),
 		SessionID: t.SessionID + ":task",
 		Project:   t.Host.Project,
 		Progress:  progress,
@@ -531,7 +549,7 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 	answer := cmp.Or(res.Answer, "(no answer)")
 	full := answer
 	answerBudget, resultBudget := answerBudgetBytes, resultBudgetBytes
-	if req.Type == TypePropose {
+	if req.Type == TypePropose || req.Type == TypeBuild {
 		answerBudget, resultBudget = 3*answerBudgetBytes, 2*resultBudgetBytes
 	}
 	answer = text.Clip(answer, answerBudget)

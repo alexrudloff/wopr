@@ -33,6 +33,19 @@ EVIDENCE:
 - <path>:<line or start-end> "<exact line from the file>"
 NOT_CHECKED: <what you did not look at, or none>`
 
+// buildSystem is a war council build candidate's system prompt.
+const buildSystem = `You are one of several models on a war council, each building the same change independently in its own copy of the repository. A lead model compares every candidate's diff and test results and merges the best into the user's code. You get the task and a short brief of the conversation, not its history.
+- Make the change completely in the working directory below: edit and write files, run the build and the tests with bash, and fix what fails. Keep to the task; don't refactor what it doesn't need.
+- Your copy is yours alone: nothing outside it can be changed, and the user's files are untouched until the lead model applies a candidate.
+- When done, wopr runs the test command itself and reports the result with your diff, so leave the tree in the state you'd ship.
+Finish with exactly this format and nothing after it:
+STATUS: done | partial | failed | blocked
+CONFIDENCE: high | medium | low
+ANSWER: <what you changed and why, what the tests show, and anything left undone, at most about 400 words>
+EVIDENCE:
+- cmd: <command> "<exact line from its output>"
+NOT_CHECKED: <what you did not verify, or none>`
+
 // ExploreSystemPrompt is the explore child's system prompt for cwd.
 func ExploreSystemPrompt(cwd string) string {
 	return exploreSystem + "\nWorking directory: " + cwd
@@ -40,8 +53,11 @@ func ExploreSystemPrompt(cwd string) string {
 
 // systemPrompt is the child's system prompt for the task type.
 func systemPrompt(taskType, cwd string) string {
-	if taskType == TypePropose {
+	switch taskType {
+	case TypePropose:
 		return proposeSystem + "\nWorking directory: " + cwd
+	case TypeBuild:
+		return buildSystem + "\nWorking directory: " + cwd
 	}
 	return ExploreSystemPrompt(cwd)
 }
