@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1] - 2026-09-30
+
+- **`/undo` covers shell edits**: when a command (`sed -i`, a Python script, `cat >`) changes files, they become normal undo changes, and the command's card shows their diff. The "before" comes from wopr's copies of files the model read, wrote, or named, or from git for clean tracked files; files a command created are removed on undo.
+- **`/gtw`** toggles Global Thermonuclear War (`/gtw on|off` sets it). War council members now all run at once instead of four at a time.
+- **Stall nudge** stops interrupting good work: new file reads, searches, and read-only shell commands (`rg`, `sed -n`, `cat`, …) count as progress; the clock starts at the model's first reply, and one long command can't fill the idle time.
+- **A warning when you send something that looks like a secret** (API keys, OAuth codes, bearer tokens, …): it still goes to the model, but you're told it's sent and saved.
+- **Long writes show progress**: the card names the file as soon as it arrives and counts lines as they stream in.
+- **Scrolling**: the mouse wheel moves 3 lines per step (Scroll speed in `/settings`, 1–10).
+
 ## [0.1.5] - 2026-09-30
 
 - **Global Thermonuclear War** (`ctrl+x g`) is a toggle on the current session: your top model at max thinking plus a war council. On each prompt, every other model you've set up proposes in parallel (with web search), and the top model synthesizes. For real code changes, council members each build the change in their own git worktree and run the tests; the top model applies or merges the best. War-red prompt and sidebar while it's on; `/setup` → War council picks members and time limits.
