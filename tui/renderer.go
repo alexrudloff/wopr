@@ -327,6 +327,13 @@ func (t *TUI) CopyOnSelect() bool {
 }
 
 // SetCopyOnSelect changes automatic selection copy without rebuilding the renderer.
+// SetWheelScrollLines sets how many lines one wheel step scrolls.
+func (t *TUI) SetWheelScrollLines(lines int) {
+	t.mu.Lock()
+	t.wheelScrollLines = max(1, lines)
+	t.mu.Unlock()
+}
+
 func (t *TUI) SetCopyOnSelect(enabled bool) {
 	t.mu.Lock()
 	t.copyOnSelect = enabled

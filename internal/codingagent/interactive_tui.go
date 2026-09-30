@@ -155,6 +155,7 @@ func (m *InteractiveMode) createInteractiveTui(ctx context.Context) func() {
 	copyOnSelect := m.settings().GetFullscreenCopyOnSelect()
 	opts := fullscreenTuiOptions()
 	opts.CopyOnSelect = &copyOnSelect
+	opts.WheelScrollLines = m.settings().GetFullscreenScrollSpeed()
 	opts.CopySelection = m.effectiveCopyClipboard()
 	// Primary-button clicks on OSC 8 hyperlinks open the default browser.
 	opts.OpenURL = func(url string) { _ = m.effectiveOpenURL()(url) }

@@ -99,6 +99,7 @@ set it in `~/.wopr/agent/settings.json`:
 | `fullscreenScrollbar` | string | `auto` | Transcript scrollbar: `auto`, `always`, or `hidden`. |
 | `fullscreenSidebar` | string | `auto` | Sidebar: `auto` (shown when the terminal is at least 121 columns wide), `show`, or `hide`. `ctrl+x b` toggles it and saves the choice. |
 | `fullscreenExitOutput` | string | `clear` | `clear` clears the screen when WOPR exits and prints only the resume hint. `transcript` prints the final transcript. `resume-hint` restores the previous screen and prints only the resume hint. |
+| `fullscreenScrollSpeed` | integer | `3` | Lines one mouse wheel step scrolls, 1 to 10; alt+wheel scrolls 5 times as far. Also in `/settings` as Scroll speed. |
 | `fullscreenCopyOnSelect` | boolean | `true` | Copy selected text automatically. When disabled, `ctrl+x` `y` copies the active selection. |
 | `hideThinkingBlock` | boolean | `false` | Hide thinking blocks in the transcript. |
 | `doubleEscapeAction` | string | `tree` | Action bound to pressing escape twice. |

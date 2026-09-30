@@ -64,6 +64,9 @@ type Settings struct {
 	FullscreenSidebar string `json:"fullscreenSidebar,omitempty"`
 	// FullscreenCopyOnSelect copies a completed selection. Default: true.
 	FullscreenCopyOnSelect *bool `json:"fullscreenCopyOnSelect,omitempty"`
+	// FullscreenScrollSpeed is the lines one wheel step scrolls (1-10,
+	// default 3).
+	FullscreenScrollSpeed *int `json:"fullscreenScrollSpeed,omitempty"`
 
 	Compaction    *CompactionSettingsJSON `json:"compaction,omitempty"`
 	BranchSummary *BranchSummarySettings  `json:"branchSummary,omitempty"`
@@ -584,6 +587,14 @@ func (s Settings) GetFullscreenExitOutput() string {
 func (s Settings) GetFullscreenCopyOnSelect() bool { return boolOr(s.FullscreenCopyOnSelect, true) }
 
 // GetFullscreenScrollbar returns "always", "hidden", or "auto" (the default).
+// GetFullscreenScrollSpeed returns the lines one wheel step scrolls.
+func (s Settings) GetFullscreenScrollSpeed() int {
+	if s.FullscreenScrollSpeed == nil {
+		return 3
+	}
+	return max(1, min(10, *s.FullscreenScrollSpeed))
+}
+
 func (s Settings) GetFullscreenScrollbar() string {
 	if mode := s.FullscreenScrollbar; mode == "always" || mode == "hidden" {
 		return mode

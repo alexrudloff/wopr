@@ -964,6 +964,17 @@ func settingsItems() []settingItem {
 			},
 			apply: func(s *Settings, v string) { s.FullscreenScrollbar = v },
 		},
+		{
+			id: "fullscreen-scroll-speed", label: "Scroll speed",
+			desc:   "Lines one mouse wheel step scrolls (alt+wheel scrolls 5 times as far)",
+			values: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"},
+			get:    func(s Settings) string { return strconv.Itoa(s.GetFullscreenScrollSpeed()) },
+			apply: func(s *Settings, v string) {
+				n, _ := strconv.Atoi(v)
+				n = max(1, min(10, n))
+				s.FullscreenScrollSpeed = &n
+			},
+		},
 		boolSetting("fullscreen-copy-on-select", "Fullscreen copy on select", "Automatically copy selected text; disable to copy selections with Ctrl+X",
 			Settings.GetFullscreenCopyOnSelect, func(s *Settings) **bool { return &s.FullscreenCopyOnSelect }),
 		{

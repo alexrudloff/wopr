@@ -491,6 +491,10 @@ func (m *InteractiveMode) applySetting(id, value string) {
 		}
 	case "fullscreen-copy-on-select":
 		m.tuiInst.SetCopyOnSelect(value == "true")
+	case "fullscreen-scroll-speed":
+		if lines, err := strconv.Atoi(value); err == nil {
+			m.tuiInst.SetWheelScrollLines(lines)
+		}
 	case "editor-padding":
 		if padding, err := strconv.Atoi(value); err == nil {
 			m.editor.SetPaddingX(padding)

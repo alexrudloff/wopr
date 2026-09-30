@@ -457,11 +457,14 @@ func (t *TUI) handleScrollToEndIndicatorMouseEvent(event sgrMouseEvent) bool {
 }
 
 func (t *TUI) getWheelScrollLines(button int) int {
+	t.mu.Lock()
+	lines := t.wheelScrollLines
+	t.mu.Unlock()
 	// SGR mouse button codes use bit 3 (value 8) for the Alt modifier.
 	if button&8 != 0 {
-		return t.wheelScrollLines * altWheelScrollMultiplier
+		return lines * altWheelScrollMultiplier
 	}
-	return t.wheelScrollLines
+	return lines
 }
 
 // handleWheel offers a wheel event to mouse-aware components, then scrolls.
