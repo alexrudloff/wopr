@@ -91,6 +91,12 @@ func (c *ToolExecutionComponent) toolPath(keys ...string) string {
 			break
 		}
 	}
+	return c.displayPath(path)
+}
+
+// displayPath shows path relative to the working directory when inside it,
+// else with ~ for the home directory.
+func (c *ToolExecutionComponent) displayPath(path string) string {
 	if path == "" {
 		return ""
 	}
@@ -257,7 +263,24 @@ func (c *ToolExecutionComponent) streamingText(text string) string {
 	if c.arg("path") != "" || c.arg("file_path") != "" || c.arg("filePath") != "" || c.arg("pattern") != "" || c.arg("url") != "" || c.arg("description") != "" || c.arg("query") != "" {
 		return text
 	}
-	return ""
+	// The args don't parse yet: a long write shows its path as soon as it
+	// arrives and how many lines have come in.
+	if c.streamPath == "" && c.streamLines == 0 {
+		return ""
+	}
+	shown := joinNonEmpty(toolTitleWord(c.Name), c.displayPath(c.streamPath))
+	if c.streamLines > 0 {
+		shown += fmt.Sprintf(" · %d line%s", c.streamLines, plural(c.streamLines))
+	}
+	return shown
+}
+
+// toolTitleWord is a tool's name as a capitalized word: write → Write.
+func toolTitleWord(name string) string {
+	if name == "" {
+		return ""
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 func (c *ToolExecutionComponent) spinnerFrame() string {

@@ -149,6 +149,7 @@ type ToolExecutionComponent struct {
 	// arrived, how much of the args has been scanned for line breaks, and
 	// the lines of a write's content so far.
 	streamHeader  string
+	streamPath    string
 	streamScanned int
 	streamLines   int
 }
@@ -310,7 +311,7 @@ func (c *ToolExecutionComponent) UpdateArgs(name string, partialArgsJSON string)
 			var path string
 			if json.Unmarshal([]byte(`"`+m[1]+`"`), &path) == nil {
 				raw, _ := json.Marshal(map[string]string{"path": path})
-				c.streamHeader = HeaderForTool(c.Name, raw, c.Cwd)
+				c.streamPath, c.streamHeader = path, HeaderForTool(c.Name, raw, c.Cwd)
 			}
 		}
 	}
@@ -323,7 +324,7 @@ func (c *ToolExecutionComponent) UpdateArgs(name string, partialArgsJSON string)
 	if c.streamHeader != "" || c.streamLines > 0 {
 		c.ArgsPreview = cmp.Or(c.streamHeader, HeaderForTool(c.Name, nil, c.Cwd))
 		if c.streamLines > 0 {
-			c.ArgsPreview += fmt.Sprintf(" · %d lines so far", c.streamLines)
+			c.ArgsPreview += ActiveTheme().FgText("textMuted", fmt.Sprintf(" · %d line%s", c.streamLines, plural(c.streamLines)))
 		}
 	}
 	c.Invalidate()
