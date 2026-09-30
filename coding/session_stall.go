@@ -22,14 +22,20 @@ import (
 const (
 	// stallRepeats is how many identical tool calls count as a loop.
 	stallRepeats = 3
-	// stallIdleTurns is how many turns without a file change count as
-	// no progress.
+	// stallIdleTurns is how many turns without progress count as idle, and
+	// stallIdleTime how long they must also have taken, so a burst of fast
+	// turns alone never nudges.
 	stallIdleTurns = 10
+	stallIdleTime  = 3 * time.Minute
 	// stallMaxNudges bounds the nudges in one run.
 	stallMaxNudges = 3
 	// stallMessageType is the custom message type of a nudge.
 	stallMessageType = "stall_nudge"
 )
+
+// researchTools are the tools whose call with a query or URL not seen
+// before in the run counts as progress: the model found new information.
+var researchTools = map[string]string{"web_search": "query", "web_fetch": "url"}
 
 // fileChangingTools are the tools whose success counts as progress.
 var fileChangingTools = map[string]bool{"edit": true, "write": true, "apply_patch": true}
@@ -102,54 +108,13 @@ type stallState struct {
 }
 
 // stallNudge returns a nudge for the context the next request will see, or
-// nil. It looks at the tool calls since the last user prompt: the same
-// call made stallRepeats times with no file change in between, or
-// stallIdleTurns turns without a file change.
+// nil (see stallCheck).
 func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage {
 	if s.efficiency == nil || !s.efficiency.cfg.StallNudge || s.stall.count >= stallMaxNudges {
 		return nil
 	}
-	start := 0
-	for i, m := range context {
-		if m.User != nil {
-			start = i + 1
-		}
-	}
-	calls := map[string]int{}
-	var last string
-	idle := 0
-	for _, m := range context[start:] {
-		if m.Assistant == nil {
-			continue
-		}
-		changed := false
-		for _, block := range m.Assistant.Content {
-			call, ok := block.(ai.ToolCall)
-			if !ok {
-				continue
-			}
-			args, _ := json.Marshal(call.Arguments)
-			last = call.Name + " " + string(args)
-			calls[last]++
-			changed = changed || fileChangingTools[call.Name] || s.fileWatch.changedFile(call.ID)
-		}
-		if changed {
-			// A repeat after a file change can see a new result.
-			idle = 0
-			clear(calls)
-		} else {
-			idle++
-		}
-	}
-	var key, text string
-	switch {
-	case last != "" && calls[last] >= stallRepeats:
-		key = "repeat " + last
-		text = fmt.Sprintf("You have made this exact tool call %d times without changing a file in between: %s. Its result will not change. Step back, say what you learned, and try a different approach, or finish if the task is done.", calls[last], truncateRunes(last, 200))
-	case idle >= stallIdleTurns:
-		key = fmt.Sprintf("idle %d", idle/stallIdleTurns)
-		text = fmt.Sprintf("%d turns have passed without changing a file. If you know the fix, make it now; if the task needs no change or is done, say so and stop.", idle)
-	default:
+	key, text := stallCheck(context, s.fileWatch.changedFile, time.Now())
+	if key == "" {
 		return nil
 	}
 	if s.stall.nudged == nil {
@@ -170,6 +135,72 @@ func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage 
 		"display":    true,
 		"timestamp":  time.Now().UnixMilli(),
 	}}}
+}
+
+// stallCheck looks at the tool calls since the last user prompt and returns
+// a nudge's key and text, or "" when there is none: the same call made
+// stallRepeats times with no file change in between, or stallIdleTurns
+// turns and stallIdleTime without progress. Progress is a file change (by a
+// file tool, or a shell command that changed a watched file) or a search or
+// fetch the run hasn't made before.
+func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bool, now time.Time) (key, text string) {
+	start := 0
+	var since int64 // milliseconds of the last progress, or of the prompt
+	for i, m := range context {
+		if m.User != nil {
+			start, since = i+1, m.User.Timestamp
+		}
+	}
+	calls := map[string]int{}
+	seen := map[string]bool{}
+	var last string
+	idle := 0
+	for _, m := range context[start:] {
+		if m.Assistant == nil {
+			continue
+		}
+		changed, found := false, false
+		for _, block := range m.Assistant.Content {
+			call, ok := block.(ai.ToolCall)
+			if !ok {
+				continue
+			}
+			args, _ := json.Marshal(call.Arguments)
+			last = call.Name + " " + string(args)
+			calls[last]++
+			changed = changed || fileChangingTools[call.Name] || changedFile(call.ID)
+			if field, ok := researchTools[call.Name]; ok {
+				if target, _ := call.Arguments[field].(string); target != "" && !seen[call.Name+" "+target] {
+					seen[call.Name+" "+target] = true
+					found = true
+				}
+			}
+		}
+		switch {
+		case changed:
+			// A repeat after a file change can see a new result.
+			idle = 0
+			clear(calls)
+			since = m.Assistant.Timestamp
+		case found:
+			idle = 0
+			since = m.Assistant.Timestamp
+		default:
+			idle++
+		}
+	}
+	elapsed := now.Sub(time.UnixMilli(since))
+	switch {
+	case last != "" && calls[last] >= stallRepeats:
+		return "repeat " + last, fmt.Sprintf("You have made this exact tool call %d times without changing a file in between: %s. Its result will not change. Step back, say what you learned, and try a different approach, or finish if the task is done.", calls[last], truncateRunes(last, 200))
+	case idle >= stallIdleTurns && (since == 0 || elapsed >= stallIdleTime):
+		spent := fmt.Sprintf("%d turns", idle)
+		if since != 0 {
+			spent += fmt.Sprintf(" and %d minutes", int(elapsed.Minutes()))
+		}
+		return fmt.Sprintf("idle %d", idle/stallIdleTurns), spent + " have passed without changing a file or finding new information. If you know what to do, do it now; if the task is done, say so and stop."
+	}
+	return "", ""
 }
 
 func truncateRunes(s string, n int) string {

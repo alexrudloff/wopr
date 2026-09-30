@@ -118,8 +118,11 @@ More keys in `efficiency.json`, each on by default:
   archived original back. The cut advances in steps of that count, so the
   cached prefix changes only every few requests. Needs `observationPack`.
 - `stallNudge`: after the same tool call three times with no file change in
-  between, or ten turns without changing a file, the model gets one message
-  telling it to change approach or finish (at most three per prompt).
+  between, or ten turns and three minutes without progress, the model gets
+  one message telling it to change approach or finish (at most three per
+  prompt). Progress is a file change, including one a shell command made to a
+  file the model read or wrote, or a web search or fetch it hasn't made
+  before in the run.
 - `testRerunCap`: a test command (`go test`, `pytest`, `npm test`, `cargo
   test`, `make test`, and the like) that already passed is not run again
   while no file has changed since; the call is answered with a note instead.
