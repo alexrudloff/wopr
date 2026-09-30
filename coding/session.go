@@ -520,6 +520,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initTestCap()
 	sess.initTempFiles()
 	sess.initUndo()
+	sess.initOverwriteGuard()
 	sess.initCouncilBuild()
 	sess.agent.AddAfterToolCallHook(sess.privateWebNote)
 	sess.initQueue(opts)

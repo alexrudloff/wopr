@@ -16,6 +16,8 @@ import (
 type writeParams struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+	// Overwrite is read by the session's overwrite guard, not here.
+	Overwrite bool `json:"overwrite,omitempty"`
 }
 
 // WriteTool creates or overwrites files.
@@ -36,8 +38,9 @@ func (t *WriteTool) Schema() ai.ToolSchema {
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"path":    map[string]any{"type": "string", "description": "Path to the file to write (relative or absolute)"},
-				"content": map[string]any{"type": "string", "description": "Content to write to the file"},
+				"path":      map[string]any{"type": "string", "description": "Path to the file to write (relative or absolute)"},
+				"content":   map[string]any{"type": "string", "description": "Content to write to the file"},
+				"overwrite": map[string]any{"type": "boolean", "description": "Set to replace an existing, unrelated file you were told not to overwrite"},
 			},
 			"required": []string{"path", "content"},
 		},
