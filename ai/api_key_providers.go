@@ -29,6 +29,7 @@ var builtInAPIKeyProviders = []APIKeyProviderInfo{
 	{ID: "minimax", Name: "MiniMax"},
 	{ID: "minimax-cn", Name: "MiniMax (China)"},
 	{ID: "openai", Name: "OpenAI"},
+	{ID: "opencode-go", Name: "OpenCode Go"},
 	{ID: "openrouter", Name: "OpenRouter"},
 	{ID: "vercel-ai-gateway", Name: "Vercel AI Gateway"},
 	{ID: "xai", Name: "xAI"},

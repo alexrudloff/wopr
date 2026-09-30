@@ -288,10 +288,23 @@ func (w *setupWizard) addSubscription() string {
 		}
 		options = append(options, tui.DialogOption{Title: p.Name, Footer: footer, Value: p.ID})
 	}
+	// Subscriptions that sign in with a key from their console.
+	for _, p := range w.m.oauthProviderList("login-api-key") {
+		if p.ID == "opencode-go" {
+			footer := ""
+			if p.Stored || p.AuthStatusSource != "" {
+				footer = cmp.Or(p.AuthStatusLabel, "configured")
+			}
+			options = append(options, tui.DialogOption{Title: p.Name, Description: "API key", Footer: footer, Value: "key:" + p.ID})
+		}
+	}
 	d := tui.NewDialogSelect("Sign in with a subscription", options, "")
 	chosen, ok := w.sel(d)
 	if !ok {
 		return ""
+	}
+	if provider, ok := strings.CutPrefix(chosen.Value, "key:"); ok {
+		return w.addAPIKeyFor(provider, chosen.Title, chosen.Footer)
 	}
 	if chosen.Footer == "" && !w.login(chosen.Value, chosen.Title) {
 		return ""
@@ -356,11 +369,16 @@ func (w *setupWizard) addAPIKey() string {
 	if !ok {
 		return ""
 	}
-	provider, name := chosen.Value, chosen.Title
-	if chosen.Footer != "" {
+	return w.addAPIKeyFor(chosen.Value, chosen.Title, chosen.Footer)
+}
+
+// addAPIKeyFor asks for provider's key, checks it, and saves it; configured
+// names a key already set up, offered for reuse.
+func (w *setupWizard) addAPIKeyFor(provider, name, configured string) string {
+	if configured != "" {
 		// A key is already configured: use it, or replace it.
 		use := tui.NewDialogSelect(name+" already has a key", []tui.DialogOption{
-			{Title: "Use the configured key", Description: chosen.Footer, Value: "use"},
+			{Title: "Use the configured key", Description: configured, Value: "use"},
 			{Title: "Enter a new key", Value: "new"},
 		}, "")
 		choice, ok := w.sel(use)
@@ -420,6 +438,30 @@ func verifyAPIKey(ctx context.Context, provider, key string) (bool, error) {
 	switch {
 	case base == "":
 		return false, nil
+	case provider == "opencode-go":
+		// The model list is public, so ask for a completion with no
+		// messages: a bad key is refused before the empty request is, and
+		// an empty request runs nothing.
+		models, _, listErr := listEndpointModels(ctx, setupEndpoint{BaseURL: base})
+		if listErr != nil || len(models) == 0 {
+			return false, nil
+		}
+		body := strings.NewReader(`{"model":` + strconv.Quote(models[0].ID) + `,"messages":[],"max_tokens":1}`)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, base+"/chat/completions", body)
+		if err != nil {
+			return false, err
+		}
+		req.Header.Set("Authorization", "Bearer "+key)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := setupHTTP.Do(req)
+		if err != nil {
+			return true, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return true, readError(resp)
+		}
+		return true, nil
 	case provider == "openrouter":
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, "https://openrouter.ai/api/v1/key", nil)
 		if err == nil {

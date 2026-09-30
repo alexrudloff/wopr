@@ -1,14 +1,10 @@
 package codingagent
 
-import "path/filepath"
-
 const unknownProvider = "unknown"
 
-// ProviderLoginHelp returns the hint shown when no provider is logged in.
+// ProviderLoginHelp returns the hint shown when no provider is set up.
 func ProviderLoginHelp() string {
-	return "Use /login to log into a provider via OAuth or API key. See:\n" +
-		"  " + filepath.Join(ConfigRoot(), "docs", "providers.md") + "\n" +
-		"  " + filepath.Join(ConfigRoot(), "docs", "models.md")
+	return "Run /setup to connect a subscription, API key, or endpoint."
 }
 
 func FormatNoModelsAvailableMessage() string {
@@ -16,7 +12,7 @@ func FormatNoModelsAvailableMessage() string {
 }
 
 func FormatNoModelSelectedMessage() string {
-	return "No model selected.\n\n" + ProviderLoginHelp() + "\n\nThen use /model to select a model."
+	return "No model selected. " + ProviderLoginHelp() + " Then pick one with /model."
 }
 
 func FormatNoAPIKeyFoundMessage(provider string) string {

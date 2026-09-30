@@ -584,7 +584,8 @@ func inferTier(kind setupKind, baseURL, provider string) string {
 	case setupViaSubscription:
 		return router.CostSubscription
 	case setupViaAPIKey:
-		if provider == "kimi-coding" {
+		// Plans billed monthly with usage limits, not per token.
+		if provider == "kimi-coding" || provider == "opencode-go" {
 			return router.CostSubscription
 		}
 		return router.CostPaid

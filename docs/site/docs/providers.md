@@ -109,6 +109,10 @@ A stored API-key credential can include an `env` object. Its values take precede
 }
 ```
 
+### OpenCode Go
+
+OpenCode Go is a monthly subscription to a set of open models through OpenCode's gateway. In `/setup`, choose **Sign in with a subscription → OpenCode Go** (it is also under **Add an API key**) and paste the key from the OpenCode console. wopr checks the key with a request that runs nothing, lists the plan's models from its live model list, and counts them as subscription models for routing, since the plan bills monthly with 5-hour, weekly, and monthly usage limits rather than per token. Each model is reached in the format OpenCode serves it (Chat Completions, Responses, or Anthropic Messages), and each request carries the conversation's `x-opencode-session` header for OpenCode's routing and prompt caching.
+
 ### OAuth providers
 
 Built-in OAuth targets are `anthropic`, `github-copilot`, `kimi-coding`, `meta`, `openai-codex`, `openrouter`, and `xai`. Each provider owns its flow. For example, GitHub Copilot uses device authorization, while callback-based providers can open a localhost callback server. Tokens are persisted to `auth.json` unless the provider owns another store, and supported providers refresh them when required.
