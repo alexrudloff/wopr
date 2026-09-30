@@ -33,9 +33,10 @@ const (
 	stallMessageType = "stall_nudge"
 )
 
-// researchTools are the tools whose call with a query or URL not seen
-// before in the run counts as progress: the model found new information.
-var researchTools = map[string]string{"web_search": "query", "web_fetch": "url"}
+// researchTools are the tools whose call with a query, URL, or file not
+// seen before in the run counts as progress: the model found new
+// information.
+var researchTools = map[string]string{"web_search": "query", "web_fetch": "url", "read": "path"}
 
 // fileChangingTools are the tools whose success counts as progress.
 var fileChangingTools = map[string]bool{"edit": true, "write": true, "apply_patch": true}
@@ -149,6 +150,14 @@ func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bo
 	for i, m := range context {
 		if m.User != nil {
 			start, since = i+1, m.User.Timestamp
+		}
+	}
+	// The clock starts at the model's first reply to the prompt, so time
+	// spent before it (a war council, a long first think) isn't idle.
+	for _, m := range context[start:] {
+		if m.Assistant != nil {
+			since = m.Assistant.Timestamp
+			break
 		}
 	}
 	calls := map[string]int{}

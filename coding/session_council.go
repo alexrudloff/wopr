@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -41,10 +42,19 @@ type sessionCouncil struct {
 	timeout time.Duration
 	// streamFn overrides member provider streams (tests).
 	streamFn agent.StreamFn
+	// limiter runs members at once, bounded only by per-provider limits:
+	// GTW is all-out, so the subagents' overall cap doesn't apply.
+	limiterOnce sync.Once
+	limiter     *subagent.Limiter
 }
+
+// councilMaxParallel bounds the members running at once; it is above any
+// realistic council size.
+const councilMaxParallel = 64
 
 // EnableWarCouncil turns the war council on for this session. private keeps
 // it to private connections, as private mode does.
+
 func (s *Session) EnableWarCouncil(private bool) { s.SetWarCouncil(true, private, nil) }
 
 // SetWarCouncil turns the war council on or off for this session and records
@@ -317,12 +327,16 @@ func (s *Session) councilRunner(host subagent.Host) *subagent.Tool {
 			return model.Provider.Stream(ctx, transcript, options)
 		}
 	}
-	t := &subagent.Tool{Host: host, SessionID: s.ID(), StreamFn: stream}
+	s.council.limiterOnce.Do(func() {
+		var perProvider map[string]int
+		if s.router != nil {
+			perProvider = s.router.Config().Subagents.ProviderParallel
+		}
+		s.council.limiter = subagent.NewLimiter(councilMaxParallel, perProvider)
+	})
+	t := &subagent.Tool{Host: host, SessionID: s.ID(), StreamFn: stream, Limiter: s.council.limiter}
 	if s.tasks.tool != nil {
-		t.Limiter, t.Registry = s.tasks.tool.Limiter, s.tasks.tool.Registry
-	}
-	if t.Limiter == nil {
-		t.Limiter = subagent.NewLimiter(0, nil)
+		t.Registry = s.tasks.tool.Registry
 	}
 	return t
 }

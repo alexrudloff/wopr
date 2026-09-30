@@ -213,7 +213,7 @@ work. It switches the session you're in to the top model in your order at
 its maximum thinking, with routing off, and turns on the war council: on every prompt,
 every other model you set up (subscriptions, API keys, and your own
 endpoints, pay-per-token included) answers the same request independently,
-in parallel, each at its own maximum thinking. Members work read-only (read,
+all at once (the subagents' limit of four at a time doesn't apply; per-provider limits do), each at its own maximum thinking. Members work read-only (read,
 grep, find, ls, read-only shell) from the request and a short brief of the
 conversation, and can search the web and fetch pages with the same search
 order as the top model (your key, else their provider's own search, else
