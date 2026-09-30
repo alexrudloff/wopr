@@ -107,25 +107,40 @@ func splitAnchorRange(s string) (string, string) {
 
 var pastedAnchorPattern = regexp.MustCompile(`^\d+:?[a-z]{2}\|`)
 
-// stripPastedAnchors removes anchor prefixes a model copied into newText,
-// but only when every non-empty line carries one.
-func stripPastedAnchors(text string) string {
+// pastedAnchorCapture captures the line number and hash of a pasted prefix.
+var pastedAnchorCapture = regexp.MustCompile(`^(\d+):?([a-z]{2})\|`)
+
+// stripPastedAnchors removes anchor prefixes a model copied into newText:
+// every line's when every non-empty line carries one, and otherwise any
+// line's prefix that is exactly the anchor read issued for that line of the
+// file (fileLines), so text that merely looks like an anchor stays.
+func stripPastedAnchors(text string, fileLines []string) string {
 	lines := strings.Split(text, "\n")
-	seen := false
+	all, seen := true, false
 	for _, line := range lines {
 		if line == "" {
 			continue
 		}
-		if !pastedAnchorPattern.MatchString(line) {
-			return text
-		}
 		seen = true
-	}
-	if !seen {
-		return text
+		if !pastedAnchorPattern.MatchString(line) {
+			all = false
+			break
+		}
 	}
 	for i, line := range lines {
-		lines[i] = pastedAnchorPattern.ReplaceAllString(line, "")
+		switch {
+		case all && seen:
+			lines[i] = pastedAnchorPattern.ReplaceAllString(line, "")
+		case fileLines != nil:
+			m := pastedAnchorCapture.FindStringSubmatch(line)
+			if m == nil {
+				continue
+			}
+			n, err := strconv.Atoi(m[1])
+			if err == nil && n >= 1 && n <= len(fileLines) && lineAnchor(fileLines, n-1) == m[1]+m[2] {
+				lines[i] = line[len(m[0]):]
+			}
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -190,7 +205,7 @@ func resolveAnchoredEdits(path string, lines []string, edits []editInput) ([]anc
 			return nil, fmt.Errorf("edits[%d] in %s: end anchor %s is before anchor %s.", i, path, strings.TrimSpace(last), strings.TrimSpace(first))
 		}
 		var replacement []string
-		if text := stripPastedAnchors(normalizeToLF(e.NewText)); text != "" {
+		if text := stripPastedAnchors(normalizeToLF(e.NewText), lines); text != "" {
 			replacement = hashlineLines(text)
 		}
 		out = append(out, anchoredEdit{index: i, start: start, end: end, lines: replacement})

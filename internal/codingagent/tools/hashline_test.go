@@ -143,3 +143,19 @@ func TestHashlineCRLFTabsUnicodeAndBOM(t *testing.T) {
 		t.Fatalf("file = %q, want BOM and CRLF kept", got)
 	}
 }
+
+// A model that pastes the target line's own anchor into the first line of
+// newText (seen in an eval: "332ly|\troot, err := …") must not write it into
+// the file, while text that only looks like an anchor is kept.
+func TestHashlinePastedOwnAnchorIsStripped(t *testing.T) {
+	dir, path := writeHashlineFile(t, "func f() {\n\treturn nil\n}\n")
+	a := anchorsOf(t, hashlineRead(t, dir, "weak", ""))
+	newText := a[1] + "|\treturn err\n\t// done\n12ab|not an anchor of this file"
+	args, _ := json.Marshal(map[string]any{"path": "f.txt", "edits": []map[string]string{{"anchor": a[1], "newText": newText}}})
+	if res := hashlineEdit(t, dir, string(args)); res.IsError {
+		t.Fatalf("edit failed: %s", res.Content)
+	}
+	if got := readFile(t, path); got != "func f() {\n\treturn err\n\t// done\n12ab|not an anchor of this file\n}\n" {
+		t.Fatalf("file = %q", got)
+	}
+}
