@@ -63,6 +63,7 @@ func BuiltinSlashCommands() []BuiltinSlashCommand {
 		{Name: "reload", Description: "Reload keybindings, skills, prompts, themes, and context files", run: (*InteractiveMode).reloadCommand},
 		{Name: "quit", Description: "Quit " + AppName, run: func(m *InteractiveMode, _ string) error { m.requestQuit(); return nil }, headless: func(sc *SlashContext) error { sc.Quit(); return nil }},
 		{Name: "agents", Description: "List, open, or stop background agents", ArgumentHint: "[<id>|stop [id]]", run: func(m *InteractiveMode, args string) error { m.agentsCommand(args); return nil }},
+		{Name: "gtw", Description: "Toggle Global Thermonuclear War: every model proposes, the top one synthesizes", ArgumentHint: "[on|off]", run: (*InteractiveMode).gtwCommand},
 		{Name: "goal", Description: "Work toward a goal across turns until an audit confirms it; status, stop, resume", ArgumentHint: "[<objective>|stop|resume]", run: (*InteractiveMode).goalCommand},
 		{Name: llama.CommandName, Description: llama.CommandDescription, run: (*InteractiveMode).llamaCommand},
 		{Name: "router", Description: "Model router: status, on, off, pin <tier>, unpin, why, classify <prompt>", ArgumentHint: "[status|on|off|pin <tier>|unpin|why]", run: (*InteractiveMode).routerCommand},

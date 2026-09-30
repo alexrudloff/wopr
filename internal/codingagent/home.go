@@ -601,6 +601,20 @@ func (m *InteractiveMode) inWar() bool {
 	return w != nil && w.WarCouncil()
 }
 
+// gtwCommand is /gtw: toggles Global Thermonuclear War, or with "on" or
+// "off" sets it.
+func (m *InteractiveMode) gtwCommand(args string) error {
+	switch want := strings.TrimSpace(strings.ToLower(args)); {
+	case want == "on" && m.inWar(), want == "off" && !m.inWar():
+		m.showFlash("Global Thermonuclear War is already " + want)
+	case want == "" || want == "on" || want == "off":
+		m.globalThermonuclearWar(m.runCtxOrBackground())
+	default:
+		m.showFlash("Usage: /gtw [on|off]")
+	}
+	return nil
+}
+
 // globalThermonuclearWar toggles Global Thermonuclear War for the current
 // session. On: the strongest model at its deepest thinking, with routing off
 // and the war council on, every other model the user set up proposing on

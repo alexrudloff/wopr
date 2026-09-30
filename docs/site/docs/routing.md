@@ -208,7 +208,7 @@ pauses it (status 1).
 
 ## War council
 
-Global Thermonuclear War (`ctrl+x g`) throws everything you have at the
+Global Thermonuclear War (`ctrl+x g` or `/gtw`) throws everything you have at the
 work. It switches the session you're in to the top model in your order at
 its maximum thinking, with routing off, and turns on the war council: on every prompt,
 every other model you set up (subscriptions, API keys, and your own
@@ -229,7 +229,7 @@ list and as "N running" at the prompt.
 While it's on, the prompt's bar and model line turn war red and read
 "☢ GLOBAL THERMONUCLEAR WAR · model · max thinking · council N" (just
 "☢ GTW" when narrow), and the sidebar shows the council's size. Press
-`ctrl+x g` again, or pick **End Global Thermonuclear War** in the command
+`ctrl+x g` or `/gtw` again, or pick **End Global Thermonuclear War** in the command
 palette, to end it: the council turns off and the session goes back to the
 routing, model, thinking level, and subagents it had before. Both the war
 and the setup to go back to are kept with the session, so `/resume` restores

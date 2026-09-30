@@ -33,6 +33,7 @@ The dispatcher is exhaustive: every built-in command is listed here. Prompt temp
 | `/hotkeys` | List keyboard shortcuts. |
 | `/quit` | Exit WOPR. Asks first while background agents run. |
 | `/agents [<id>\|stop [id]]` | List this session's subagents (enter opens one's transcript, ctrl+k stops it), open one by id, or stop one. See [Routing and subagents](routing.md). |
+| `/gtw [on\|off]` | Toggle Global Thermonuclear War on the current session (same as `ctrl+x g`); `on` or `off` sets it. See [war council](routing.md#war-council). |
 | `/goal [<objective>\|stop\|resume]` | Work toward an objective across turns until an independent audit confirms it; with no argument, show its status. `--turns`, `--cost`, and `--time` set its caps. See [Routing and subagents](routing.md#goals). |
 | `/trust` | Set the trust decision for the current project. |
 | `/llama` | Manage a local llama.cpp server. |
