@@ -303,8 +303,14 @@ func (h *HStack) Render(width int) []string {
 	if len(entries) == 0 {
 		return []string{}
 	}
+	// Only auto-sized entries need their natural width. Measuring one with a
+	// basis renders it at the full width and then again at its share, which
+	// for the transcript re-rendered all of history twice a frame.
 	intrinsicWidths := make([]int, len(entries))
 	for i, entry := range entries {
+		if entry.Basis != nil {
+			continue
+		}
 		mx := 0
 		for _, line := range entry.Component.Render(safeWidth) {
 			mx = max(mx, widthx.VisibleWidth(line))
