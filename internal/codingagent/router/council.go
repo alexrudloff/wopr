@@ -1,5 +1,7 @@
 package router
 
+import "cmp"
+
 // War council: Global Thermonuclear War asks every routed model the user
 // set up, in parallel, and the orchestrator synthesizes their proposals.
 
@@ -35,6 +37,11 @@ func (r *Router) CouncilMembers(private bool, exclude ...string) []CouncilMember
 		default:
 			if _, ok := r.host.ModelInfo(ref.Provider, ref.Model); !ok {
 				m.Skip = "not signed in"
+				if u, ok := r.host.(interface {
+					Unavailable(provider, model string) string
+				}); ok {
+					m.Skip = cmp.Or(u.Unavailable(ref.Provider, ref.Model), m.Skip)
+				}
 			}
 		}
 		out = append(out, m)

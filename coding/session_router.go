@@ -77,6 +77,15 @@ func (h routerHost) ModelInfo(provider, model string) (router.ModelInfo, bool) {
 	}, true
 }
 
+// Unavailable says why provider/model can't run: "not signed in" or
+// "unknown model" (an ID the catalog and models.json don't have).
+func (h routerHost) Unavailable(provider, model string) string {
+	if _, err := h.s.routeModel(provider, model); err != nil && strings.HasPrefix(err.Error(), "unknown model") {
+		return "unknown model"
+	}
+	return ""
+}
+
 func (h routerHost) APIKey(provider string) string {
 	registry := h.s.services.Registry()
 	if key, ok := registry.RuntimeAPIKey(provider); ok && key != "" {
