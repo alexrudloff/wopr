@@ -75,6 +75,9 @@ type OpenAIResponsesConfig struct {
 	// Codex selects the ChatGPT Codex request and transport protocol rather
 	// than the generic Responses protocol.
 	Codex bool
+	// Input is the model's resolved input types (models.json definitions and
+	// overrides included); nil falls back to the model catalog.
+	Input []string
 }
 
 type openAIResponsesProvider struct {
@@ -419,6 +422,9 @@ func (p *openAIResponsesProvider) resolvedModel() *Model {
 // reasoning clamp with, so a codex or non-codex provider never gates images on a
 // different catalog entry than the one that drives thinking.
 func (p *openAIResponsesProvider) modelSupportsImages() bool {
+	if accepts, known := AcceptsImages(p.cfg.Input); known {
+		return accepts
+	}
 	generated, ok := p.resolveResponsesModel()
 	if !ok {
 		return false

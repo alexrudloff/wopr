@@ -11,6 +11,27 @@ OpenAI-compatible API with static models.
 
 See [Models](models.md) before you add a provider.
 
+## Images
+
+A model's `input` lists what it accepts. Without it, a models.json model is
+text-only: pasted images and screenshots from `read` reach it as the line
+`image content omitted because this model does not accept images`. Add
+`"image"` for a vision model:
+
+```json
+{
+  "providers": {
+    "local": {
+      "baseUrl": "http://127.0.0.1:8080/v1",
+      "api": "openai-completions",
+      "models": [{ "id": "qwen-vl", "input": ["text", "image"] }]
+    }
+  }
+}
+```
+
+`modelOverrides` can set `input` on a model wopr already knows.
+
 ## Security
 
 A custom provider endpoint receives prompts, model responses, headers, and credentials. Treat its configuration as security-sensitive.

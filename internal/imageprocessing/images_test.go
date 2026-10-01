@@ -90,7 +90,7 @@ func TestNormalizeToolResultImagesResizesBeforeHistory(t *testing.T) {
 	if width := image.Bounds().Dx(); width > MaxLongestSide {
 		t.Fatalf("normalized width = %d, want <= %d", width, MaxLongestSide)
 	}
-	if !strings.Contains(normalized.Content, "original 2200x1100, displayed at 2000x1000") {
+	if !strings.Contains(normalized.Content, "original 2200x1100, displayed at 2048x1024") {
 		t.Fatalf("normalization hint missing: %q", normalized.Content)
 	}
 	if strings.Contains(normalized.Content, "converted from") {

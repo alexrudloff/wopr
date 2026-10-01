@@ -34,6 +34,9 @@ type GoogleConfig struct {
 	APIVersion string
 	// ExtraHeaders are added to every request.
 	ExtraHeaders map[string]string
+	// Input is the model's resolved input types (models.json definitions and
+	// overrides included); nil falls back to the model catalog.
+	Input []string
 }
 
 type googleProvider struct {
@@ -543,7 +546,11 @@ func (p *googleProvider) Stream(ctx context.Context, transcript TranscriptContex
 	}
 	resolved := CollapseSystemMessages(transcript)
 	messages := resolved.Messages()
-	contents := geminiConvertMessages(WithoutInitialSystemMessage(messages), p.cfg.ProviderID, p.cfg.Model, model.Capabilities.SupportsImages)
+	supportsImages := model.Capabilities.SupportsImages
+	if accepts, known := AcceptsImages(p.cfg.Input); known {
+		supportsImages = accepts
+	}
+	contents := geminiConvertMessages(WithoutInitialSystemMessage(messages), p.cfg.ProviderID, p.cfg.Model, supportsImages)
 
 	req := geminiRequest{
 		Contents: contents,

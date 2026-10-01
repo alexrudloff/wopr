@@ -181,6 +181,13 @@ func (s *Session) efficiencyProject(messages []agent.AgentMessage) []agent.Agent
 // projectImages keeps the newest images when image pruning is on, and with
 // it on or off keeps the request under the provider's size limit.
 func (s *Session) projectImages(messages []agent.AgentMessage) []agent.AgentMessage {
+	// A text-only model's images are replaced before the request is built,
+	// so they neither need pruning nor count toward its size.
+	if model := s.activeModel(); model != nil {
+		if accepts, known := ai.AcceptsImages(model.Input); known && !accepts {
+			return messages
+		}
+	}
 	keep := 0
 	if s.efficiency.cfg.ImagePruning {
 		keep = s.efficiency.cfg.KeepImages

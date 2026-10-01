@@ -122,7 +122,7 @@ set it in `~/.wopr/agent/settings.json`:
 | `terminal.showImages` | boolean | `true` | Render images when the terminal accepts them. |
 | `terminal.imageWidthCells` | number | `60` | Width of a rendered image, in terminal cells. |
 | `terminal.showTerminalProgress` | boolean | `false` | Show OSC 9;4 progress in the terminal tab. |
-| `images.autoResize` | boolean | `true` | Resize an image to fit the width. |
+| `images.autoResize` | boolean | `true` | Resize images before sending them: at most 2048 pixels on a side and 2,500 32-pixel tiles, re-encoded as PNG, or JPEG from quality 85 down when PNG is over 4.5 MB. An image that already fits is sent unchanged. A resized image carries a note with its original size. |
 | `images.blockImages` | boolean | `false` | Hide images in the transcript. Images are still sent to the provider. |
 
 ## Resources

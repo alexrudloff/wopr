@@ -66,6 +66,9 @@ func BuildModelWithWarning(spec string, svcs *Services) (*ai.Model, string, erro
 	provider = newProviderAttributionProvider(provider, providerID, entry.BaseURL, func() bool {
 		return svcs.settings.GetEnableAttributionHeaders()
 	}, entry.Headers)
+	if accepts, known := ai.AcceptsImages(entry.Input); known && !accepts && providerID != "test-faux" {
+		provider.(*providerAttributionProvider).textOnly = true
+	}
 
 	if providerID == "test-faux" {
 		entry.Input = []string{"text", "image"}
@@ -259,6 +262,7 @@ func buildProviderForEntry(providerID, modelID string, apiKind ai.API, entry ico
 			Env:            ai.ProviderEnv(maps.Clone(entry.Env)),
 			Compat:         cloneCompat(entry.Compat),
 			Insecure:       entry.Insecure,
+			Input:          slices.Clone(entry.Input),
 		}), nil
 	case ai.APIOpenAIResponses:
 		return ai.NewOpenAIResponsesProvider(ai.OpenAIResponsesConfig{
@@ -272,6 +276,7 @@ func buildProviderForEntry(providerID, modelID string, apiKind ai.API, entry ico
 			Env:            ai.ProviderEnv(maps.Clone(entry.Env)),
 			Compat:         cloneCompat(entry.Compat),
 			IsReasoning:    entry.Reasoning,
+			Input:          slices.Clone(entry.Input),
 		}), nil
 	case ai.APIOpenAICodexResponses:
 		return ai.NewOpenAICodexResponsesProvider(ai.OpenAICodexResponsesConfig{
@@ -312,6 +317,7 @@ func buildProviderForEntry(providerID, modelID string, apiKind ai.API, entry ico
 			ProviderID:   providerID,
 			APIVersion:   googleAPIVersionForBaseURL(baseURL),
 			ExtraHeaders: extraHeaders,
+			Input:        slices.Clone(entry.Input),
 		}), nil
 	case ai.APIGoogleVertex:
 		return ai.NewGoogleVertexProvider(ai.GoogleVertexConfig{
@@ -348,6 +354,7 @@ func buildProviderForEntry(providerID, modelID string, apiKind ai.API, entry ico
 			Env:            ai.ProviderEnv(maps.Clone(entry.Env)),
 			Compat:         cloneCompat(entry.Compat),
 			Insecure:       entry.Insecure,
+			Input:          slices.Clone(entry.Input),
 		}), nil
 	}
 }
@@ -529,6 +536,10 @@ type providerAttributionProvider struct {
 	baseURL            string
 	attributionEnabled func() bool
 	configured         map[string]string
+	// textOnly marks a model whose input types leave out images: every
+	// image in the transcript becomes ai.ImageOmittedText before any client
+	// sees it.
+	textOnly bool
 }
 
 func newProviderAttributionProvider(provider ai.Provider, providerID, baseURL string, attributionEnabled func() bool, configured map[string]string) ai.Provider {
@@ -542,6 +553,9 @@ func newProviderAttributionProvider(provider ai.Provider, providerID, baseURL st
 }
 
 func (provider *providerAttributionProvider) Stream(ctx context.Context, transcript ai.TranscriptContext, options ai.StreamOptions) (*ai.AssistantMessageEventStream, error) {
+	if provider.textOnly {
+		transcript = transcript.WithoutImages()
+	}
 	attributionEnabled := false
 	if provider.attributionEnabled != nil {
 		attributionEnabled = provider.attributionEnabled()

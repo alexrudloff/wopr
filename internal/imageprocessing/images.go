@@ -3,7 +3,8 @@
 //
 // Uses the Go standard library plus golang.org/x/image:
 //  1. Decode + apply EXIF orientation once.
-//  2. If needed, resize to fit within 2000x2000.
+//  2. If needed, resize to fit within 2048x2048 and a budget of 2,500
+//     32-pixel tiles (about 2.56 megapixels).
 //  3. Try PNG first, then JPEG quality steps until the base64 payload fits
 //     under 4.5 MB.
 //  4. If still too large, shrink dimensions by 25% and retry.
@@ -34,9 +35,14 @@ import (
 )
 
 const (
-	MaxLongestSide  = 2000
+	MaxLongestSide  = 2048
 	MaxEncodedBytes = int(4.5 * 1024 * 1024) // base64 payload bytes
-	JPEGQuality     = 80
+	JPEGQuality     = 85
+	// tileSize and maxTiles bound an image's area: models bill and see images
+	// in 32-pixel tiles, so a wide screenshot inside 2048x2048 can still be
+	// far more tiles than the model uses.
+	tileSize = 32
+	maxTiles = 2500
 )
 
 var ErrImageTooLarge = errors.New("image: could not be resized below inline image size limit")
@@ -333,7 +339,7 @@ func prepareImageForLLM(in []byte, options *ai.ModelImageResizeOptions) (prepare
 	srcMime := mimeForFormat(srcFormat)
 	inputBase64Size := encodedSizeBase64(in)
 
-	if originalWidth <= limits.MaxWidth && originalHeight <= limits.MaxHeight && inputBase64Size < limits.MaxBytes && srcFormat != "bmp" {
+	if originalWidth <= limits.MaxWidth && originalHeight <= limits.MaxHeight && tiles(originalWidth, originalHeight) <= maxTiles && inputBase64Size < limits.MaxBytes && srcFormat != "bmp" {
 		return preparedImageResult{
 			Data:           in,
 			MIME:           srcMime,
@@ -346,6 +352,7 @@ func prepareImageForLLM(in []byte, options *ai.ModelImageResizeOptions) (prepare
 	}
 
 	currentWidth, currentHeight := fitWithinBounds(originalWidth, originalHeight, limits.MaxWidth, limits.MaxHeight)
+	currentWidth, currentHeight = fitTileBudget(currentWidth, currentHeight)
 	qualitySteps := []int{limits.JPEGQuality}
 	for _, quality := range []int{85, 70, 55, 40} {
 		if quality != limits.JPEGQuality {
@@ -652,6 +659,25 @@ func fitWithinBounds(width, height, maxWidth, maxHeight int) (int, int) {
 		targetHeight = maxHeight
 	}
 	return max(1, targetWidth), max(1, targetHeight)
+}
+
+// tiles is the number of tileSize tiles a width x height image covers.
+func tiles(width, height int) int {
+	return ((width + tileSize - 1) / tileSize) * ((height + tileSize - 1) / tileSize)
+}
+
+// fitTileBudget scales width x height down, keeping its aspect ratio, until
+// it covers at most maxTiles tiles: scale by area, then round the scaled
+// tile grid down so the integer size stays within the budget.
+func fitTileBudget(width, height int) (int, int) {
+	if tiles(width, height) <= maxTiles {
+		return width, height
+	}
+	w, h := float64(width), float64(height)
+	scale := math.Sqrt(tileSize * tileSize * maxTiles / w / h)
+	wide, high := w*scale/tileSize, h*scale/tileSize
+	scale *= min(math.Floor(wide)/wide, math.Floor(high)/high)
+	return max(1, int(math.Floor(w*scale))), max(1, int(math.Floor(h*scale)))
 }
 
 func formatDimensionNote(result preparedImageResult) string {

@@ -53,6 +53,9 @@ type OpenAIConfig struct {
 	DynamicHeaders func(transcript TranscriptContext, opts StreamOptions) map[string]string
 	// wopr additive (D36): opt in to TLS without certificate verification.
 	Insecure bool
+	// Input is the model's resolved input types (models.json definitions and
+	// overrides included); nil falls back to the model catalog.
+	Input []string
 }
 
 // ModelCompat is the per-model compat bag shared by the model catalog,
@@ -530,6 +533,9 @@ func qwenReasoningEffort(reasoningOn, supportsReasoningEffort bool, mappedEffort
 // input, resolving the catalog entry with the same precedence as
 // reasoning-level resolution.
 func (p *openAIProvider) modelSupportsImages() bool {
+	if accepts, known := AcceptsImages(p.cfg.Input); known {
+		return accepts
+	}
 	var generated *CatalogModel
 	var ok bool
 	if p.cfg.ProviderID == "openrouter" {

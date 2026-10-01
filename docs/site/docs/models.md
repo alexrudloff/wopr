@@ -48,6 +48,7 @@ Every model entry the host knows about carries:
 - `Reasoning` - bool; whether the model supports `thinking_level`.
 - `ThinkingLevelMap` - provider-specific wiring per level.
 - `MaxTokens` / `ContextWindow` - for context usage math.
+- `Input` - `text`, plus `image` for a model that accepts images. Every provider sends images only to models that list `image`; others get a one-line placeholder.
 - `Cost` (if known) - input/output rates.
 
 ## Adding a model
