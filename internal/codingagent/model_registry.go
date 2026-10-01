@@ -46,9 +46,12 @@ type ModelEntry struct {
 	CacheReadCost    float64
 	CacheWriteCost   float64
 	CostTiers        []ai.CostTier
-	PromptCache      ai.ModelPromptCache
-	Env              map[string]string // provider-scoped env overrides (auth.json env)
-	Insecure         bool              // skip TLS verification (self-signed/internal-CA on-prem endpoints)
+	// PriceUnknown marks a model nothing gave a price for: zero costs are
+	// unknown, not free.
+	PriceUnknown bool
+	PromptCache  ai.ModelPromptCache
+	Env          map[string]string // provider-scoped env overrides (auth.json env)
+	Insecure     bool              // skip TLS verification (self-signed/internal-CA on-prem endpoints)
 }
 
 // ─── models.json schema ──────────────────────────────────────────────────────
@@ -582,6 +585,7 @@ func catalogModelEntry(providerID, modelID string, generated *ai.KnownModel) Mod
 		CacheReadCost:    generated.CacheReadCost,
 		CacheWriteCost:   generated.CacheWriteCost,
 		CostTiers:        append([]ai.CostTier(nil), generated.Tiers...),
+		PriceUnknown:     generated.PriceUnknown,
 		PromptCache:      maps.Clone(generated.PromptCache),
 	}
 }
@@ -1147,6 +1151,7 @@ func (r *ModelRegistry) applyOverride(e *ModelEntry, ovr modelOverrideJSON) {
 		e.MaxTokens = *ovr.MaxTokens
 	}
 	if ovr.Cost != nil {
+		e.PriceUnknown = false
 		if ovr.Cost.Input != nil {
 			e.InputCost = *ovr.Cost.Input
 		}

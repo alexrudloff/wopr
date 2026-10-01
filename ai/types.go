@@ -26,7 +26,7 @@ var maxSSETokenSize = bufio.MaxScanTokenSize << 9 // 32 MB
 // without breaking the wopr build, while [KnownAPIs] enumerates the known
 // values.
 //
-// Use cases: model catalog (CatalogModel.API), extension provider
+// Use cases: model catalog (KnownModel.API), extension provider
 // registration (extension.ProviderConfig.API + ProviderModelConfig.API),
 // stream dispatch (matches one of the Stream<API> handlers).
 type API string
@@ -348,6 +348,9 @@ type UsageCost struct {
 	CacheRead  float64 `json:"cacheRead"`
 	CacheWrite float64 `json:"cacheWrite"`
 	Total      float64 `json:"total"`
+	// Unknown marks usage of a model nothing gave a price for: the zero
+	// amounts are unknown, not free.
+	Unknown bool `json:"unknown,omitempty"`
 }
 
 // DeferredHandle identifies a provider-side deferred response and the data
@@ -565,6 +568,9 @@ type ModelCapabilities struct {
 	// CostTiers overrides the base rates for high-volume requests: the highest
 	// matching InputTokensAbove threshold applies to the whole request.
 	CostTiers []CostTier
+	// PriceUnknown marks a model nothing gave a price for; its zero rates
+	// are unknown, not free.
+	PriceUnknown bool
 }
 
 // ModelPromptCache gives the best-effort prompt-cache lifetime in seconds for each retention tier.
@@ -623,6 +629,8 @@ type ModelCost struct {
 	CacheRead  float64    `json:"cacheRead"`
 	CacheWrite float64    `json:"cacheWrite"`
 	Tiers      []CostTier `json:"tiers,omitempty"`
+	// Unknown marks rates nothing gave; usage priced with them is unknown.
+	Unknown bool `json:"unknown,omitempty"`
 }
 
 // AnthropicAllowedFallbackModel describes a server-side fallback accepted by Anthropic.

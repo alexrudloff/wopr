@@ -35,15 +35,20 @@ func (w *setupWizard) addModels(picked []*setupModel) []*setupModel {
 		return nil
 	}
 	w.reload()
-	cost := 0.0
+	cost, unpriced := 0.0, false
 	for _, s := range picked {
 		w.m.measureModel(s)
 		if s.Tier == router.CostPaid {
-			cost += requestCost(s.spec())
+			c, known := requestCost(s.spec())
+			cost += c
+			unpriced = unpriced || !known
 		}
 	}
 	message := "Added " + strings.Join(added, ", ") + ". Measuring speed in the background."
-	if cost > 0 {
+	switch {
+	case unpriced:
+		message += " Measuring costs a little; some of these models list no price."
+	case cost > 0:
 		message += fmt.Sprintf(" Measuring costs about $%.4f.", cost)
 	}
 	w.m.showFlash(message)

@@ -329,6 +329,7 @@ type footerData struct {
 type footerUsageTotals struct {
 	input, output, cacheRead, cacheWrite int
 	cost                                 float64
+	costUnknown                          bool
 	latestCacheHitRate                   *float64
 }
 
@@ -352,8 +353,12 @@ func footerUsageParts(u footerUsageTotals, usingSubscription bool) []string {
 	if (u.cacheRead > 0 || u.cacheWrite > 0) && u.latestCacheHitRate != nil {
 		parts = append(parts, "CH"+strconv.FormatFloat(*u.latestCacheHitRate, 'f', 1, 64)+"%")
 	}
-	if (u.cost != 0 && !math.IsNaN(u.cost)) || usingSubscription {
+	if (u.cost != 0 && !math.IsNaN(u.cost)) || usingSubscription || u.costUnknown {
 		costStr := "$" + strconv.FormatFloat(u.cost, 'f', 3, 64)
+		if u.costUnknown {
+			// Some usage had no price: the total is a floor.
+			costStr += "+?"
+		}
 		if usingSubscription {
 			costStr += " (sub)"
 		}

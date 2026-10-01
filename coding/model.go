@@ -174,6 +174,7 @@ func modelFromEntry(entry icodingagent.ModelEntry, provider ai.Provider) *ai.Mod
 			CacheReadCostPer1M:  entry.CacheReadCost,
 			CacheWriteCostPer1M: entry.CacheWriteCost,
 			CostTiers:           append([]ai.CostTier(nil), entry.CostTiers...),
+			PriceUnknown:        entry.PriceUnknown,
 		},
 		Input:            input,
 		InputLimits:      entry.InputLimits.Clone(),

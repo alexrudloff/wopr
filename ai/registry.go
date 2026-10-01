@@ -88,6 +88,7 @@ func (m *KnownModel) ToCapabilities() ModelCapabilities {
 		CacheReadCostPer1M:  m.CacheReadCost,
 		CacheWriteCostPer1M: m.CacheWriteCost,
 		CostTiers:           m.Tiers,
+		PriceUnknown:        m.PriceUnknown,
 		SupportsToolUse:     true, // the catalog assumes tool-use universally; per-API gating happens at provider layer
 	}
 	for _, c := range m.Capabilities {

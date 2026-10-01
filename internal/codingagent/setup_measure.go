@@ -273,14 +273,15 @@ func thinkingSummary(m *modelMeasure) string {
 }
 
 // requestCost estimates what one tiny measuring request costs a
-// pay-per-token model, from the catalog's prices, or 0 when unknown.
-func requestCost(spec string) float64 {
-	cat, ok := ai.LookupModelExact(spec)
-	if !ok {
-		return 0
+// pay-per-token model, from its prices; known is false when nothing gave a
+// price.
+func requestCost(spec string) (cost float64, known bool) {
+	m, ok := ai.LookupModelExact(spec)
+	if !ok || m.PriceUnknown {
+		return 0, false
 	}
 	const inTokens, outTokens = 30, 20
-	return (inTokens*cat.InputCostPerMTokens + outTokens*cat.OutputCostPerMTokens) / 1e6
+	return (inTokens*m.InputCostPerMTokens + outTokens*m.OutputCostPerMTokens) / 1e6, true
 }
 
 // reloadRouterQuietly picks up new measurements when nothing is running.

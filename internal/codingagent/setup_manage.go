@@ -430,7 +430,10 @@ func (w *setupWizard) openConnection(id string) {
 		d := tui.NewDialogSelect(c.Name+" · "+kindLabel(c.Kind), build(), "")
 		d.Intro = []string{measureWhy}
 		if c.Kind == setupViaAPIKey && len(c.Models) > 0 {
-			if cost := requestCost(c.Models[0].spec()); cost > 0 {
+			switch cost, known := requestCost(c.Models[0].spec()); {
+			case !known:
+				d.Intro = []string{measureWhy + " For a model paid per token that costs a little; this one lists no price."}
+			case cost > 0:
 				d.Intro = []string{measureWhy + fmt.Sprintf(" For a model paid per token that costs about $%.4f.", cost)}
 			}
 		}

@@ -37,6 +37,7 @@ type modelSnapshot struct {
 	Input    int           `json:"input,omitempty"`
 	Output   int           `json:"output,omitempty"`
 	Cost     float64       `json:"cost,omitempty"`
+	Unknown  bool          `json:"costUnknown,omitempty"`
 	Timed    speedSnapshot `json:"timed"`
 }
 
@@ -73,7 +74,7 @@ func (m *InteractiveMode) sidebarSnapshotNow() sidebarSnapshot {
 	if side.speed.session == m.crashSessionFile() {
 		snap.Speed = snapSpeed(side.speed.speedSums)
 		for _, u := range side.speed.models {
-			snap.Models = append(snap.Models, modelSnapshot{Provider: u.provider, Model: u.model, Calls: u.calls, Input: u.input, Output: u.output, Cost: u.cost, Timed: snapSpeed(u.timed)})
+			snap.Models = append(snap.Models, modelSnapshot{Provider: u.provider, Model: u.model, Calls: u.calls, Input: u.input, Output: u.output, Cost: u.cost, Unknown: u.costUnknown, Timed: snapSpeed(u.timed)})
 		}
 	}
 	snap.LastTTFTMs, snap.LastRate = side.ttft.Milliseconds(), side.tokensPerSec
@@ -150,7 +151,7 @@ func (m *InteractiveMode) restoreSidebar() {
 	side.speed.speedSums = snap.Speed.sums()
 	for _, u := range snap.Models {
 		used := side.speed.model(path, u.Provider, u.Model)
-		used.calls, used.input, used.output, used.cost, used.timed = u.Calls, u.Input, u.Output, u.Cost, u.Timed.sums()
+		used.calls, used.input, used.output, used.cost, used.costUnknown, used.timed = u.Calls, u.Input, u.Output, u.Cost, u.Unknown, u.Timed.sums()
 	}
 	side.ttft, side.tokensPerSec = time.Duration(snap.LastTTFTMs)*time.Millisecond, snap.LastRate
 	side.savings, side.savedTokens, side.routingSaved = snap.Savings, snap.SavedTokens, snap.RoutingSaved

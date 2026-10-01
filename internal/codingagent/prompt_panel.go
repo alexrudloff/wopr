@@ -311,8 +311,11 @@ func (m *InteractiveMode) contextUsageText(snap footerData) string {
 	if window := snap.contextWindow(); window > 0 && !snap.contextUnknown {
 		text += fmt.Sprintf(" (%d%%)", int(math.Round(float64(snap.contextTokens)/float64(window)*100)))
 	}
-	if snap.usage.cost > 0 && !math.IsNaN(snap.usage.cost) {
+	if snap.usage.cost > 0 && !math.IsNaN(snap.usage.cost) || snap.usage.costUnknown {
 		text += fmt.Sprintf(" · $%.2f", snap.usage.cost)
+		if snap.usage.costUnknown {
+			text += "+?"
+		}
 	}
 	return text
 }

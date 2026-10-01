@@ -19,6 +19,9 @@ type SessionTokenStats struct {
 	CacheWrite int
 	Total      int
 	Cost       float64 // USD
+	// CostUnknown marks a session that used a model nothing gave a price
+	// for: Cost leaves that usage out.
+	CostUnknown bool
 }
 
 // SessionAccounting is the immutable all-entry accounting maintained with a Session.
@@ -174,6 +177,7 @@ func (s *Session) FooterUsageTotals() footerUsageTotals {
 		cacheRead:          tokens.CacheRead,
 		cacheWrite:         tokens.CacheWrite,
 		cost:               tokens.Cost,
+		costUnknown:        tokens.CostUnknown,
 		latestCacheHitRate: s.stats.stats.LatestCacheHitRate,
 	}
 }
@@ -188,6 +192,7 @@ func (a *sessionAccountingAccumulator) addUsage(key string, usage *ai.Usage) {
 	a.stats.Tokens.CacheWrite += usage.CacheWrite
 	a.stats.Tokens.Total += usage.Input + usage.Output + usage.CacheRead + usage.CacheWrite
 	a.stats.Tokens.Cost += usage.Cost.Total
+	a.stats.Tokens.CostUnknown = a.stats.Tokens.CostUnknown || usage.Cost.Unknown
 
 	if a.usageByKey == nil {
 		a.usageByKey = make(map[string]SessionUsageBreakdown)

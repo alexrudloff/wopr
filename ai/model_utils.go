@@ -15,6 +15,7 @@ func (m *Model) CostRates() ModelCost {
 		CacheRead:  c.CacheReadCostPer1M,
 		CacheWrite: c.CacheWriteCostPer1M,
 		Tiers:      c.CostTiers,
+		Unknown:    c.PriceUnknown,
 	}
 }
 
@@ -54,6 +55,7 @@ func calculateUsageCost(rates ModelCost, usage *Usage) UsageCost {
 	usage.Cost.CacheRead = float64((cacheRead / 1000000) * float64(usage.CacheRead))
 	usage.Cost.CacheWrite = (float64(cacheWrite*float64(shortWrite)) + float64(input*2*float64(longWrite))) / 1000000
 	usage.Cost.Total = usage.Cost.Input + usage.Cost.Output + usage.Cost.CacheRead + usage.Cost.CacheWrite
+	usage.Cost.Unknown = rates.Unknown && inputTokens+usage.Output > 0
 	return usage.Cost
 }
 

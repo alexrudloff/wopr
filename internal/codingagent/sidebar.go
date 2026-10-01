@@ -545,6 +545,7 @@ func (s *sidebar) modelsPage(width int) (string, []string) {
 		calls, agents int
 		tokens        int
 		cost          float64
+		costUnknown   bool
 		timed         speedSums
 	}
 	rows := map[string]*row{}
@@ -558,7 +559,7 @@ func (s *sidebar) modelsPage(width int) (string, []string) {
 	if speed.session == session {
 		for _, u := range speed.models {
 			r := get(u.provider, u.model)
-			r.calls, r.tokens, r.cost, r.timed = u.calls, u.input+u.output, u.cost, u.timed
+			r.calls, r.tokens, r.cost, r.costUnknown, r.timed = u.calls, u.input+u.output, u.cost, u.costUnknown, u.timed
 		}
 	}
 	if registry := s.m.agentsRegistry(); registry != nil {
@@ -588,7 +589,7 @@ func (s *sidebar) modelsPage(width int) (string, []string) {
 			out = append(out, th.FgText("textMuted", fmt.Sprintf("+%d more", len(sorted)-i)))
 			break
 		}
-		out = append(out, spread(th.FgText("text", widthx.TruncateToWidth(r.name, max(1, width-9), "…", false)), th.FgText("text", fmt.Sprintf("$%.2f", r.cost)), width))
+		out = append(out, spread(th.FgText("text", widthx.TruncateToWidth(r.name, max(1, width-9), "…", false)), th.FgText("text", modelCostText(r.cost, r.costUnknown)), width))
 		var parts []string
 		if r.calls > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", r.calls, plural(r.calls, "reply", "replies")))
@@ -789,4 +790,16 @@ func (m *InteractiveMode) recordToolFileChange(comp *tui.ToolExecutionComponent,
 		}
 		m.recordFileChange(path, lines, 0)
 	}
+}
+
+// modelCostText is a model's cost in the sidebar: "$?" when nothing gave
+// its price, "$0.12+?" when only part of its usage was priced.
+func modelCostText(cost float64, unknown bool) string {
+	switch {
+	case unknown && cost == 0:
+		return "$?"
+	case unknown:
+		return fmt.Sprintf("$%.2f+?", cost)
+	}
+	return fmt.Sprintf("$%.2f", cost)
 }

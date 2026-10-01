@@ -51,6 +51,7 @@ type modelUsage struct {
 	calls           int
 	input, output   int
 	cost            float64
+	costUnknown     bool
 	timed           speedSums
 }
 
@@ -206,6 +207,7 @@ func (m *InteractiveMode) observeSidebarEvent(ev agent.AgentEvent) {
 			used.input += message.Usage.Input + message.Usage.CacheRead + message.Usage.CacheWrite
 			used.output += message.Usage.Output
 			used.cost += message.Usage.Cost.Total
+			used.costUnknown = used.costUnknown || message.Usage.Cost.Unknown
 		}
 		if !side.requestStart.IsZero() && !side.firstToken.IsZero() && message.Usage != nil && message.StopReason != ai.StopReasonError {
 			side.ttft = side.firstToken.Sub(side.requestStart)
