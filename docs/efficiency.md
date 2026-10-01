@@ -168,6 +168,18 @@ More keys in `efficiency.json`, each on by default:
   and formats, and fix what fails before finishing. Once per prompt; a turn
   that only reads and answers is never checked. The transcript shows it as
   one muted line.
+- `safetyBackup`: before a shell command that rewrites or discards git
+  history or work (`filter-branch`, `filter-repo`, `rebase`, `reset --hard`,
+  force `push`, `clean -f`, `checkout -- <path>`, `restore`, `branch -D`,
+  `reflog expire`, `gc --prune`, `stash drop`/`clear`), wopr bundles every
+  ref of the repo and saves its uncommitted diff and untracked files; before
+  a command that names a SQLite database (`.db`, `.sqlite`, …) with a `-wal`
+  or `-shm` file beside it, it copies all three. The tool result gets one
+  line saying where. Backups live in the session's runtime directory (the
+  system temp directory for an unsaved session), so compaction and temp-file
+  cleanup leave them alone; a session's backups stop at 200 MB, and a repo
+  whose refs and work haven't changed since its last backup isn't copied
+  again.
 - `learn`: every model starts from the numbers above and is tuned from real
   sessions, in small bounded steps, once a knob has enough events since it
   last moved (8, or 5 compactions). Values are per provider/model in

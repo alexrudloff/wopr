@@ -63,6 +63,9 @@ func (s *Session) initEfficiency() {
 	if state.cfg.StallNudge {
 		s.agent.AddAfterToolCallHook(s.fileWatch.afterToolCall(s.services.CWD()))
 	}
+	if state.cfg.SafetyBackup {
+		s.initSafetyBackup()
+	}
 	if state.cfg.FinalCheck {
 		s.agent.AddAfterToolCallHook(s.finalCheckAfterToolCall)
 		s.agent.SetFinishTurn(s.efficiencyFinishTurn)

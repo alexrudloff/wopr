@@ -60,6 +60,10 @@ type Config struct {
 	// would end, to verify each requirement of the request before it
 	// finishes.
 	FinalCheck bool `json:"finalCheck"`
+	// SafetyBackup copies a git repo's refs and uncommitted work, or a
+	// SQLite database with its -wal/-shm files, before a shell command that
+	// could destroy them.
+	SafetyBackup bool `json:"safetyBackup"`
 }
 
 // DefaultConfig turns every mechanism on.
@@ -80,12 +84,13 @@ func DefaultConfig() Config {
 		ImagePruning:              true,
 		KeepImages:                3,
 		FinalCheck:                true,
+		SafetyBackup:              true,
 	}
 }
 
 // Enabled reports whether any mechanism is on.
 func (c Config) Enabled() bool {
-	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch || c.ImagePruning || c.FinalCheck
+	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch || c.ImagePruning || c.FinalCheck || c.SafetyBackup
 }
 
 // Load reads <agentDir>/efficiency.json. Unknown keys and bad values are
@@ -109,7 +114,7 @@ func Load(agentDir string) (Config, error) {
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
 		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true /* retired; ignored */, "applyPatch": true, "quotaBalance": true, "learn": true,
-		"imagePruning": true, "keepImages": true, "finalCheck": true,
+		"imagePruning": true, "keepImages": true, "finalCheck": true, "safetyBackup": true,
 	}
 	for key := range raw {
 		if !known[key] {
