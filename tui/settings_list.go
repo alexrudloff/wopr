@@ -13,7 +13,7 @@ package tui
 //
 //     Automatically compact context when it gets too large
 //
-//     Type to search · Enter/Space to change · Esc to cancel
+//     Type to search · Enter/Space/←→ to change · Esc to cancel
 //
 // The selected row is highlighted, values are right-aligned in a
 // second column, the description of the selected item appears below
@@ -197,9 +197,9 @@ func (s *SettingsList) Render(width int) []string {
 
 // hintLines returns the key hint footer.
 func (s *SettingsList) hintLines(width int) []string {
-	hint := "  Enter/Space to change · Esc to cancel"
+	hint := "  Enter/Space/←→ to change · Esc to cancel"
 	if s.searchEnabled {
-		hint = "  Type to search · Enter/Space to change · Esc to cancel"
+		hint = "  Type to search · Enter/Space/←→ to change · Esc to cancel"
 	}
 	th := ActiveTheme()
 	muted := cmp.Or(th.Dim, "\x1b[38;2;102;102;102m")
@@ -300,6 +300,10 @@ func (s *SettingsList) HandleInput(data string) {
 		if len(display) > 0 {
 			s.cursor = (s.cursor + 1) % len(display)
 		}
+	case kb.Matches(data, KBEditorCursorLeft):
+		s.stepItem(-1)
+	case kb.Matches(data, KBEditorCursorRight):
+		s.stepItem(1)
 	case kb.Matches(data, KBSelectPageUp):
 		s.moveCursor(-10)
 	case kb.Matches(data, KBSelectPageDown):
@@ -348,12 +352,26 @@ func (s *SettingsList) activateItem() {
 		})
 		return
 	}
-	if len(item.Values) == 0 {
+	s.stepItem(1)
+}
+
+// stepItem moves the selected item's value by delta through its values,
+// wrapping; an unknown current value steps to the first (or last).
+func (s *SettingsList) stepItem(delta int) {
+	display := s.displayItems()
+	if s.cursor < 0 || s.cursor >= len(display) {
 		return
 	}
-	// Cycle to the next value (the first when the current one is unknown).
-	next := (slices.Index(item.Values, item.CurrentValue) + 1) % len(item.Values)
-	item.CurrentValue = item.Values[next]
+	item := &s.items[display[s.cursor]]
+	if item.Submenu != nil || len(item.Values) == 0 {
+		return
+	}
+	n := len(item.Values)
+	i := slices.Index(item.Values, item.CurrentValue)
+	if i < 0 && delta < 0 {
+		i = 0
+	}
+	item.CurrentValue = item.Values[((i+delta)%n+n)%n]
 	s.ChangedID = item.ID
 	s.ChangedValue = item.CurrentValue
 	s.done = true

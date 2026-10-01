@@ -1007,25 +1007,33 @@ func (m *InteractiveMode) settingsCommand(string) error {
 		return nil
 	}
 	items := settingsItemsVisible()
+	s := sm.Get()
+	tuiItems := make([]tui.SettingItem, len(items))
+	for i, item := range items {
+		tuiItems[i] = tui.SettingItem{
+			ID:           item.id,
+			Label:        item.label,
+			Description:  item.desc,
+			CurrentValue: item.get(s),
+			Values:       item.values,
+		}
+		if item.id == "model-thinking" {
+			tuiItems[i].Submenu = m.modelThinkingSettingsSubmenu
+		}
+	}
+	// One list for the whole loop, so a change keeps the cursor and the
+	// search where they were.
+	sl := tui.NewSettingsList(tuiItems)
 	for {
 		s := sm.Get()
-		tuiItems := make([]tui.SettingItem, len(items))
-		for i, item := range items {
-			tuiItems[i] = tui.SettingItem{
-				ID:           item.id,
-				Label:        item.label,
-				Description:  item.desc,
-				CurrentValue: item.get(s),
-				Values:       item.values,
-			}
-			if item.id == "model-thinking" {
-				tuiItems[i].Submenu = m.modelThinkingSettingsSubmenu
-			}
+		for _, item := range items {
+			sl.UpdateValue(item.id, item.get(s))
 		}
-		changedID, changedValue, ok := m.showSettingsList(tuiItems)
-		if !ok {
+		sl.Reset()
+		if !m.runDialog(modalOf(sl), dialogLarge) || sl.Cancelled() {
 			return nil
 		}
+		changedID, changedValue := sl.ChangedID, sl.ChangedValue
 		var selected *settingItem
 		for i := range items {
 			if items[i].id == changedID {
@@ -1060,16 +1068,6 @@ func (m *InteractiveMode) settingsCommand(string) error {
 		m.showStatus(fmt.Sprintf("%s: %s", selected.label, changedValue))
 		m.applySetting(selected.id, appliedValue)
 	}
-}
-
-// showSettingsList runs the two-column settings list in a dialog until a
-// value changes or it is dismissed.
-func (m *InteractiveMode) showSettingsList(items []tui.SettingItem) (id, value string, ok bool) {
-	sl := tui.NewSettingsList(items)
-	if !m.runDialog(modalOf(sl), dialogLarge) || sl.Cancelled() {
-		return "", "", false
-	}
-	return sl.ChangedID, sl.ChangedValue, true
 }
 
 // modelThinkingClearOverrideValue is the sentinel select-item value that
