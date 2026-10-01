@@ -20,6 +20,7 @@ import json
 import os
 import shlex
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any, override
 
@@ -28,6 +29,12 @@ from harbor.environments.base import BaseEnvironment
 from harbor.models.agent.context import AgentContext
 
 _OUTPUT = "wopr.jsonl"
+# Every efficiency.json switch, for --ak bare=true.
+_EFFICIENCY_KEYS = (
+    "actionFusion", "observationPack", "evidencePreservingReducer", "onlineContextCompact",
+    "toolOutputHalfLife", "stallNudge", "testRerunCap", "applyPatch", "quotaBalance", "learn",
+    "imagePruning", "finalCheck", "safetyBackup", "deadlineNotes",
+)
 _token_lock = asyncio.Lock()
 
 
@@ -54,10 +61,38 @@ async def _anthropic_token(min_expiry: str) -> str:
 
 
 class Wopr(BaseInstalledAgent):
-    def __init__(self, *args, thinking: str | None = None, min_token_expiry: str = "75m", **kwargs):
+    def __init__(
+        self,
+        *args,
+        thinking: str | None = None,
+        min_token_expiry: str = "75m",
+        tasks_dir: str | None = None,
+        deadline_fraction: float | str = 0.9,
+        bare: bool | str = False,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         self._thinking = thinking
         self._min_token_expiry = min_token_expiry
+        # tasks_dir holds the task folders (task.toml); with it, a run gets
+        # --deadline at deadline_fraction of the task's agent timeout.
+        self._tasks_dir = Path(tasks_dir) if tasks_dir else None
+        self._deadline_fraction = float(deadline_fraction)
+        # bare mimics Claude Code's CLAUDE_CODE_SIMPLE mode: every efficiency
+        # mechanism off, only bash/read/edit/write, no deadline.
+        self._bare = str(bare).lower() in ("1", "true", "yes")
+
+    def _task_timeout(self) -> float | None:
+        """The task's agent timeout, from its task.toml; the trial folder is
+        named <task>__<id>."""
+        if self._tasks_dir is None:
+            return None
+        task = self.logs_dir.parent.name.split("__")[0]
+        path = self._tasks_dir / task / "task.toml"
+        if not path.exists():
+            return None
+        cfg = tomllib.loads(path.read_text())
+        return (cfg.get("agent") or {}).get("timeout_sec")
 
     @staticmethod
     @override
@@ -93,6 +128,20 @@ class Wopr(BaseInstalledAgent):
         flags = f"--model {shlex.quote(self.model_name)}"
         if self._thinking:
             flags += f" --thinking {shlex.quote(self._thinking)}"
+        if self._bare:
+            flags += " --tools bash,read,edit,write"
+            off = {k: False for k in _EFFICIENCY_KEYS}
+            off["version"] = 1
+            await self.exec_as_agent(
+                environment,
+                command=(
+                    'mkdir -p "$HOME/.wopr/agent" && printf %s '
+                    + shlex.quote(json.dumps(off))
+                    + ' > "$HOME/.wopr/agent/efficiency.json"'
+                ),
+            )
+        elif (timeout := self._task_timeout()) and self._deadline_fraction > 0:
+            flags += f" --deadline {int(timeout * self._deadline_fraction)}s"
         # No router.json in the container, so routing is off and the pinned
         # model answers every turn. Print/JSON mode never offers ask_user.
         await self.exec_as_agent(
