@@ -81,6 +81,17 @@ func TestPrintModeJSONRun(t *testing.T) {
 	}
 }
 
+// A json run whose reply fails with a provider error exits nonzero, so a
+// harness running wopr can see the failure and retry.
+func TestPrintModeJSONRunFailsOnProviderError(t *testing.T) {
+	provider := aitest.NewFauxProvider("", "")
+	provider.SetResponses(aitest.Response{StopReason: ai.StopReasonError, ErrorMessage: "anthropic: HTTP 400: invalid_request_error"})
+	result := runPrintModeForTest(t, printModeTestHost(t, provider), printModeOptions{Mode: "json", InitialMessage: "go"})
+	if result.err == nil || !strings.Contains(result.stderr, "HTTP 400") {
+		t.Fatalf("err = %v, stderr %q; want a failure reported on stderr", result.err, result.stderr)
+	}
+}
+
 func fauxTextResponse(text string) aitest.Response {
 	return aitest.Response{Content: []aitest.Block{aitest.Text(text)}, StopReason: "stop"}
 }

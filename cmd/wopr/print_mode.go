@@ -245,7 +245,8 @@ func runPrintMode(ctx context.Context, host printModeRuntime, opts printModeOpti
 		return nil // reported by the teardown above
 	}
 	if opts.Mode != "text" {
-		return nil
+		// The reply is in the event stream; only a failed run is reported.
+		return printModeFailure(sess.Messages(), opts.stderr)
 	}
 	return writePrintModeResult(sess.Messages(), opts.stdout, opts.stderr)
 }
@@ -306,24 +307,45 @@ func sendPrintPrompt(ctx context.Context, sess *coding.Session, text string, ima
 // and earlier assistant messages of the run (tool-use narration) are not
 // printed. An error or aborted message goes to stderr and fails the run.
 func writePrintModeResult(messages []agent.AgentMessage, stdout, stderr io.Writer) error {
-	if len(messages) == 0 {
-		return nil
+	if err := printModeFailure(messages, stderr); err != nil {
+		return err
 	}
-	last := messages[len(messages)-1].Assistant
+	last := lastAssistant(messages)
 	if last == nil {
 		return nil
-	}
-	if last.StopReason == ai.StopReasonError || last.StopReason == ai.StopReasonAborted {
-		errMsg := last.ErrorMessage
-		if errMsg == "" {
-			errMsg = "Request " + string(last.StopReason)
-		}
-		_, _ = fmt.Fprintln(stderr, errMsg)
-		return errPrintModeHandled
 	}
 	for _, block := range last.Content {
 		if text, ok := block.(ai.TextContent); ok {
 			_, _ = io.WriteString(stdout, text.Text+"\n")
+		}
+	}
+	return nil
+}
+
+// printModeFailure reports a run whose last reply ended in an error or an
+// abort on stderr and returns errPrintModeHandled, so every mode exits
+// nonzero and scripts and benchmark harnesses can see the failure.
+func printModeFailure(messages []agent.AgentMessage, stderr io.Writer) error {
+	last := lastAssistant(messages)
+	if last == nil || last.StopReason != ai.StopReasonError && last.StopReason != ai.StopReasonAborted {
+		return nil
+	}
+	errMsg := last.ErrorMessage
+	if errMsg == "" {
+		errMsg = "Request " + string(last.StopReason)
+	}
+	_, _ = fmt.Fprintln(stderr, errMsg)
+	return errPrintModeHandled
+}
+
+// lastAssistant is the run's last reply, skipping any notices after it.
+func lastAssistant(messages []agent.AgentMessage) *agent.AssistantMessage {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if a := messages[i].Assistant; a != nil {
+			return a
+		}
+		if messages[i].User != nil || messages[i].ToolResult != nil {
+			return nil
 		}
 	}
 	return nil
