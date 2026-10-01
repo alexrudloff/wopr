@@ -27,6 +27,10 @@ func isolateProviderAuthEnv(t *testing.T) string {
 	return dir
 }
 
+// preferredAnthropic stands for Anthropic's preferred model, which comes
+// from model data rather than a fixed id.
+const preferredAnthropic = "anthropic/<preferred>"
+
 // TestSelectStartupModel drives startup model selection over the real
 // catalog: an env key picks its provider's default, and a saved default
 // without auth falls back instead of failing the first request.
@@ -41,10 +45,10 @@ func TestSelectStartupModel(t *testing.T) {
 		warnContains string
 		api          ai.API
 	}{
-		{name: "built-in env key picks the provider default", want: "anthropic/claude-opus-4-8"},
+		{name: "built-in env key picks the provider default", want: preferredAnthropic},
 		{name: "bare --model with a thinking suffix", options: startupModelOptions{CLIModel: "anthropic/claude-sonnet-4-5:high"}, want: "anthropic/claude-sonnet-4-5", thinking: "high"},
 		{name: "unknown bare --model is an error", options: startupModelOptions{CLIModel: "no-such-model-xyz"}, errContains: `Model "no-such-model-xyz" not found`},
-		{name: "saved default without auth falls back", settings: codingagent.Settings{DefaultProvider: "openai", DefaultModel: "gpt-4o-mini"}, want: "anthropic/claude-opus-4-8"},
+		{name: "saved default without auth falls back", settings: codingagent.Settings{DefaultProvider: "openai", DefaultModel: "gpt-4o-mini"}, want: preferredAnthropic},
 		{name: "bedrock uses the Converse API", options: startupModelOptions{CLIModel: "amazon-bedrock/us.anthropic.claude-opus-4-6-v1"}, want: "amazon-bedrock/us.anthropic.claude-opus-4-6-v1", api: ai.APIBedrockConverseStream},
 		{name: "unknown id under a known provider warns", options: startupModelOptions{CLIModel: "anthropic/claude-custom-x"}, want: "anthropic/claude-custom-x", warnContains: "not found for provider"},
 		{name: "saved default with auth is used", settings: codingagent.Settings{DefaultProvider: "anthropic", DefaultModel: "claude-sonnet-4-5"}, want: "anthropic/claude-sonnet-4-5"},
@@ -64,6 +68,10 @@ func TestSelectStartupModel(t *testing.T) {
 			}
 			if selected.Model == nil {
 				t.Fatalf("no model selected, want %s", tc.want)
+			}
+			if tc.want == preferredAnthropic {
+				id, _ := coding.PreferredModelID("anthropic")
+				tc.want = "anthropic/" + id
 			}
 			if got := selected.Model.ProviderMeta.ProviderID + "/" + selected.Model.ID; got != tc.want || selected.Thinking != tc.thinking {
 				t.Fatalf("model = %s:%s, want %s:%s", got, selected.Thinking, tc.want, tc.thinking)

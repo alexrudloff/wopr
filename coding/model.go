@@ -84,73 +84,22 @@ func BuildModelWithWarning(spec string, svcs *Services) (*ai.Model, string, erro
 	return modelFromEntry(entry, provider), warning, nil
 }
 
-// providerDefaultModels lists each provider's default model, in the order
-// startup walks them when no model is configured.
-var providerDefaultModels = []ProviderModel{
-	{"amazon-bedrock", "us.anthropic.claude-opus-4-6-v1"},
-	{"ant-ling", "Ring-2.6-1T"},
-	{"anthropic", "claude-opus-4-8"},
-	{"openai", "gpt-5.5"},
-	{"azure-openai-responses", "gpt-5.4"},
-	{"openai-codex", "gpt-5.5"},
-	{"nvidia", "nvidia/nemotron-3-super-120b-a12b"},
-	{"deepseek", "deepseek-v4-pro"},
-	{"google", "gemini-3.1-pro-preview"},
-	{"google-vertex", "gemini-3.1-pro-preview"},
-	{"github-copilot", "gpt-5.4"},
-	{"openrouter", "moonshotai/kimi-k2.6"},
-	{"vercel-ai-gateway", "zai/glm-5.1"},
-	{"xai", "grok-4.7"},
-	{"groq", "openai/gpt-oss-120b"},
-	{"cerebras", "gpt-oss-120b"},
-	{"zai", "glm-5.3"},
-	{"zai-coding-cn", "glm-5.3"},
-	{"mistral", "devstral-medium-latest"},
-	{"minimax", "MiniMax-M2.7"},
-	{"minimax-cn", "MiniMax-M2.7"},
-	{"moonshotai", "kimi-k2.6"},
-	{"moonshotai-cn", "kimi-k2.6"},
-	{"huggingface", "moonshotai/Kimi-K2.6"},
-	{"fireworks", "accounts/fireworks/models/kimi-k2p6"},
-	{"together", "moonshotai/Kimi-K2.6"},
-	{"baseten", "zai-org/GLM-5.2"},
-	{"opencode", "kimi-k2.6"},
-	{"opencode-go", "kimi-k2.6"},
-	{"kimi-coding", "kimi-for-coding"},
-	{"meta", "muse-spark-1.3"},
-	{"cloudflare-workers-ai", "@cf/moonshotai/kimi-k2.6"},
-	{"cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.6"},
-	{"qwen-token-plan", "qwen3.7-max"},
-	{"qwen-token-plan-cn", "qwen3.7-max"},
-	{"qwen-token-plan-individual", "qwen3.8-max"},
-	{"xiaomi", "mimo-v2.5-pro"},
-	{"xiaomi-token-plan-cn", "mimo-v2.5-pro"},
-	{"xiaomi-token-plan-ams", "mimo-v2.5-pro"},
-	{"xiaomi-token-plan-sgp", "mimo-v2.5-pro"},
+// PreferredModelID is provider's default model: the flagship of its newest
+// generation, from its own model list and models.dev (ai.PreferredModel),
+// never a fixed id.
+func PreferredModelID(provider string) (string, bool) {
+	m, ok := ai.PreferredModel(ai.ListModels(provider))
+	return m.ID, ok
 }
 
-// ProviderModel names one model under one provider.
-type ProviderModel struct{ Provider, ModelID string }
-
-// DefaultProviderModels returns each provider's default model, in startup
-// preference order.
-func DefaultProviderModels() []ProviderModel { return slices.Clone(providerDefaultModels) }
-
-// providerDefaultModel returns the catalog model an unknown id under
-// providerID borrows: the provider's default model when catalogued, else its
-// first catalogued model.
+// providerDefaultModel returns the model an unknown id under providerID
+// borrows: the provider's preferred model.
 func providerDefaultModel(providerID string) (*ai.KnownModel, bool) {
-	for _, entry := range providerDefaultModels {
-		if entry.Provider == providerID {
-			if m, ok := ai.LookupModelExact(providerID + "/" + entry.ModelID); ok {
-				return m, true
-			}
-		}
+	m, ok := ai.PreferredModel(ai.ListModels(providerID))
+	if !ok {
+		return nil, false
 	}
-	if models := ai.ListModels(providerID); len(models) > 0 {
-		return &models[0], true
-	}
-	return nil, false
+	return &m, true
 }
 
 func modelFromEntry(entry icodingagent.ModelEntry, provider ai.Provider) *ai.Model {

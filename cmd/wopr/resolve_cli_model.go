@@ -182,11 +182,8 @@ func buildFallbackModel(provider, modelID string, availableModels []codingagent.
 		return nil
 	}
 	base := providerModels[0]
-	for _, entry := range coding.DefaultProviderModels() {
-		if entry.Provider != provider {
-			continue
-		}
-		if index := slices.IndexFunc(providerModels, func(model codingagent.RuntimeModel) bool { return model.ID == entry.ModelID }); index >= 0 {
+	if preferred, ok := coding.PreferredModelID(provider); ok {
+		if index := slices.IndexFunc(providerModels, func(model codingagent.RuntimeModel) bool { return model.ID == preferred }); index >= 0 {
 			base = providerModels[index]
 		}
 	}

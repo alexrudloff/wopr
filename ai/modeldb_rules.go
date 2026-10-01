@@ -462,6 +462,7 @@ func (r *providerRule) build(id string, md *modelsDevModel, lm *LiveModel) Known
 	m.PriceUnknown = true
 	if md != nil {
 		m.DisplayName = cmpOr(md.Name, id)
+		m.Released = md.ReleaseDate
 		m.Reasoning = md.Reasoning
 		m.ContextWindow = md.Limit.Context
 		m.MaxOutputTokens = md.Limit.Output
@@ -490,6 +491,7 @@ func (r *providerRule) build(id string, md *modelsDevModel, lm *LiveModel) Known
 	}
 	if lm != nil {
 		m.DisplayName = cmpOr(lm.Name, m.DisplayName)
+		m.Released = cmpOr(lm.Released, m.Released)
 		if lm.Context > 0 {
 			m.ContextWindow = lm.Context
 		}

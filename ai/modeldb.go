@@ -48,6 +48,8 @@ type KnownModel struct {
 	// Inferred marks a model neither the provider's list nor models.dev
 	// names: its details are borrowed from its closest relative.
 	Inferred bool
+	// Released is the model's release date (YYYY-MM-DD), or "".
+	Released string
 }
 
 // LiveModel is one entry of a provider's own model list, with whatever
@@ -62,6 +64,8 @@ type LiveModel struct {
 	Efforts []string `json:"efforts,omitempty"`
 	// Adaptive reports Anthropic's adaptive thinking.
 	Adaptive *bool `json:"adaptive,omitempty"`
+	// Released is the release date the list gives (YYYY-MM-DD), or "".
+	Released string `json:"released,omitempty"`
 	// Prices per million tokens, for lists that carry them (OpenRouter).
 	InputCost      *float64 `json:"inputCost,omitempty"`
 	OutputCost     *float64 `json:"outputCost,omitempty"`
@@ -93,6 +97,7 @@ type modelsDevModel struct {
 	Cost             *modelsDevCost       `json:"cost,omitempty"`
 	Provider         *modelsDevModelHost  `json:"provider,omitempty"`
 	Status           string               `json:"status,omitempty"`
+	ReleaseDate      string               `json:"release_date,omitempty"`
 }
 
 type modelsDevReasoning struct {

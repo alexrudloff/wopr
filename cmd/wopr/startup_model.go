@@ -74,9 +74,9 @@ func (rt *startupModelRuntime) getAvailable() []codingagent.RuntimeModel {
 }
 
 // findInitialModel picks a model from the saved default and the available
-// models: the saved default when its provider has auth, then
-// the first available model that is a known provider's default, then the
-// first available model.
+// models: the saved default when its provider has auth, then the preferred
+// model (coding.PreferredModelID) of the first provider with models
+// available, then the first available model.
 func findInitialModel(rt *startupModelRuntime, defaultProvider, defaultModelID string) *codingagent.RuntimeModel {
 	if defaultProvider != "" && defaultModelID != "" {
 		if found := rt.getModel(defaultProvider, defaultModelID); found != nil && rt.HasConfiguredAuth(found.Provider) {
@@ -87,13 +87,11 @@ func findInitialModel(rt *startupModelRuntime, defaultProvider, defaultModelID s
 	if len(available) == 0 {
 		return nil
 	}
-	for _, entry := range coding.DefaultProviderModels() {
-		index := slices.IndexFunc(available, func(model codingagent.RuntimeModel) bool {
-			return model.Provider == entry.Provider && model.ID == entry.ModelID
-		})
-		if index >= 0 {
-			return &available[index]
-		}
+	preferred, ok := coding.PreferredModelID(available[0].Provider)
+	if index := slices.IndexFunc(available, func(model codingagent.RuntimeModel) bool {
+		return ok && model.Provider == available[0].Provider && model.ID == preferred
+	}); index >= 0 {
+		return &available[index]
 	}
 	return &available[0]
 }

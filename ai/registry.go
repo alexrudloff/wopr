@@ -1,9 +1,11 @@
 package ai
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 	"strings"
+	"time"
 )
 
 // ─── Model Registry ───────────────────────────────────────────────────────────
@@ -165,6 +167,82 @@ func ListModels(provider string) []KnownModel {
 		}
 	}
 	return out
+}
+
+// flagshipWindow is how far back from a provider's newest release a model
+// still counts as its current generation.
+const flagshipWindow = 90 * 24 * time.Hour
+
+// PreferredModel picks a provider's default from data, never a fixed id:
+// among the models released within flagshipWindow of its newest one, the
+// one with the highest known output price (its flagship), then the
+// newest. Models whose details are borrowed rank after real ones; without
+// release dates every model counts as current.
+func PreferredModel(models []KnownModel) (KnownModel, bool) {
+	var newest time.Time
+	for _, m := range models {
+		if t, err := time.Parse(time.DateOnly, m.Released); err == nil && t.After(newest) {
+			newest = t
+		}
+	}
+	current := func(m KnownModel) bool {
+		t, err := time.Parse(time.DateOnly, m.Released)
+		return newest.IsZero() || err == nil && newest.Sub(t) <= flagshipWindow
+	}
+	price := func(m KnownModel) float64 {
+		if m.PriceUnknown {
+			return -1
+		}
+		return m.OutputCostPerMTokens
+	}
+	ids := make(map[string]bool, len(models))
+	for _, m := range models {
+		ids[strings.ToLower(m.ID)] = true
+	}
+	var best KnownModel
+	found := false
+	for _, m := range models {
+		if !found {
+			best, found = m, true
+			continue
+		}
+		if c := cmp.Or(
+			-cmp.Compare(boolRank(m.Inferred), boolRank(best.Inferred)),
+			-cmp.Compare(boolRank(variant(m.ID, ids)), boolRank(variant(best.ID, ids))),
+			cmp.Compare(boolRank(current(m)), boolRank(current(best))),
+			cmp.Compare(price(m), price(best)),
+			cmp.Compare(m.Released, best.Released),
+			cmp.Compare(m.ContextWindow, best.ContextWindow),
+		); c > 0 {
+			best = m
+		}
+	}
+	return best, found
+}
+
+// variant reports an id that names a variant of another model rather than
+// a model of its own: an alias ("…-latest", "~…"), or another listed id
+// plus a worded suffix (gpt-6-astra-fast, MiniMax-M2.7-highspeed). A
+// numbered suffix is a version (claude-fable-5-1), not a variant.
+func variant(id string, ids map[string]bool) bool {
+	id = strings.ToLower(id)
+	if strings.HasPrefix(id, "~") || strings.HasSuffix(id, "latest") {
+		return true
+	}
+	for i := strings.LastIndexAny(id, "-:"); i > 0; i = strings.LastIndexAny(id[:i], "-:") {
+		suffix := id[i+1:]
+		if ids[id[:i]] && strings.IndexFunc(suffix, func(r rune) bool { return r >= 'a' && r <= 'z' }) >= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func boolRank(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // ListProviders returns the sorted providers that offer models.

@@ -303,6 +303,7 @@ func anthropicModels(ctx context.Context, base, key string, oauth bool) ([]ai.Li
 			Data []struct {
 				ID             string `json:"id"`
 				DisplayName    string `json:"display_name"`
+				CreatedAt      string `json:"created_at"`
 				MaxInputTokens int    `json:"max_input_tokens"`
 				MaxTokens      int    `json:"max_tokens"`
 				Capabilities   struct {
@@ -323,7 +324,7 @@ func anthropicModels(ctx context.Context, base, key string, oauth bool) ([]ai.Li
 			return nil, err
 		}
 		for _, m := range page.Data {
-			lm := ai.LiveModel{ID: m.ID, Name: m.DisplayName, Context: m.MaxInputTokens, MaxOutput: m.MaxTokens}
+			lm := ai.LiveModel{ID: m.ID, Name: m.DisplayName, Context: m.MaxInputTokens, MaxOutput: m.MaxTokens, Released: dateOnly(m.CreatedAt)}
 			if m.Capabilities.ImageInput.Supported {
 				lm.Input = []string{"text", "image"}
 			} else if m.MaxInputTokens > 0 {
@@ -449,6 +450,9 @@ func openAIStyleModels(ctx context.Context, base, key string) ([]ai.LiveModel, e
 		}
 		lm := ai.LiveModel{ID: id}
 		lm.Name, _ = entry["name"].(string)
+		if created := jsonInt(entry["created"]); created > 0 {
+			lm.Released = time.Unix(int64(created), 0).UTC().Format(time.DateOnly)
+		}
 		for _, k := range []string{"context_length", "context_window", "max_model_len", "max_context_length"} {
 			if n := jsonInt(entry[k]); n > 0 {
 				lm.Context = n
@@ -516,4 +520,12 @@ func liveToRemote(models []ai.LiveModel) []remoteModel {
 		out = append(out, remoteModel{ID: m.ID, Name: m.Name, Context: m.Context, MaxOutput: m.MaxOutput})
 	}
 	return out
+}
+
+// dateOnly is the YYYY-MM-DD part of an RFC 3339 time, or "".
+func dateOnly(t string) string {
+	if len(t) < len(time.DateOnly) {
+		return ""
+	}
+	return t[:len(time.DateOnly)]
 }
