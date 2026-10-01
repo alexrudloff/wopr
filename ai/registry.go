@@ -4,56 +4,38 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 )
 
 // ─── Model Registry ───────────────────────────────────────────────────────────
 //
-// The registry indexes the codegen'd `CatalogModels` slice for lookup
-// by full id (`provider/model`), bare model id, and model id alone.
-// Status line, /cost, and `--diagnose` all consume from here.
-
-var (
-	registryOnce sync.Once
-	registryByFQ map[string]*CatalogModel   // "<provider>/<model-id>"
-	registryByID map[string][]*CatalogModel // "<model-id>" → entries (multiple providers)
-)
-
-func initRegistry() {
-	registryByFQ = make(map[string]*CatalogModel, len(CatalogModels))
-	registryByID = make(map[string][]*CatalogModel, len(CatalogModels))
-	for i := range CatalogModels {
-		m := &CatalogModels[i]
-		fq := m.Provider + "/" + m.ID
-		registryByFQ[fq] = m
-		registryByID[m.ID] = append(registryByID[m.ID], m)
-	}
-}
+// Lookups over the model database (modeldb.go): by full id
+// (`provider/model`) or bare model id. Status line, /cost, and `--diagnose`
+// all consume from here.
 
 // LookupModel resolves a spec like "<provider>/<model-id>" or just
-// "<model-id>" against the generated catalog. Returns the matching
-// model and true on success.
+// "<model-id>". Returns the matching model and true on success.
 //
 // When only a bare model id is given and multiple providers ship a
-// model with the same id (rare; "claude-3-5-sonnet" appears under
-// both anthropic and copilot for example), the first match in
-// alphabetical-provider order wins. Callers wanting deterministic
-// resolution should pass the full "<provider>/<model-id>" form.
-func LookupModel(spec string) (*CatalogModel, bool) {
-	registryOnce.Do(initRegistry)
+// model with the same id, the first match in alphabetical-provider order
+// wins. Callers wanting deterministic resolution should pass the full
+// "<provider>/<model-id>" form.
+func LookupModel(spec string) (*KnownModel, bool) {
 	if spec == "" {
 		return nil, false
 	}
-	if m, ok := registryByFQ[spec]; ok {
+	if m, ok := LookupModelExact(spec); ok {
 		return m, true
 	}
-	// Try bare id.
+	ensureModelDB()
+	modelDB.RLock()
+	defer modelDB.RUnlock()
 	id := spec
 	if _, after, ok := strings.Cut(spec, "/"); ok {
 		id = after
 	}
-	if entries := registryByID[id]; len(entries) > 0 {
-		return entries[0], true
+	if entries := modelDB.byID[id]; len(entries) > 0 {
+		m := *entries[0]
+		return &m, true
 	}
 	return nil, false
 }
@@ -61,20 +43,43 @@ func LookupModel(spec string) (*CatalogModel, bool) {
 // LookupModelExact resolves only the fully-qualified "provider/id" key,
 // without LookupModel's bare-id fallback across other providers. This is
 // what model resolution needs so that "github-copilot/gpt-4o" yields no
-// match when the copilot catalog lacks gpt-4o, instead of silently
-// borrowing openai's gpt-4o capabilities.
-func LookupModelExact(spec string) (*CatalogModel, bool) {
-	registryOnce.Do(initRegistry)
+// match when copilot lacks gpt-4o, instead of silently borrowing openai's
+// gpt-4o capabilities.
+func LookupModelExact(spec string) (*KnownModel, bool) {
 	if spec == "" {
 		return nil, false
 	}
-	m, ok := registryByFQ[spec]
-	return m, ok
+	ensureModelDB()
+	modelDB.RLock()
+	defer modelDB.RUnlock()
+	m, ok := modelDB.known[spec]
+	if !ok {
+		return nil, false
+	}
+	out := *m
+	return &out, true
 }
 
-// ToCapabilities lifts a CatalogModel into the runtime
+// InferModel builds a model of a known provider that neither the
+// provider's list nor models.dev names, from its closest relative under the
+// same provider (claude-sonnet-6 from claude-sonnet-5-5). It refuses once
+// wopr has the provider's own list and the list leaves the model out.
+func InferModel(spec string) (*KnownModel, bool) {
+	provider, id, ok := strings.Cut(spec, "/")
+	if !ok {
+		return nil, false
+	}
+	if m, ok := LookupModelExact(spec); ok {
+		return m, true
+	}
+	modelDB.RLock()
+	defer modelDB.RUnlock()
+	return inferModel(provider, id)
+}
+
+// ToCapabilities lifts a KnownModel into the runtime
 // ModelCapabilities consumed by status line and provider routing.
-func (m *CatalogModel) ToCapabilities() ModelCapabilities {
+func (m *KnownModel) ToCapabilities() ModelCapabilities {
 	caps := ModelCapabilities{
 		ContextWindow:       m.ContextWindow,
 		MaxOutputTokens:     m.MaxOutputTokens,
@@ -119,7 +124,7 @@ func thinkingMaxLevel(reasoning bool, levelMap ThinkingLevelMap) ThinkingLevel {
 
 // ToModel lifts a generated catalog entry into the runtime model metadata shape
 // used by provider-specific compat helpers and tests.
-func (m *CatalogModel) ToModel() *Model {
+func (m *KnownModel) ToModel() *Model {
 	if m == nil {
 		return nil
 	}
@@ -146,12 +151,14 @@ func (m *CatalogModel) ToModel() *Model {
 	}
 }
 
-// ListModels returns a copy of the catalog filtered by an optional
-// provider prefix. Empty provider returns everything.
-func ListModels(provider string) []CatalogModel {
-	registryOnce.Do(initRegistry)
-	out := make([]CatalogModel, 0, len(CatalogModels))
-	for _, m := range CatalogModels {
+// ListModels returns the models a provider offers (every provider's when
+// provider is empty): its own list when wopr has read it, else models.dev's.
+func ListModels(provider string) []KnownModel {
+	ensureModelDB()
+	modelDB.RLock()
+	defer modelDB.RUnlock()
+	out := make([]KnownModel, 0, len(modelDB.listed))
+	for _, m := range modelDB.listed {
 		if provider == "" || m.Provider == provider {
 			out = append(out, m)
 		}
@@ -159,13 +166,10 @@ func ListModels(provider string) []CatalogModel {
 	return out
 }
 
-// ListProviders returns the sorted list of unique provider names from
-// the generated static model catalog.
+// ListProviders returns the sorted providers that offer models.
 func ListProviders() []string {
-	registryOnce.Do(initRegistry)
-	seen := make(map[string]struct{})
-	for _, m := range CatalogModels {
-		seen[m.Provider] = struct{}{}
-	}
-	return slices.Sorted(maps.Keys(seen))
+	ensureModelDB()
+	modelDB.RLock()
+	defer modelDB.RUnlock()
+	return slices.Clone(modelDB.providers)
 }

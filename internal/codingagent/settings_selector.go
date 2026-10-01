@@ -139,7 +139,7 @@ func (m *InteractiveMode) modelThinkingSettingsSubmenu(_ string, done func(*stri
 	var models []*ai.Model
 	if m.opts.ModelRegistry != nil {
 		for _, entry := range m.opts.ModelRegistry.GetAvailable() {
-			generated := ai.CatalogModel{Provider: entry.ProviderID, ID: entry.ModelID, Reasoning: entry.Reasoning, ThinkingLevelMap: entry.ThinkingLevelMap}
+			generated := ai.KnownModel{Provider: entry.ProviderID, ID: entry.ModelID, Reasoning: entry.Reasoning, ThinkingLevelMap: entry.ThinkingLevelMap}
 			models = append(models, generated.ToModel())
 		}
 	}

@@ -79,6 +79,21 @@ func (s *FileModelsStore) Read(ctx context.Context, providerID string) (*ModelsS
 	return entry, ctx.Err()
 }
 
+// ReadAll returns every provider's stored catalog, keyed by provider id.
+func (s *FileModelsStore) ReadAll(ctx context.Context) (map[string]ModelsStoreEntry, error) {
+	out := map[string]ModelsStoreEntry{}
+	err := s.withLock(ctx, func(entries []storedModels) ([]storedModels, error) {
+		for _, stored := range entries {
+			var decoded ModelsStoreEntry
+			if json.Unmarshal(stored.raw, &decoded) == nil {
+				out[stored.providerID] = decoded
+			}
+		}
+		return nil, nil
+	})
+	return out, err
+}
+
 // Write replaces the provider's stored catalog.
 func (s *FileModelsStore) Write(ctx context.Context, providerID string, entry ModelsStoreEntry) error {
 	raw, err := marshalStoreJSON(entry)

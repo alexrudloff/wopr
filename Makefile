@@ -214,6 +214,9 @@ bench-compare: ## Compare the last benchmark run with the base by median; fails 
 knowledge-graph: ## Regenerate the knowledge graph page, JSON-LD, and Mermaid from docs/knowledge-graph/wopr.graph.json
 	@go run ./automation/gen/knowledgegraph
 
-.PHONY: bench bench-base bench-compare build check clean dev docs-drift doctor evals evals-live evals-mutate evals-publish evals-test go-fix-clean help install knowledge-graph lint lint-changed perf-check pgo profile setup slop slop-check test test-integration test-prereqs test-race test-stress vet wopr
+models-snapshot: ## Refresh ai/modelsdev.json, the embedded models.dev snapshot wopr uses offline and on first run
+	@go run ./automation/gen/modelsdev
+
+.PHONY: bench bench-base bench-compare build check clean dev docs-drift doctor evals evals-live evals-mutate evals-publish evals-test go-fix-clean help install knowledge-graph lint lint-changed models-snapshot perf-check pgo profile setup slop slop-check test test-integration test-prereqs test-race test-stress vet wopr
 
 include automation/make/ci.mk

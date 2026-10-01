@@ -50,6 +50,9 @@ func BuildModelWithWarning(spec string, svcs *Services) (*ai.Model, string, erro
 	var warning string
 	if generated, ok := ai.LookupModelExact(providerID + "/" + modelID); ok {
 		entry = registry.ResolveCatalogModel(providerID, modelID, generated)
+	} else if inferred, ok := ai.InferModel(providerID + "/" + modelID); ok && !registry.HasModelDefinition(providerID, modelID) {
+		entry = registry.ResolveCatalogModel(providerID, modelID, inferred)
+		warning = fmt.Sprintf("Model %q isn't in %s's list or models.dev yet; using its closest relative's settings.", modelID, providerID)
 	} else if base, ok := providerDefaultModel(providerID); ok && !registry.HasModelDefinition(providerID, modelID) {
 		entry = registry.ResolveCatalogModel(providerID, modelID, base)
 		entry.DisplayName = modelID
@@ -136,7 +139,7 @@ func DefaultProviderModels() []ProviderModel { return slices.Clone(providerDefau
 // providerDefaultModel returns the catalog model an unknown id under
 // providerID borrows: the provider's default model when catalogued, else its
 // first catalogued model.
-func providerDefaultModel(providerID string) (*ai.CatalogModel, bool) {
+func providerDefaultModel(providerID string) (*ai.KnownModel, bool) {
 	for _, entry := range providerDefaultModels {
 		if entry.Provider == providerID {
 			if m, ok := ai.LookupModelExact(providerID + "/" + entry.ModelID); ok {

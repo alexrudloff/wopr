@@ -919,20 +919,22 @@ func (p *anthropicProvider) resolveModel() *Model {
 	return model
 }
 
-// fallbackUsageCost prices a response served by an allowed fallback model at
-// that model's rates.
+// fallbackUsageCost prices a response another model served (Anthropic's
+// server-side fallback) at that model's rates: a configured fallback's, else
+// the model database's.
 func (p *anthropicProvider) fallbackUsageCost(cost ModelCost, responseModel string) ModelCost {
-	if responseModel == "" {
+	if responseModel == "" || responseModel == p.cfg.Model {
 		return cost
 	}
-	compat := p.resolveModel().ProviderMeta.Compat
-	if compat == nil {
-		return cost
-	}
-	for _, fallback := range compat.AllowedFallbackModels {
-		if fallback.Provider == p.cfg.ProviderID && fallback.Model == responseModel {
-			return fallback.Cost
+	if compat := p.resolveModel().ProviderMeta.Compat; compat != nil {
+		for _, fallback := range compat.AllowedFallbackModels {
+			if fallback.Provider == p.cfg.ProviderID && fallback.Model == responseModel {
+				return fallback.Cost
+			}
 		}
+	}
+	if served, ok := LookupModelExact(p.cfg.ProviderID + "/" + responseModel); ok && !served.PriceUnknown {
+		return (&Model{Capabilities: served.ToCapabilities()}).CostRates()
 	}
 	return cost
 }

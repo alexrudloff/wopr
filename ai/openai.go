@@ -536,7 +536,7 @@ func (p *openAIProvider) modelSupportsImages() bool {
 	if accepts, known := AcceptsImages(p.cfg.Input); known {
 		return accepts
 	}
-	var generated *CatalogModel
+	var generated *KnownModel
 	var ok bool
 	if p.cfg.ProviderID == "openrouter" {
 		if generated, ok = LookupModel(p.cfg.Model); !ok {

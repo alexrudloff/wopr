@@ -406,6 +406,9 @@ func main() {
 		fatalf("wopr: services init: %v", err)
 	}
 	trace.Mark("services-created")
+	if !IsOfflineModeEnabled() {
+		go services.RefreshModelSources(ctx)
+	}
 	llamaHost := startBuiltInLlama(ctx, services)
 	// --use-theme applies to this run only.
 	services.SettingsManager().ApplyOverrides(codingagent.Settings{Theme: flags.UseTheme})

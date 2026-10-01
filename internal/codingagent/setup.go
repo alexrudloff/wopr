@@ -417,7 +417,7 @@ func (w *setupWizard) addAPIKey() string {
 // provider's model list (or OpenRouter's key endpoint, since its model list
 // is public). ok is false when the provider can't be checked that way.
 func verifyAPIKey(ctx context.Context, provider, key string) (bool, error) {
-	api, base := providerAPI(provider)
+	api, base := ai.ProviderEndpoint(provider)
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	var req *http.Request

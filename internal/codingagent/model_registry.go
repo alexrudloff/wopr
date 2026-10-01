@@ -493,7 +493,7 @@ func providerHasDefaults(provider providerConfig) bool {
 }
 
 // ResolveCatalogModel layers provider configuration and a matching model override onto one generated model.
-func (r *ModelRegistry) ResolveCatalogModel(providerID, modelID string, generated *ai.CatalogModel) ModelEntry {
+func (r *ModelRegistry) ResolveCatalogModel(providerID, modelID string, generated *ai.KnownModel) ModelEntry {
 	entry := catalogModelEntry(providerID, modelID, generated)
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -560,7 +560,7 @@ func (r *ModelRegistry) composeRequestHeadersLocked(base map[string]string, prov
 	return headers
 }
 
-func catalogModelEntry(providerID, modelID string, generated *ai.CatalogModel) ModelEntry {
+func catalogModelEntry(providerID, modelID string, generated *ai.KnownModel) ModelEntry {
 	return ModelEntry{
 		ProviderID:       providerID,
 		ModelID:          modelID,

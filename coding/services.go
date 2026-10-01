@@ -95,6 +95,10 @@ func NewServices(opts ServicesOptions) (*Services, error) {
 		agentDir = DefaultAgentDir()
 	}
 
+	// What the model database knows from earlier runs: the last models.dev
+	// copy and each connected provider's own model list.
+	icodingagent.LoadModelSources(agentDir)
+
 	authPath := filepath.Join(agentDir, "auth.json")
 	auth, err := ai.NewAuthStorage(authPath)
 	if err != nil {
@@ -130,6 +134,13 @@ func NewServices(opts ServicesOptions) (*Services, error) {
 // CWD returns the working directory this Services container was
 // constructed with.
 func (s *Services) CWD() string { return s.cwd }
+
+// RefreshModelSources refreshes models.dev's data and the connected
+// providers' model lists when they're a day old. It makes network calls;
+// run it in the background.
+func (s *Services) RefreshModelSources(ctx context.Context) {
+	icodingagent.RefreshModelSources(ctx, s.agentDir, s.auth)
+}
 
 // AgentDir returns the global agent config directory (typically
 // ~/.wopr/agent or $WOPR_HOME/agent).

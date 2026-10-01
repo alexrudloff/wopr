@@ -13,9 +13,16 @@ import (
 
 // Expected usage values are reference serialized AssistantMessage.usage for
 // these exact response bodies with the same catalog model.
+// deepseekTestRates are fixed DeepSeek V4 Pro prices for token-accounting
+// cases.
+var deepseekTestRates = ModelCost{Input: 1.32, Output: 3.96, CacheRead: 0.044}
+
 func TestProviderUsageCost(t *testing.T) {
 	for _, tc := range []struct {
 		name, kind, spec, body, want, responseModel string
+		// rates pins the prices when the test is about token accounting,
+		// not about what models.dev currently charges.
+		rates *ModelCost
 	}{
 		{
 			name: "anthropic 1h cache write at twice input", kind: "anthropic", spec: "anthropic/claude-opus-4-8",
@@ -41,7 +48,7 @@ data: {"type":"message_stop"}
 			want: `{"input":100,"output":5,"cacheRead":0,"cacheWrite":1000000,"totalTokens":1000105,"cost":{"input":0.0005,"output":0.000125,"cacheRead":0,"cacheWrite":7.75,"total":7.750625},"cacheWrite1h":400000}`,
 		},
 		{
-			name: "completions prompt_cache_hit_tokens", kind: "completions", spec: "deepseek/deepseek-v4-pro",
+			name: "completions prompt_cache_hit_tokens", kind: "completions", spec: "deepseek/deepseek-v4-pro", rates: &deepseekTestRates,
 			body: `data: {"id":"c1","choices":[{"index":0,"delta":{"content":"ok"},"finish_reason":null}]}
 
 data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12345,"completion_tokens":678,"prompt_cache_hit_tokens":10000}}
@@ -66,7 +73,7 @@ data: {"type":"message_stop"}
 			want: `{"input":200,"output":50,"cacheRead":10000,"cacheWrite":0,"cacheWrite1h":0,"totalTokens":10250,"cost":{"input":0.001,"output":0.00125,"cacheRead":0.005,"cacheWrite":0,"total":0.00725}}`,
 		},
 		{
-			name: "completions prompt_tokens includes cached_tokens", kind: "completions", spec: "deepseek/deepseek-v4-pro",
+			name: "completions prompt_tokens includes cached_tokens", kind: "completions", spec: "deepseek/deepseek-v4-pro", rates: &deepseekTestRates,
 			body: `data: {"id":"c1","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":12345,"completion_tokens":678,"prompt_tokens_details":{"cached_tokens":10000}}}
 
 data: [DONE]
@@ -101,7 +108,11 @@ data: [DONE]
 			t.Cleanup(server.Close)
 			provider := usageCostProvider(tc.kind, strings.SplitN(tc.spec, "/", 2), server.URL)
 			transcript := NormalizeContext(Context{Messages: []Message{UserMessage{Content: UserText("hi")}}})
-			stream, err := provider.Stream(context.Background(), transcript, StreamOptions{ModelCost: (&Model{Capabilities: generated.ToCapabilities()}).CostRates()})
+			rates := (&Model{Capabilities: generated.ToCapabilities()}).CostRates()
+			if tc.rates != nil {
+				rates = *tc.rates
+			}
+			stream, err := provider.Stream(context.Background(), transcript, StreamOptions{ModelCost: rates})
 			if err != nil {
 				t.Fatal(err)
 			}

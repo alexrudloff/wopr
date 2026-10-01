@@ -49,9 +49,9 @@ func ratio(a, b float64) float64 {
 
 var generated = regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
 
-// dataFiles are hand-maintained literal tables rather than logic. Their
-// repeated field layouts read as clones, which would swamp the signal.
-var dataFiles = map[string]bool{"ai/models_catalog.go": true}
+// dataFiles are literal tables rather than logic. Their repeated field
+// layouts read as clones, which would swamp the signal.
+var dataFiles = map[string]bool{}
 
 var skipDirs = map[string]bool{".git": true, ".upstream": true, "node_modules": true, "testdata": true, "vendor": true, "tmp": true, "bin": true}
 

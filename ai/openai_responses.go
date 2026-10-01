@@ -391,7 +391,7 @@ type respOutputContent struct {
 // (ToModel) never resolve two different entries. Codex models are cataloged
 // under the `openai-codex/` prefix, so a codex-responses provider tries that
 // first; every provider then falls back to ProviderID/Model and bare Model.
-func (p *openAIResponsesProvider) resolveResponsesModel() (*CatalogModel, bool) {
+func (p *openAIResponsesProvider) resolveResponsesModel() (*KnownModel, bool) {
 	if p.cfg.ProviderID == string(APIOpenAICodexResponses) {
 		if generated, ok := LookupModel("openai-codex/" + p.cfg.Model); ok {
 			return generated, true
