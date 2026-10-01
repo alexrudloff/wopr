@@ -109,6 +109,19 @@ func TestShellEditsAreUndoable(t *testing.T) {
 		t.Fatalf("outside git, undo restored %q", got)
 	}
 
+	// A command that cds into a subfolder first names files relative to it.
+	if err := os.MkdirAll(filepath.Join(outside, "game", "js"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	suits := canonical(filepath.Join(outside, "game", "js", "suits.js"))
+	write(suits, "speed = 1\n")
+	cdSed := "cd " + filepath.Join(outside, "game") + "; sed -i '' 's/1/2/' js/suits.js"
+	o.before(ctx, "cdsed", cdSed)
+	write(suits, "speed = 2\n")
+	if got := o.after(ctx, "cdsed", cdSed); len(got) != 1 {
+		t.Fatalf("a file named relative to a cd target was not recorded: %+v", got)
+	}
+
 	undo := func() {
 		t.Helper()
 		if _, err := undoIn(store, repo, ""); err != nil {

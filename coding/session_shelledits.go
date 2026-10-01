@@ -492,9 +492,22 @@ func commandText(args json.RawMessage) string {
 // pathToken matches a word that could name a file: it has a slash or a dot.
 var pathToken = regexp.MustCompile(`[A-Za-z0-9_~@+./-]*[./][A-Za-z0-9_~@+./-]*`)
 
+// cdTarget matches a `cd <dir>` at the start of a command or after ;, &&,
+// ||, |, or (.
+var cdTarget = regexp.MustCompile(`(?:^|[;&|(]\s*)cd\s+("[^"]+"|'[^']+'|[^\s;&|)]+)`)
+
 // namedPaths resolves the words of a command that could name files, at
-// most 200.
+// most 200. A relative word resolves against cwd and against every
+// directory the command cds into, since `cd app; sed -i … js/x.js` names
+// app/js/x.js.
 func namedPaths(cwd, text string) []string {
+	dirs := []string{cwd}
+	for _, m := range cdTarget.FindAllStringSubmatch(text, -1) {
+		dir := strings.Trim(m[1], `"'`)
+		if dir != "" && dir != "-" {
+			dirs = append(dirs, tools.ResolvePath(cwd, dir))
+		}
+	}
 	seen := map[string]bool{}
 	var out []string
 	for _, word := range pathToken.FindAllString(text, -1) {
@@ -503,13 +516,19 @@ func namedPaths(cwd, text string) []string {
 		if word == "" || strings.HasPrefix(word, "-") || strings.Contains(word, "://") {
 			continue
 		}
-		path := canonical(tools.ResolvePath(cwd, word))
-		if !seen[path] {
-			seen[path] = true
-			out = append(out, path)
+		bases := dirs
+		if filepath.IsAbs(word) || strings.HasPrefix(word, "~") {
+			bases = dirs[:1]
 		}
-		if len(out) == 200 {
-			break
+		for _, base := range bases {
+			path := canonical(tools.ResolvePath(base, word))
+			if !seen[path] {
+				seen[path] = true
+				out = append(out, path)
+			}
+			if len(out) == 200 {
+				return out
+			}
 		}
 	}
 	return out
