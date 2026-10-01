@@ -16,6 +16,7 @@ import (
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/internal/codingagent/compaction"
+	"github.com/alexrudloff/wopr/internal/codingagent/efficiency"
 )
 
 // Stall detection: a small model that repeats the same tool call, or reads
@@ -33,8 +34,6 @@ const (
 	stallGapCap = time.Minute
 	// stallMaxNudges bounds the nudges in one run.
 	stallMaxNudges = 3
-	// stallMessageType is the custom message type of a nudge.
-	stallMessageType = "stall_nudge"
 )
 
 // researchTools are the tools whose call with a query, URL, or file not
@@ -135,7 +134,7 @@ func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage 
 	}
 	return []agent.AgentMessage{{Custom: map[string]any{
 		"role":       agent.RoleCustom,
-		"customType": stallMessageType,
+		"customType": efficiency.StallNudgeMessageType,
 		"content":    text,
 		"display":    true,
 		"timestamp":  time.Now().UnixMilli(),

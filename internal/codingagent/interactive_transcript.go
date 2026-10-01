@@ -10,6 +10,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+	"github.com/alexrudloff/wopr/internal/codingagent/efficiency"
 	"github.com/alexrudloff/wopr/internal/codingagent/goal"
 	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
 	"github.com/alexrudloff/wopr/tui"
@@ -347,6 +348,10 @@ func (m *InteractiveMode) renderSessionEntries() {
 }
 
 func (m *InteractiveMode) appendCustomMessage(message CustomMessageEntry) {
+	if label, ok := efficiency.NoteLabel(message.CustomType); ok {
+		m.appendHarnessNote(label)
+		return
+	}
 	if message.CustomType == goal.MessageType {
 		block := newGoalBlock(tui.CustomMessageText(&tui.CustomMessage{Content: message.Content}), message.Details)
 		block.SetExpanded(m.toolsExpanded)
@@ -379,6 +384,13 @@ func (m *InteractiveMode) appendCustomMessage(message CustomMessageEntry) {
 	fallback.SetExpanded(m.toolsExpanded)
 	m.customMessageOrder = append(m.customMessageOrder, fallback)
 	m.chatContainer.Add(fallback)
+}
+
+// appendHarnessNote shows a note wopr added to the run as one muted line.
+func (m *InteractiveMode) appendHarnessNote(label string) {
+	th := tui.ActiveTheme()
+	m.chatContainer.Add(tui.NewText(""))
+	m.chatContainer.Add(tui.NewText(" " + cmp.Or(th.Dim, "\x1b[2m") + "· " + label + th.Reset))
 }
 
 // flushCompactionQueue sends all messages that were queued while a compaction

@@ -47,6 +47,8 @@ func (s *Session) preparePrompt(ctx context.Context, messages []agent.AgentMessa
 	s.pruneOfferAtPrompt()
 	s.thinkingBoost.Store(0)
 	s.stall = stallState{}
+	s.final.done = false
+	s.final.worked.Store(false)
 	s.undo.prompt.Store(time.Now().UnixNano())
 	if !slices.ContainsFunc(messages, func(message agent.AgentMessage) bool { return message.User != nil }) {
 		return messages, nil

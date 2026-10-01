@@ -56,6 +56,10 @@ type Config struct {
 	// session file keeps them all.
 	ImagePruning bool `json:"imagePruning"`
 	KeepImages   int  `json:"keepImages"`
+	// FinalCheck asks the model once, when a run that changed something
+	// would end, to verify each requirement of the request before it
+	// finishes.
+	FinalCheck bool `json:"finalCheck"`
 }
 
 // DefaultConfig turns every mechanism on.
@@ -75,12 +79,13 @@ func DefaultConfig() Config {
 		Learn:                     true,
 		ImagePruning:              true,
 		KeepImages:                3,
+		FinalCheck:                true,
 	}
 }
 
 // Enabled reports whether any mechanism is on.
 func (c Config) Enabled() bool {
-	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch || c.ImagePruning
+	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch || c.ImagePruning || c.FinalCheck
 }
 
 // Load reads <agentDir>/efficiency.json. Unknown keys and bad values are
@@ -104,7 +109,7 @@ func Load(agentDir string) (Config, error) {
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
 		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true /* retired; ignored */, "applyPatch": true, "quotaBalance": true, "learn": true,
-		"imagePruning": true, "keepImages": true,
+		"imagePruning": true, "keepImages": true, "finalCheck": true,
 	}
 	for key := range raw {
 		if !known[key] {

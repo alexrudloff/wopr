@@ -161,6 +161,13 @@ More keys in `efficiency.json`, each on by default:
   drops its oldest images until it fits, down to the newest one, and never
   drops text; an HTTP 413 that still comes back is treated as context
   overflow and compacted.
+- `finalCheck`: the first time a run that changed something (a file tool,
+  or a shell command that isn't read-only) would end, the model gets one
+  message asking it to re-read the request, list each requirement, verify
+  each with a command, leave margin on numeric limits, match exact names
+  and formats, and fix what fails before finishing. Once per prompt; a turn
+  that only reads and answers is never checked. The transcript shows it as
+  one muted line.
 - `learn`: every model starts from the numbers above and is tuned from real
   sessions, in small bounded steps, once a knob has enough events since it
   last moved (8, or 5 compactions). Values are per provider/model in

@@ -63,6 +63,10 @@ func (s *Session) initEfficiency() {
 	if state.cfg.StallNudge {
 		s.agent.AddAfterToolCallHook(s.fileWatch.afterToolCall(s.services.CWD()))
 	}
+	if state.cfg.FinalCheck {
+		s.agent.AddAfterToolCallHook(s.finalCheckAfterToolCall)
+		s.agent.SetFinishTurn(s.efficiencyFinishTurn)
+	}
 	if s.inner != nil {
 		state.root = efficiency.RuntimeRoot(s.inner.Path(), s.inner.ID())
 	}
@@ -339,12 +343,13 @@ func (s *Session) reducerCompleter() efficiency.ReducerCompleter {
 // efficiencyFinishTurn ends the run at a plan boundary the economics selected,
 // so the session can compact and continue on the smaller context.
 func (s *Session) efficiencyFinishTurn(_ context.Context, turn agent.AgentTurnContext) *agent.AgentTurnDecision {
-	if s.efficiency == nil || s.efficiency.compact == nil {
+	if s.efficiency == nil {
 		return nil
 	}
-	if s.efficiency.compact.OnTurnEnd(turn) {
+	if s.efficiency.compact != nil && s.efficiency.compact.OnTurnEnd(turn) {
 		return &agent.AgentTurnDecision{Action: agent.AgentTurnEnd}
 	}
+	s.finalCheckAtTurnEnd(turn)
 	return nil
 }
 

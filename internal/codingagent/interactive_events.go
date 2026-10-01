@@ -8,6 +8,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+	"github.com/alexrudloff/wopr/internal/codingagent/efficiency"
 	"github.com/alexrudloff/wopr/internal/codingagent/goal"
 	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
 	"github.com/alexrudloff/wopr/tui"
@@ -98,6 +99,14 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 			// user turn must leave the pending queue immediately, not linger
 			// until agent_end.
 			m.updatePendingMessagesDisplay()
+		}
+		if custom := e.Message.Custom; custom != nil {
+			if customType, _ := custom["customType"].(string); customType != "" {
+				if label, ok := efficiency.NoteLabel(customType); ok {
+					m.appendHarnessNote(label)
+					m.tuiInst.RequestRender()
+				}
+			}
 		}
 		// A delivered background result has no user block to echo it.
 		if custom := e.Message.Custom; custom != nil && custom["customType"] == goal.MessageType {
