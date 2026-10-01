@@ -108,6 +108,17 @@ func (b *speedBook) observe(spec string, uncachedTokens int, ttft time.Duration)
 	}
 }
 
+// ExpectedTTFT is provider/model's expected time to first token for a
+// request with uncachedTokens new tokens, or ok=false before it has been
+// measured.
+func (r *Router) ExpectedTTFT(spec string, uncachedTokens int) (time.Duration, bool) {
+	if r == nil || r.speed == nil {
+		return 0, false
+	}
+	seconds, ok := r.speed.estimate(spec, uncachedTokens)
+	return time.Duration(seconds * float64(time.Second)), ok
+}
+
 func (b *speedBook) snapshot() map[string]SpeedStat {
 	b.mu.Lock()
 	defer b.mu.Unlock()

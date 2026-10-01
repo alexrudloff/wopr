@@ -417,8 +417,15 @@ the proposal system prompt, quotes and `web:` sources verified, no
 escalation or failover; a private council gets only a private SearXNG
 search, or no web tools) on its own model at its maximum
 thinking, through the session's task registry and provider limits.
-`gatherCouncil` stops collecting at the time limit
-(`warCouncil.timeoutSeconds`, default 300) and drops late members. The
+Each member's time budget scales with its measured prefill speed
+(`Session.councilTimeBudget`: the thorough budget for a model that
+prefills 20K tokens in 10 seconds or less, proportionally more for a
+slower one, twice as much for an unmeasured one, at most 30 minutes). Past
+its budget a member's tool calls are refused, but it keeps going while it
+streams thinking or answer text, until 45 seconds of silence or 5 more
+minutes; an answer the limit cuts off is kept and marked as cut off.
+`gatherCouncil` stops collecting at the council's time limit
+(`warCouncil.timeoutSeconds`, default 2100) and drops late members. The
 proposals reach the orchestrator as one `war_council` custom message that
 asks it to synthesize, not select.
 

@@ -155,7 +155,7 @@ in the 256-color palette. See [terminal setup](terminal-setup.md).
 | `shellCommandPrefix` | string |  | Prefix applied to every shell command. |
 | `externalEditor` | string |  | Editor opened by `app.editor.external`. |
 | `cleanupTempFiles` | boolean | `true` | Delete the temp files sessions create once nothing needs them. See [Temp file cleanup](#temp-file-cleanup). |
-| `warCouncil` | object |  | Global Thermonuclear War's council: `excluded` (models left out, as `provider/modelId`), `timeoutSeconds` (a member's limit, default 300), and `buildTimeoutSeconds` (a member's limit for building a candidate, default 900). Set on `/setup` → **War council**. See [War council](routing.md#war-council). |
+| `warCouncil` | object |  | Global Thermonuclear War's council: `excluded` (models left out, as `provider/modelId`), `timeoutSeconds` (how long the council waits for its members, default 2100; each member's own budget scales with its measured speed), and `buildTimeoutSeconds` (a member's limit for building a candidate, default 900). Set on `/setup` → **War council**. See [War council](routing.md#war-council). |
 
 ## Tools
 

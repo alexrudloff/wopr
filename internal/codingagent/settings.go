@@ -529,8 +529,9 @@ type WarCouncilSettings struct {
 	BuildTimeoutSeconds int `json:"buildTimeoutSeconds,omitempty"`
 }
 
-// DefaultWarCouncilTimeout is how long a council member may take by default.
-const DefaultWarCouncilTimeout = 5 * time.Minute
+// DefaultWarCouncilTimeout is how long the council waits for its members by
+// default: room for a slow local model's sized budget and its answer.
+const DefaultWarCouncilTimeout = 35 * time.Minute
 
 // DefaultWarCouncilBuildTimeout is how long a member may take to build a
 // candidate by default.

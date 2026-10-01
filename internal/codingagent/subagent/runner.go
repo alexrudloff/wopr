@@ -38,10 +38,14 @@ var buildBudget = Budget{Turns: 80, Time: 2 * time.Hour, Tokens: 6_000_000, Tool
 
 // budgetFor is a request's budget: its effort's, or a build candidate's.
 func budgetFor(req Request) Budget {
+	b := BudgetFor(req.Effort)
 	if req.Type == TypeBuild {
-		return buildBudget
+		b = buildBudget
 	}
-	return BudgetFor(req.Effort)
+	if req.TimeBudget > 0 {
+		b.Time = req.TimeBudget
+	}
+	return b
 }
 
 // BudgetFor returns the explore budget for an effort (default medium).
@@ -57,13 +61,24 @@ func BudgetFor(effort string) Budget {
 
 // Wrap-up messages. The nudge arrives at 80% of any budget; once a budget is
 // spent every tool call is refused and the child gets graceTurns more
-// requests to answer.
+// requests to answer. Past the time budget the child is stopped once it
+// goes graceTime without streaming a token, or AnswerCeiling after the
+// budget ran out: an answer that is still arriving gets to finish.
 const (
 	wrapUpNudge   = "Budget nearly exhausted: stop exploring and give your final answer now in the required format (STATUS, CONFIDENCE, ANSWER, EVIDENCE, NOT_CHECKED)."
 	budgetRefusal = "Budget exhausted: no more tool calls. Give your final answer now in the required format with the evidence you already have."
 	graceTurns    = 2
 	graceTime     = 45 * time.Second
+	// AnswerCeiling is the longest a child may keep streaming its answer
+	// past its time budget.
+	AnswerCeiling = 5 * time.Minute
+	// cutOffNote ends an answer the time limit stopped mid-stream.
+	cutOffNote = "\n\n[cut off: the time limit stopped this answer before it finished]"
 )
+
+// graceTick is how often a child past its time budget is checked for
+// silence.
+var graceTick = 5 * time.Second
 
 // Attempt is one child run.
 type Attempt struct {
@@ -112,6 +127,11 @@ func Run(ctx context.Context, at Attempt) Outcome {
 		out      Outcome
 		nudged   bool
 		hardStop int // request index at which the gate closed
+		// lastToken is when the child last streamed anything; streaming
+		// is the text of the reply in progress, kept so a reply cut off
+		// by the time limit isn't lost.
+		lastToken = start
+		streaming string
 	)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -158,6 +178,20 @@ func Run(ctx context.Context, at Attempt) Outcome {
 		},
 		OnEvent: func(ev agent.AgentEvent) {
 			switch e := ev.(type) {
+			case agent.MessageUpdateEvent:
+				// Thinking and answer text keep a child past its time
+				// budget alive; streaming more tool calls doesn't.
+				a := e.Message.Assistant
+				if a == nil || e.AssistantMessageEvent == nil {
+					return
+				}
+				switch e.AssistantMessageEvent.EventType() {
+				case ai.EventTextDelta, ai.EventThinkingDelta:
+					text := assistantText(a)
+					mu.Lock()
+					lastToken, streaming = time.Now(), text
+					mu.Unlock()
+				}
 			case agent.ToolExecutionStartEvent:
 				mu.Lock()
 				out.ToolCalls++
@@ -174,7 +208,13 @@ func Run(ctx context.Context, at Attempt) Outcome {
 				}
 			case agent.MessageEndEvent:
 				message := e.Message.Assistant
-				if message == nil || message.Usage == nil {
+				if message == nil {
+					return
+				}
+				mu.Lock()
+				streaming = ""
+				mu.Unlock()
+				if message.Usage == nil {
 					return
 				}
 				mu.Lock()
@@ -200,7 +240,7 @@ func Run(ctx context.Context, at Attempt) Outcome {
 		mu.Lock()
 		stop("time")
 		mu.Unlock()
-		time.AfterFunc(graceTime, cancel)
+		go waitForSilence(runCtx, &mu, &lastToken, cancel)
 	})
 	defer stopTimer.Stop()
 
@@ -213,7 +253,34 @@ func Run(ctx context.Context, at Attempt) Outcome {
 	if out.BudgetHit == "" && runCtx.Err() != nil && ctx.Err() == nil {
 		out.BudgetHit = "time"
 	}
+	if runCtx.Err() != nil && strings.TrimSpace(streaming) != "" {
+		// The limit stopped a reply mid-stream: its text is the answer,
+		// marked as cut off, rather than an earlier turn's preamble.
+		out.Text = strings.TrimSpace(streaming) + cutOffNote
+	}
 	return out
+}
+
+// waitForSilence cancels a child past its time budget once it has streamed
+// nothing for graceTime, or AnswerCeiling after the budget ran out.
+func waitForSilence(ctx context.Context, mu *sync.Mutex, lastToken *time.Time, cancel context.CancelFunc) {
+	deadline := time.Now().Add(AnswerCeiling)
+	tick := time.NewTicker(graceTick)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-tick.C:
+			mu.Lock()
+			quiet := now.Sub(*lastToken)
+			mu.Unlock()
+			if quiet >= graceTime || now.After(deadline) {
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 // gatedTool refuses calls once the attempt's budget is spent.
@@ -249,17 +316,22 @@ func finalText(messages []agent.AgentMessage) (text, providerError string) {
 		if i == len(messages)-1 && a.StopReason == ai.StopReasonError {
 			providerError = cmp.Or(a.ErrorMessage, "provider error")
 		}
-		var b strings.Builder
-		for _, block := range a.Content {
-			if t, ok := block.(ai.TextContent); ok {
-				b.WriteString(t.Text)
-			}
-		}
-		if s := strings.TrimSpace(b.String()); s != "" {
+		if s := strings.TrimSpace(assistantText(a)); s != "" {
 			return s, providerError
 		}
 	}
 	return "", providerError
+}
+
+// assistantText is the text blocks of a reply, joined.
+func assistantText(a *agent.AssistantMessage) string {
+	var b strings.Builder
+	for _, block := range a.Content {
+		if t, ok := block.(ai.TextContent); ok {
+			b.WriteString(t.Text)
+		}
+	}
+	return b.String()
 }
 
 // transcript renders the child's messages as plain text for the archive and

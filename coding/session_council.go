@@ -244,7 +244,8 @@ func (s *Session) runCouncil(ctx context.Context, question string) CouncilResult
 		}
 		name := cmp.Or(model.DisplayName, member.Ref.Spec())
 		calls = append(calls, councilCall{name: name, spec: route.Spec, run: func(ctx context.Context) (string, error) {
-			spec := subagent.Spec{Type: subagent.TypePropose, Description: "council · " + name, Brief: brief, Effort: subagent.EffortThorough}
+			spec := subagent.Spec{Type: subagent.TypePropose, Description: "council · " + name, Brief: brief, Effort: subagent.EffortThorough,
+				TimeBudget: s.councilTimeBudget(route.Spec, timeout)}
 			for attempt := 0; ; attempt++ {
 				id := subagent.NewTaskID(fmt.Sprintf("council\x00%s\x00%d\x00%s", route.Spec, time.Now().UnixNano(), question))
 				details, answer, err := s.councilRunner(councilHost{s: s, route: route}).Run(ctx, id, spec, nil)
@@ -259,6 +260,31 @@ func (s *Session) runCouncil(ctx context.Context, question string) CouncilResult
 	}
 	proposals, late := gatherCouncil(ctx, calls, timeout)
 	return CouncilResult{Proposals: proposals, Skipped: append(skipped, late...)}
+}
+
+// Council members get time in proportion to how slowly they prefill: a
+// model expected to take councilRefTTFT or less on councilRefTokens of new
+// context gets the thorough budget, a slower one proportionally more, an
+// unmeasured one twice as much. The budget stays under the council's limit,
+// less the time a member may spend finishing its answer, and under
+// councilMaxTime.
+const (
+	councilRefTokens = 20_000
+	councilRefTTFT   = 10 * time.Second
+	councilMaxTime   = 30 * time.Minute
+)
+
+// councilTimeBudget is how long a member on spec may work before it must
+// answer, given the council's time limit.
+func (s *Session) councilTimeBudget(spec string, limit time.Duration) time.Duration {
+	base := subagent.BudgetFor(subagent.EffortThorough).Time
+	budget := 2 * base
+	if s.router != nil {
+		if ttft, ok := s.router.ExpectedTTFT(spec, councilRefTokens); ok {
+			budget = time.Duration(float64(base) * max(1, float64(ttft)/float64(councilRefTTFT)))
+		}
+	}
+	return max(base, min(budget, councilMaxTime, limit-subagent.AnswerCeiling))
 }
 
 // councilCall is one member's run.

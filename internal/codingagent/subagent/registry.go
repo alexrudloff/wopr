@@ -34,6 +34,9 @@ type Spec struct {
 	// the child should not share.
 	Level       string `json:"level,omitempty"`
 	AvoidFamily string `json:"avoidFamily,omitempty"`
+	// TimeBudget, when set, replaces the effort's time budget: the war
+	// council sizes it to each member's measured speed.
+	TimeBudget time.Duration `json:"-"`
 }
 
 // Agent is a snapshot of one task in the registry.

@@ -12,7 +12,7 @@ import (
 // councilLimits are the time limits the War council screen offers, and
 // councilBuildLimits those for building a candidate.
 var (
-	councilLimits      = []time.Duration{2 * time.Minute, 5 * time.Minute, 10 * time.Minute, 20 * time.Minute}
+	councilLimits      = []time.Duration{5 * time.Minute, 10 * time.Minute, 20 * time.Minute, 35 * time.Minute, 60 * time.Minute}
 	councilBuildLimits = []time.Duration{5 * time.Minute, 10 * time.Minute, 15 * time.Minute, 30 * time.Minute, 60 * time.Minute}
 )
 
