@@ -296,11 +296,14 @@ func (t *EditTool) editLocked(ctx context.Context, absPath string, p editRequest
 	diff, firstChangedLine := GenerateDiffString(applied.baseContent, applied.newContent)
 	patch := GenerateUnifiedPatch(p.Path, applied.baseContent, applied.newContent)
 	message := fmt.Sprintf("Successfully replaced %d block(s) in %s.", len(p.Edits), p.Path)
+	if len(applied.loose) > 0 {
+		message += " (" + strings.Join(applied.loose, "; ") + ")"
+	}
 	if fresh != "" && hashline {
 		message += " Fresh anchors:\n" + fresh
 	}
 	return agent.AgentToolResult{
 		Content: message,
-		Details: &EditToolDetails{Diff: diff, Patch: patch, FirstChangedLine: firstChangedLine},
+		Details: &EditToolDetails{Diff: diff, Patch: patch, FirstChangedLine: firstChangedLine, Loose: applied.loose},
 	}
 }

@@ -65,6 +65,8 @@ WOPR enables four built-in tools by default: `read`, `bash`, `edit` and `write`.
 
 WOPR sends every active tool definition with each model request.
 
+`edit` replaces text it finds in the file. When an `oldText` isn't there as written, it tries looser matches in order: ignoring trailing spaces, smart quotes and dashes; ignoring indentation (the new text is re-indented by the same amount); ignoring runs of whitespace; and ignoring doubled backslashes (a common slip with escapes like `\u00b7`, fixed the same way in the new text). A loose match must fit exactly one place, or nothing changes, and the result says how it matched. When nothing fits, the error names every edit that missed and shows the closest lines in the file, so the next try needs no re-read. An edit call applies all of its edits or none.
+
 ## Resources
 
 Skills provide instructions and supporting files. Prompt templates provide reusable message text. Themes set terminal colors.

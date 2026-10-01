@@ -89,10 +89,12 @@ type matchedEdit struct {
 	newText     string
 }
 
-// appliedEditsResult is the base and edited content of an applied edit set.
+// appliedEditsResult is the base and edited content of an applied edit set,
+// and how any edit matched loosely ("edits[2] matched ignoring indentation").
 type appliedEditsResult struct {
 	baseContent string
 	newContent  string
+	loose       []string
 }
 
 // applyEditsToNormalizedContent applies edits to LF-normalized content:
@@ -132,10 +134,24 @@ func applyEditsToNormalizedContent(normalizedContent string, edits []editEntry, 
 
 	// Second probe: locate each edit in baseContent.
 	matched := make([]matchedEdit, 0, len(normEdits))
+	var loose, missing []string
+	var missingIdx []int
 	for i, e := range normEdits {
 		m := fuzzyFindText(baseContent, e.OldText)
 		if !m.found {
-			return appliedEditsResult{}, notFoundErr(path, i, len(normEdits))
+			lm, ok, places, label := findLoose(baseContent, e.OldText, e.NewText)
+			if places > 1 {
+				return appliedEditsResult{}, looseAmbiguousErr(path, i, len(normEdits), places, label)
+			}
+			if !ok {
+				// Keep checking the rest, so one reply can fix every miss.
+				missing = append(missing, nearestHint(baseContent, e.OldText))
+				missingIdx = append(missingIdx, i)
+				continue
+			}
+			matched = append(matched, matchedEdit{editIndex: i, matchIndex: lm.index, matchLength: lm.length, newText: lm.newText})
+			loose = append(loose, fmt.Sprintf("%s matched %s", editName(i, len(normEdits)), lm.label))
+			continue
 		}
 		// Count in baseContent (or its fuzzy normalization).
 		occ := countOccurrences(baseContent, e.OldText)
@@ -148,6 +164,10 @@ func applyEditsToNormalizedContent(normalizedContent string, edits []editEntry, 
 			matchLength: m.matchLength,
 			newText:     e.NewText,
 		})
+	}
+
+	if len(missingIdx) > 0 {
+		return appliedEditsResult{}, notFoundAllErr(path, len(normEdits), missingIdx, missing)
 	}
 
 	// Sort ascending by position, check overlaps.
@@ -180,7 +200,7 @@ func applyEditsToNormalizedContent(normalizedContent string, edits []editEntry, 
 		return appliedEditsResult{}, noChangeErr(path, len(normEdits))
 	}
 
-	return appliedEditsResult{baseContent: normalizedContent, newContent: newContent}, nil
+	return appliedEditsResult{baseContent: normalizedContent, newContent: newContent, loose: loose}, nil
 }
 
 // splitLinesWithEndings splits content into lines; each line keeps its "\n".
@@ -297,7 +317,35 @@ func notFoundErr(path string, i, total int) error {
 	if total == 1 {
 		return fmt.Errorf("Could not find the exact text in %s. The old text must match exactly including all whitespace and newlines.", path)
 	}
-	return fmt.Errorf("Could not find edits[%d] in %s. The oldText must match exactly including all whitespace and newlines.", i, path)
+	return fmt.Errorf("Could not find edits[%d] in %s. The oldText must match exactly including all whitespace and newlines. None of the %d edits were applied; resend them with edits[%d] fixed.", i, path, total, i)
+}
+
+// notFoundAllErr names every edit that didn't match, each with its closest
+// text when there is one.
+func notFoundAllErr(path string, total int, idx []int, hints []string) error {
+	if len(idx) == 1 {
+		return fmt.Errorf("%w%s", notFoundErr(path, idx[0], total), hints[0])
+	}
+	names := make([]string, len(idx))
+	var b strings.Builder
+	for k, i := range idx {
+		names[k] = fmt.Sprintf("edits[%d]", i)
+		if hints[k] != "" {
+			fmt.Fprintf(&b, "\n\nedits[%d]:%s", i, hints[k])
+		}
+	}
+	return fmt.Errorf("Could not find %s in %s. The oldText must match exactly including all whitespace and newlines. None of the %d edits were applied; resend them with these fixed.%s", strings.Join(names, ", "), path, total, b.String())
+}
+
+func editName(i, total int) string {
+	if total == 1 {
+		return "the edit"
+	}
+	return fmt.Sprintf("edits[%d]", i)
+}
+
+func looseAmbiguousErr(path string, i, total, places int, label string) error {
+	return fmt.Errorf("%s matched %d places in %s %s, so nothing was changed. Add surrounding lines to make it unique.", editName(i, total), places, path, label)
 }
 
 func duplicateErr(path string, i, total, occ int) error {

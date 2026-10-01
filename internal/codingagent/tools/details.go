@@ -13,6 +13,9 @@ type EditToolDetails struct {
 	// FirstChangedLine is the new-file line of the first change, 0 when
 	// there is no change (omitted).
 	FirstChangedLine int `json:"firstChangedLine,omitempty"`
+	// Loose says how edits matched that weren't found exactly, e.g.
+	// "edits[2] matched ignoring indentation".
+	Loose []string `json:"loose,omitempty"`
 }
 
 // WriteDetails is attached to a WriteTool result. The TUI uses the path to
