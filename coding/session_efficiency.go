@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/alexrudloff/wopr/agent"
@@ -28,7 +29,19 @@ type sessionEfficiency struct {
 	// boundaryReason marks the compaction this session selected at a plan
 	// boundary so RecordCompaction can carry its cache debt.
 	boundaryReason string
+	// imagesPruned and imagesSizePruned are the counts the last request
+	// projection pruned, so a savings line appears only when they grow.
+	imagesPruned, imagesSizePruned atomic.Int64
 }
+
+// Request size limits, below each provider's own: Anthropic refuses a
+// request over 32 MB (HTTP 413), and base64 images are what get there.
+const (
+	anthropicRequestLimit = 24 << 20
+	defaultRequestLimit   = 40 << 20
+	// imageTokens estimates one image's tokens for a savings line.
+	imageTokens = 1200
+)
 
 // initEfficiency loads efficiency.json and installs the enabled mechanisms. It runs
 // after the router so the reducer can use the cheapest tier.
@@ -126,6 +139,7 @@ func (s *Session) EfficiencyStatus() string {
 	fmt.Fprintf(&b, "- Action Fusion: %s\n- Observation Pack: %s\n- Evidence-Preserving Reducer: %s\n- Online Context Compact: %s (cache write/read ratio %.1f)\n",
 		onOff(st.cfg.ActionFusion), onOff(st.cfg.ObservationPack), onOff(st.cfg.EvidencePreservingReducer), onOff(st.cfg.OnlineContextCompact), st.cfg.CacheWriteReadRatio)
 	fmt.Fprintf(&b, "- Quota balance: %s\n", onOff(st.cfg.QuotaBalance))
+	fmt.Fprintf(&b, "- Image pruning: %s (newest %d kept)\n", onOff(st.cfg.ImagePruning), st.cfg.KeepImages)
 	fmt.Fprintf(&b, "- Learning: %s\n", onOff(st.cfg.Learn))
 	for _, line := range st.learner.Summary() {
 		fmt.Fprintf(&b, "  - %s\n", line)
@@ -147,18 +161,65 @@ func (s *Session) emitSavings(mechanism, saving string, tokens int) {
 	s.emitOrderedEvent(agent.SavingsEvent{Mechanism: mechanism, Saving: saving, Tokens: tokens})
 }
 
-// efficiencyProject applies ObservationPack to a request context.
+// efficiencyProject applies ObservationPack and image pruning to a request
+// context.
 func (s *Session) efficiencyProject(messages []agent.AgentMessage) []agent.AgentMessage {
-	if s.efficiency == nil || s.efficiency.pack == nil {
+	if s.efficiency == nil {
 		return messages
 	}
-	messages = s.efficiency.pack.Project(messages)
-	if s.efficiency.cfg.ToolOutputHalfLife {
-		if model := s.activeModel(); model != nil {
-			messages = s.efficiency.pack.ProjectHalfLife(messages, s.efficiency.learner.HalfLifeKeep(modelSpec(model), model.Capabilities.ContextWindow))
+	if s.efficiency.pack != nil {
+		messages = s.efficiency.pack.Project(messages)
+		if s.efficiency.cfg.ToolOutputHalfLife {
+			if model := s.activeModel(); model != nil {
+				messages = s.efficiency.pack.ProjectHalfLife(messages, s.efficiency.learner.HalfLifeKeep(modelSpec(model), model.Capabilities.ContextWindow))
+			}
 		}
 	}
-	return messages
+	return s.projectImages(messages)
+}
+
+// projectImages keeps the newest images when image pruning is on, and with
+// it on or off keeps the request under the provider's size limit.
+func (s *Session) projectImages(messages []agent.AgentMessage) []agent.AgentMessage {
+	keep := 0
+	if s.efficiency.cfg.ImagePruning {
+		keep = s.efficiency.cfg.KeepImages
+	}
+	limit := defaultRequestLimit
+	if model := s.activeModel(); model != nil && (model.ProviderMeta.API == ai.APIAnthropicMessages || model.ProviderMeta.API == ai.APIBedrockConverseStream) {
+		limit = anthropicRequestLimit
+	}
+	// The read tool's path names a pruned screenshot.
+	paths := map[string]string{}
+	for _, m := range messages {
+		if m.Assistant == nil {
+			continue
+		}
+		for _, block := range m.Assistant.Content {
+			if call, ok := block.(ai.ToolCall); ok && call.Name == "read" {
+				if path, _ := call.Arguments["path"].(string); path != "" {
+					paths[call.ID] = path
+				}
+			}
+		}
+	}
+	projected, report := efficiency.ProjectImages(messages, keep, limit, func(id string) string { return paths[id] })
+	if prev := s.efficiency.imagesPruned.Swap(int64(report.Pruned)); int64(report.Pruned) > prev {
+		n := report.Pruned - int(prev)
+		s.emitSavings("Image pruning", fmt.Sprintf("%d old %s left out of the request", n, images(n)), n*imageTokens)
+	}
+	if prev := s.efficiency.imagesSizePruned.Swap(int64(report.SizePruned)); int64(report.SizePruned) > prev {
+		n := report.SizePruned - int(prev)
+		s.emitSavings("Request size", fmt.Sprintf("%d more %s left out to stay under the provider's size limit", n, images(n)), n*imageTokens)
+	}
+	return projected
+}
+
+func images(n int) string {
+	if n == 1 {
+		return "image"
+	}
+	return "images"
 }
 
 // efficiencyRecordRequest counts a provider request for Online Context Compact.

@@ -51,6 +51,11 @@ type Config struct {
 	// QuotaBalance moves routed work to a similarly ranked model on another
 	// subscription plan when the top pick's plan gets tight.
 	QuotaBalance bool `json:"quotaBalance"`
+	// ImagePruning sends only the newest KeepImages images (screenshots,
+	// pasted images) and replaces older ones with a short placeholder; the
+	// session file keeps them all.
+	ImagePruning bool `json:"imagePruning"`
+	KeepImages   int  `json:"keepImages"`
 }
 
 // DefaultConfig turns every mechanism on.
@@ -68,12 +73,14 @@ func DefaultConfig() Config {
 		ApplyPatch:                true,
 		QuotaBalance:              true,
 		Learn:                     true,
+		ImagePruning:              true,
+		KeepImages:                3,
 	}
 }
 
 // Enabled reports whether any mechanism is on.
 func (c Config) Enabled() bool {
-	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch
+	return c.ActionFusion || c.ObservationPack || c.EvidencePreservingReducer || c.OnlineContextCompact || c.StallNudge || c.TestRerunCap || c.ApplyPatch || c.ImagePruning
 }
 
 // Load reads <agentDir>/efficiency.json. Unknown keys and bad values are
@@ -97,6 +104,7 @@ func Load(agentDir string) (Config, error) {
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
 		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true /* retired; ignored */, "applyPatch": true, "quotaBalance": true, "learn": true,
+		"imagePruning": true, "keepImages": true,
 	}
 	for key := range raw {
 		if !known[key] {
@@ -105,6 +113,9 @@ func Load(agentDir string) (Config, error) {
 	}
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return cfg, fmt.Errorf("efficiency: parse %s: %w", path, err)
+	}
+	if cfg.KeepImages < 1 {
+		return cfg, fmt.Errorf("efficiency: keepImages must be at least 1 in %s", path)
 	}
 	if cfg.Version != 1 {
 		return cfg, fmt.Errorf("efficiency: config version must be 1 in %s", path)

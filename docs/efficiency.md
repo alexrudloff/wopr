@@ -150,6 +150,17 @@ More keys in `efficiency.json`, each on by default:
   under 10% moves a warm orchestrator at the next turn. The route reason
   says so: `quota: Claude 5h 82% used → ChatGPT wk 41% used`. A pinned tier
   is left alone.
+- `imagePruning` and `keepImages` (default 3): a request carries only the
+  newest `keepImages` images (screenshots from `read`, pasted images); older
+  ones become a one-line placeholder such as `[image removed from context:
+  /tmp/shot.png, 01:43]`. Pruning happens three images at a time, so the
+  cached prompt prefix changes only every few images. Your own pasted images
+  stay while they are among your three newest. The session file keeps every
+  image. Independently of the switch, a request over a provider's size limit
+  (24 MB for Anthropic and Bedrock, under their 32 MB cap; 40 MB elsewhere)
+  drops its oldest images until it fits, down to the newest one, and never
+  drops text; an HTTP 413 that still comes back is treated as context
+  overflow and compacted.
 - `learn`: every model starts from the numbers above and is tuned from real
   sessions, in small bounded steps, once a knob has enough events since it
   last moved (8, or 5 compactions). Values are per provider/model in

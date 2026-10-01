@@ -28,6 +28,8 @@ var overflowPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)context[_ ]length[_ ]exceeded`),                                                             // Generic fallback
 	regexp.MustCompile(`(?i)too many tokens`),                                                                           // Generic fallback
 	regexp.MustCompile(`(?i)token limit exceeded`),                                                                      // Generic fallback
+	regexp.MustCompile(`(?i)\bHTTP 413\b`),                                                                              // Generic request byte-size overflow
+	regexp.MustCompile(`(?i)(?:payload|request entity) too large`),                                                      // Generic request byte-size overflow
 }
 
 // cerebrasBodylessOverflowPattern is Cerebras's bodyless 400/413 overflow.
