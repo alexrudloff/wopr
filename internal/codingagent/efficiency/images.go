@@ -41,22 +41,32 @@ type imageLoc struct {
 	at         int64
 	name       string
 	size       int
+	// batch is the message that brought the image in: the assistant turn
+	// whose tool calls returned it, or the user's own message.
+	batch int
 }
 
-// ProjectImages replaces all but the newest keep images with a placeholder,
-// in steps of imagePruneStep, except the user's newest keepUserImages. keep
-// 0 turns that rule off. When the estimated message bytes still exceed
-// maxBytes (0: no limit), the oldest remaining images are replaced too,
-// down to the newest one. Text is never dropped. Messages are copied, never
-// mutated. name returns a tool result's file name by tool call ID, or "".
+// ProjectImages replaces images older than the newest keep with a
+// placeholder, in steps of imagePruneStep. Images are kept by batch, the
+// images one assistant turn's tool calls returned, so the newest batch
+// always arrives whole however large it is, and the model sees every image
+// at least once. The user's newest keepUserImages stay too. keep 0 turns
+// that rule off. When the estimated message bytes still exceed maxBytes (0:
+// no limit), the oldest remaining images are replaced too, ones the model
+// has seen first, down to the newest one. Text is never dropped. Messages
+// are copied, never mutated. name returns a tool result's file name by tool
+// call ID, or "".
 func ProjectImages(messages []agent.AgentMessage, keep, maxBytes int, name func(callID string) string) ([]agent.AgentMessage, ImageProjection) {
 	var locs []imageLoc
+	lastAssistant := -1
 	for i, m := range messages {
 		switch {
+		case m.Assistant != nil:
+			lastAssistant = i
 		case m.User != nil:
 			for j, block := range m.User.Content {
 				if img, ok := block.(ai.ImageContent); ok {
-					locs = append(locs, imageLoc{msg: i, block: j, user: true, at: m.User.Timestamp, name: "your image", size: len(img.Data)})
+					locs = append(locs, imageLoc{msg: i, block: j, user: true, at: m.User.Timestamp, name: "your image", size: len(img.Data), batch: i})
 				}
 			}
 		case m.ToolResult != nil:
@@ -68,7 +78,7 @@ func ProjectImages(messages []agent.AgentMessage, keep, maxBytes int, name func(
 							label = n
 						}
 					}
-					locs = append(locs, imageLoc{msg: i, block: j, at: m.ToolResult.Timestamp, name: label, size: len(img.Data)})
+					locs = append(locs, imageLoc{msg: i, block: j, at: m.ToolResult.Timestamp, name: label, size: len(img.Data), batch: lastAssistant})
 				}
 			}
 		}
@@ -86,11 +96,22 @@ func ProjectImages(messages []agent.AgentMessage, keep, maxBytes int, name func(
 			users++
 		}
 	}
+	// unseen are images after the last reply: the model has not seen them.
+	unseen := func(k int) bool { return locs[k].msg > lastAssistant }
 	pruned := make([]bool, len(locs))
 	if keep > 0 && len(locs) > keep {
-		frontier := (len(locs) - keep) / imagePruneStep * imagePruneStep
+		// Keep whole batches, newest first, until keep images are kept.
+		older := len(locs)
+		for kept := 0; older > 0 && kept < keep; {
+			batch := locs[older-1].batch
+			for older > 0 && locs[older-1].batch == batch {
+				older--
+				kept++
+			}
+		}
+		frontier := older / imagePruneStep * imagePruneStep
 		for k := range frontier {
-			if !protected[k] {
+			if !protected[k] && !unseen(k) {
 				pruned[k] = true
 				out.Pruned++
 				out.Bytes -= locs[k].size
@@ -99,14 +120,16 @@ func ProjectImages(messages []agent.AgentMessage, keep, maxBytes int, name func(
 	}
 	if maxBytes > 0 {
 		left := len(locs) - out.Pruned
-		for k := 0; k < len(locs) && out.Bytes > maxBytes && left > 1; k++ {
-			if pruned[k] {
-				continue
+		for _, unseenToo := range []bool{false, true} {
+			for k := 0; k < len(locs) && out.Bytes > maxBytes && left > 1; k++ {
+				if pruned[k] || unseen(k) && !unseenToo {
+					continue
+				}
+				pruned[k] = true
+				out.SizePruned++
+				out.Bytes -= locs[k].size
+				left--
 			}
-			pruned[k] = true
-			out.SizePruned++
-			out.Bytes -= locs[k].size
-			left--
 		}
 	}
 	if out.Pruned+out.SizePruned == 0 {
@@ -170,6 +193,8 @@ func messageBytes(messages []agent.AgentMessage) int {
 				case ai.ToolCall:
 					args, _ := json.Marshal(b.Arguments)
 					n += len(args)
+				case ai.ServerToolContent:
+					n += len(b.Raw)
 				}
 			}
 		case m.ToolResult != nil:
