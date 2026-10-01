@@ -156,6 +156,8 @@ func EstimateMessageTokens(message Message) int {
 				chars += utf16Length(block.Thinking)
 			case ToolCall:
 				chars += utf16Length(block.Name) + JSONStringifyLength(block.Arguments)
+			case ServerToolContent:
+				chars += len(block.Raw)
 			}
 		}
 		return ceilDiv(chars)

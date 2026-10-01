@@ -342,6 +342,8 @@ func rpcContentBlock(block ai.ContentBlock) (any, error) {
 			out["namespace"] = block.Namespace
 		}
 		return out, nil
+	case ai.ServerToolContent:
+		return map[string]any{"type": "serverTool", "raw": block.Raw}, nil
 	case ai.ThinkingContent:
 		out := map[string]any{"type": "thinking", "thinking": block.Thinking}
 		if block.ThinkingSignature != "" {

@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"sort"
 	"strings"
 	"time"
@@ -326,6 +327,24 @@ func (builder *assistantStreamBuilder) endText() {
 	block := builder.partial.Content[builder.activeText].(TextContent)
 	builder.push(TextEndEvent{ContentIndex: builder.activeText, Content: block.Text, Partial: builder.partial})
 	builder.activeText = -1
+}
+
+// serverBlock appends a block a provider produced by running a tool on its
+// servers, kept verbatim for replay, and returns its index in the reply.
+func (builder *assistantStreamBuilder) serverBlock(raw json.RawMessage) int {
+	builder.start()
+	builder.partial.Content = append(builder.partial.Content, ServerToolContent{Raw: append(json.RawMessage(nil), raw...)})
+	return len(builder.partial.Content) - 1
+}
+
+// setServerBlock replaces the server block at index once it is complete.
+func (builder *assistantStreamBuilder) setServerBlock(index int, raw json.RawMessage) {
+	if index < 0 || index >= len(builder.partial.Content) {
+		return
+	}
+	if _, ok := builder.partial.Content[index].(ServerToolContent); ok {
+		builder.partial.Content[index] = ServerToolContent{Raw: raw}
+	}
 }
 
 func (builder *assistantStreamBuilder) endThinking() {

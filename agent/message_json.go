@@ -289,6 +289,8 @@ func marshalAgentContentBlock(block ai.ContentBlock) (any, error) {
 		}{Type: "image", Data: value.Data, MIMEType: value.MimeType}, nil
 	case ai.ThinkingContent:
 		return value, nil
+	case ai.ServerToolContent:
+		return value, nil
 	case ai.ToolCall:
 		return struct {
 			Type             string        `json:"type"`

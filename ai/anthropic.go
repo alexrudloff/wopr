@@ -156,6 +156,54 @@ type anthContentBlock struct {
 	Tool *anthToolReference `json:"tool,omitempty"`
 	// cache_control
 	CacheControl *anthCacheControl `json:"cache_control,omitempty"`
+	// raw is a server block replayed exactly as the provider sent it.
+	raw string
+}
+
+// isAnthServerBlock reports whether a content block type is one a reply
+// carries for a tool Anthropic ran on its servers (server_tool_use and its
+// *_tool_result). Those blocks are kept in the reply and replayed in place,
+// since the thinking blocks around them are signed in that order.
+func isAnthServerBlock(blockType string) bool {
+	return blockType == "server_tool_use" || blockType != "tool_result" && strings.HasSuffix(blockType, "_tool_result")
+}
+
+// withAnthServerInput sets a streamed server_tool_use block's input to the
+// JSON its input_json_delta events built. A block that streamed no input
+// keeps the input it started with.
+func withAnthServerInput(block json.RawMessage, input string) (json.RawMessage, error) {
+	if strings.TrimSpace(input) == "" {
+		return block, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(block, &fields); err != nil {
+		return nil, err
+	}
+	if !json.Valid([]byte(input)) {
+		return nil, fmt.Errorf("server_tool_use input is not JSON")
+	}
+	fields["input"] = json.RawMessage(input)
+	return json.Marshal(fields)
+}
+
+// MarshalJSON writes a raw server block verbatim and every other block field
+// by field.
+func (block anthContentBlock) MarshalJSON() ([]byte, error) {
+	if block.raw != "" {
+		return []byte(block.raw), nil
+	}
+	if block.Type == "thinking" {
+		// The API requires the thinking field even when the text is empty,
+		// as a signed summary sometimes is.
+		return json.Marshal(struct {
+			Type         string            `json:"type"`
+			Thinking     string            `json:"thinking"`
+			Signature    string            `json:"signature,omitempty"`
+			CacheControl *anthCacheControl `json:"cache_control,omitempty"`
+		}{block.Type, block.Thinking, block.Signature, block.CacheControl})
+	}
+	type plain anthContentBlock
+	return json.Marshal(plain(block))
 }
 
 // anthToolReference names a declared tool in a tool_addition or tool_removal
@@ -452,6 +500,13 @@ func anthConvertMessagesDetailed(messages []Message, isOAuthToken, allowEmptySig
 					} else {
 						blocks = append(blocks, anthContentBlock{Type: "text", Text: content.Thinking})
 					}
+				case ServerToolContent:
+					var probe struct {
+						Type string `json:"type"`
+					}
+					if json.Unmarshal(content.Raw, &probe) == nil && isAnthServerBlock(probe.Type) {
+						blocks = append(blocks, anthContentBlock{Type: probe.Type, raw: string(content.Raw)})
+					}
 				case ToolCall:
 					arguments := content.Arguments
 					if arguments == nil {
@@ -545,16 +600,17 @@ func stripThinkingSignatures(messages []Message) []Message {
 }
 
 // isThinkingSignatureError reports whether an Anthropic error body describes a
-// rejected thinking-block signature (e.g. "Invalid `signature` in `thinking`
-// block"). Matching on both tokens avoids firing on unrelated signature or
-// thinking errors.
+// rejected thinking block: a bad signature ("Invalid `signature` in `thinking`
+// block") or a replayed turn whose thinking no longer matches what was signed
+// ("thinking blocks in the latest assistant message cannot be modified").
+// Matching on both tokens avoids firing on unrelated errors.
 func isThinkingSignatureError(body []byte) bool {
 	var errResp anthErrorResponse
 	if json.Unmarshal(body, &errResp) != nil {
 		return false
 	}
 	msg := strings.ToLower(errResp.Error.Message)
-	return strings.Contains(msg, "signature") && strings.Contains(msg, "thinking")
+	return strings.Contains(msg, "thinking") && (strings.Contains(msg, "signature") || strings.Contains(msg, "cannot be modified"))
 }
 
 // anthHTTPError formats a non-200 Anthropic response, preferring the parsed
@@ -1205,6 +1261,10 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 		toolName  string
 		toolArgs  strings.Builder
 		signature strings.Builder
+		// serverRaw and serverIdx are a server_tool_use block as it started
+		// and its place in the reply, filled in with its input when it stops.
+		serverRaw json.RawMessage
+		serverIdx int
 	}
 	blocks := map[int]*activeBlock{}
 	toolCallSeqIdx := 0 // 0-based sequential index for tool calls only
@@ -1274,6 +1334,17 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 			}
 			ab := &activeBlock{blockType: ev.ContentBlock.Type}
 			blocks[ev.Index] = ab
+			if isAnthServerBlock(ev.ContentBlock.Type) {
+				var raw struct {
+					ContentBlock json.RawMessage `json:"content_block"`
+				}
+				if err := unmarshalAnthropicSSEEvent(event, &raw); err != nil {
+					builder.fail(StopReasonError, err)
+					return
+				}
+				ab.serverRaw = raw.ContentBlock
+				ab.serverIdx = builder.serverBlock(raw.ContentBlock)
+			}
 
 			switch ev.ContentBlock.Type {
 			case "text":
@@ -1354,6 +1425,9 @@ func (p *anthropicProvider) parseAnthropicSSE(ctx context.Context, r io.Reader, 
 				}
 				if json.Unmarshal([]byte(ab.toolArgs.String()), &input) == nil && input.Query != "" {
 					serverQueries[ab.toolID] = input.Query
+				}
+				if raw, err := withAnthServerInput(ab.serverRaw, ab.toolArgs.String()); err == nil {
+					builder.setServerBlock(ab.serverIdx, raw)
 				}
 			}
 			delete(blocks, ev.Index)

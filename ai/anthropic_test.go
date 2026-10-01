@@ -749,3 +749,103 @@ func TestApplyConversationCacheControl(t *testing.T) {
 }
 
 // ─── beta messages endpoint ─────────────────────────────────────────────────
+
+// A reply that ran Anthropic's server web search replays with its server
+// blocks in place among the signed thinking blocks, after a session
+// save/load, and an empty signed thinking block keeps its thinking field.
+// Dropping either made the API reject the next request.
+func TestAnthropicServerSearchReplaysInPlace(t *testing.T) {
+	sse := `event: message_start
+data: {"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":5,"output_tokens":0}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"thinking","thinking":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"search first"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signature_delta","signature":"sigA"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":0}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"query\": \"regex chess\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":1}
+
+event: content_block_start
+data: {"type":"content_block_start","index":2,"content_block":{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[{"type":"web_search_result","title":"T","url":"https://e.x","encrypted_content":"ENC"}]}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":2}
+
+event: content_block_start
+data: {"type":"content_block_start","index":3,"content_block":{"type":"thinking","thinking":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":3,"delta":{"type":"signature_delta","signature":"sigB"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":3}
+
+event: content_block_start
+data: {"type":"content_block_start","index":4,"content_block":{"type":"tool_use","id":"toolu_1","name":"bash","input":{}}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":4,"delta":{"type":"input_json_delta","partial_json":"{\"command\":\"ls\"}"}}
+
+event: content_block_stop
+data: {"type":"content_block_stop","index":4}
+
+event: message_delta
+data: {"type":"message_delta","delta":{"stop_reason":"tool_use"},"usage":{"output_tokens":20}}
+
+event: message_stop
+data: {"type":"message_stop"}
+
+`
+	reply := anthropicTerminal(t, runAnthropicSSE(t, sse))
+	saved, err := json.Marshal(reply)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var loaded AssistantMessage
+	if err := json.Unmarshal(saved, &loaded); err != nil {
+		t.Fatal(err)
+	}
+	converted := anthConvertMessages([]Message{
+		UserMessage{Content: UserText("go")},
+		loaded,
+		ToolResultMessage{ToolCallID: "toolu_1", ToolName: "bash", Content: []ToolResultMessageContent{TextContent{Text: "ok"}}},
+	}, false, false, false)
+	body, err := json.Marshal(converted[1].Content)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var blocks []map[string]any
+	if err := json.Unmarshal(body, &blocks); err != nil {
+		t.Fatal(err)
+	}
+	var types []string
+	for _, b := range blocks {
+		types = append(types, b["type"].(string))
+	}
+	if want := []string{"thinking", "server_tool_use", "web_search_tool_result", "thinking", "tool_use"}; !reflect.DeepEqual(types, want) {
+		t.Fatalf("replayed block types = %v, want %v\n%s", types, want, body)
+	}
+	if q := blocks[1]["input"].(map[string]any)["query"]; q != "regex chess" {
+		t.Fatalf("server_tool_use input = %v", blocks[1]["input"])
+	}
+	if !strings.Contains(string(body), `"encrypted_content":"ENC"`) {
+		t.Fatalf("search result not replayed verbatim: %s", body)
+	}
+	if thinking, ok := blocks[3]["thinking"]; !ok || thinking != "" || blocks[3]["signature"] != "sigB" {
+		t.Fatalf("empty thinking block = %v", blocks[3])
+	}
+}

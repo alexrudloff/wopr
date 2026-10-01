@@ -83,6 +83,12 @@ func UnmarshalContentBlock(data []byte) (ContentBlock, error) {
 			return nil, err
 		}
 		return t, nil
+	case "serverTool":
+		var t ServerToolContent
+		if err := json.Unmarshal(data, &t); err != nil {
+			return nil, err
+		}
+		return t, nil
 	default:
 		return nil, fmt.Errorf("unknown content block type %q", probe.Type)
 	}

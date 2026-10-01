@@ -68,9 +68,10 @@ type AssistantContentBlock interface {
 	isAssistantContentBlock()
 }
 
-func (TextContent) isAssistantContentBlock()     {}
-func (ThinkingContent) isAssistantContentBlock() {}
-func (ToolCall) isAssistantContentBlock()        {}
+func (TextContent) isAssistantContentBlock()       {}
+func (ThinkingContent) isAssistantContentBlock()   {}
+func (ToolCall) isAssistantContentBlock()          {}
+func (ServerToolContent) isAssistantContentBlock() {}
 
 // ToolResultMessageContent is valid inside a tool-result message.
 type ToolResultMessageContent interface {
@@ -219,6 +220,9 @@ func cloneAssistantContent(blocks []AssistantContentBlock) []AssistantContentBlo
 		case TextContent:
 			out[i] = value
 		case ThinkingContent:
+			out[i] = value
+		case ServerToolContent:
+			value.Raw = append(json.RawMessage(nil), value.Raw...)
 			out[i] = value
 		case ToolCall:
 			value.Arguments = JsonObject(cloneJSONValue(value.Arguments).(map[string]any))

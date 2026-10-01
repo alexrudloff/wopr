@@ -252,6 +252,15 @@ func normalizeAssistantReplayBlocks(blocks []ai.AssistantContentBlock, isSameMod
 			}
 			continue
 		}
+		if _, ok := block.(ai.ServerToolContent); ok {
+			// A server block is only meaningful to the model that ran it.
+			if isSameModel {
+				out = append(out, block)
+			} else {
+				changed = true
+			}
+			continue
+		}
 		thinking, ok := block.(ai.ThinkingContent)
 		if !ok {
 			out = append(out, block)

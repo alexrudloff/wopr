@@ -134,16 +134,33 @@ func (content ThinkingContent) MarshalJSON() ([]byte, error) {
 	return marshalContent(content.contentType(), payload(content))
 }
 
+// ServerToolContent is a block a provider produced by running a tool on its
+// own servers, such as Anthropic's server_tool_use and web_search_tool_result.
+// Raw is the block exactly as the provider sent it. It is replayed verbatim
+// to the model that produced it, in its place among the thinking blocks the
+// provider signs, and dropped for any other model.
+type ServerToolContent struct {
+	Raw json.RawMessage `json:"raw"`
+}
+
+func (ServerToolContent) contentType() string { return "serverTool" }
+
+func (content ServerToolContent) MarshalJSON() ([]byte, error) {
+	type payload ServerToolContent
+	return marshalContent(content.contentType(), payload(content))
+}
+
 // ContentBlock is the closed union of provider-facing content types.
 type ContentBlock interface {
 	contentBlock()
 	contentType() string
 }
 
-func (TextContent) contentBlock()     {}
-func (ImageContent) contentBlock()    {}
-func (ToolCall) contentBlock()        {}
-func (ThinkingContent) contentBlock() {}
+func (TextContent) contentBlock()       {}
+func (ImageContent) contentBlock()      {}
+func (ToolCall) contentBlock()          {}
+func (ThinkingContent) contentBlock()   {}
+func (ServerToolContent) contentBlock() {}
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
 
