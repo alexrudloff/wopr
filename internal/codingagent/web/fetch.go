@@ -104,6 +104,13 @@ func (t *FetchTool) fetch(ctx context.Context, target *url.URL) (fetchedPage, er
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/markdown, text/html;q=0.9, text/plain;q=0.8, application/pdf;q=0.7, */*;q=0.5")
 	resp, err := t.client.Do(req)
+	// Some servers refuse an Accept that prefers Markdown (406) even when it
+	// also takes HTML; ask once more the way a browser does.
+	if err == nil && resp.StatusCode == http.StatusNotAcceptable {
+		_ = resp.Body.Close()
+		req.Header.Set("Accept", "text/html,application/xhtml+xml,*/*;q=0.8")
+		resp, err = t.client.Do(req)
+	}
 	if err != nil {
 		if errors.Is(err, errPrivateAddress) {
 			return fetchedPage{}, fmt.Errorf("web_fetch: %s is on a private network; set web.allowPrivateNetwork to allow it", target.Host)
