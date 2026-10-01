@@ -194,8 +194,12 @@ func (t *SearchTool) Execute(ctx context.Context, _ string, raw json.RawMessage,
 		return agent.AgentToolResult{}, errors.New("web_search: query is empty")
 	}
 	results, err := t.Backend.Search(ctx, p.Query, t.MaxResults)
-	if errors.Is(err, ErrDDGNoResults) {
-		return agent.AgentToolResult{Content: err.Error(), IsError: true}, nil
+	if errors.Is(err, ErrDDGNoResults) || errors.Is(err, ErrDDGBlocked) {
+		res := agent.AgentToolResult{Content: err.Error(), IsError: true}
+		if errors.Is(err, errDDGCooling) {
+			res.Details = map[string]any{"provider": t.Backend.Name(), "sent": false}
+		}
+		return res, nil
 	}
 	if err != nil {
 		return agent.AgentToolResult{}, err

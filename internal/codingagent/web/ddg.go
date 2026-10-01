@@ -1,7 +1,9 @@
 package web
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,7 +26,20 @@ const (
 )
 
 // ErrDDGNoResults is what a DuckDuckGo search without results reports.
-var ErrDDGNoResults = fmt.Errorf("DuckDuckGo returned no results (possibly rate-limited); try different terms or web_fetch a known URL")
+var ErrDDGNoResults = fmt.Errorf("DuckDuckGo returned no results; try different terms or web_fetch a known URL")
+
+// ErrDDGBlocked is what a search reports while DuckDuckGo answers with its
+// bot check (HTTP 202 and a CAPTCHA page). Every further search extends the
+// block, so the message tells the model to stop, and searches during the
+// cooldown fail without leaving the machine.
+var ErrDDGBlocked = errors.New("DuckDuckGo is showing a bot check (CAPTCHA) and blocks searches from this network for a few minutes; more searches only extend the block. Don't search again now: web_fetch known URLs (official docs, GitHub, package registries) instead. A Brave or Tavily key, or a SearXNG instance, in /setup avoids this")
+
+// errDDGCooling is ErrDDGBlocked for a search the cooldown kept from
+// leaving the machine.
+var errDDGCooling = fmt.Errorf("%w", ErrDDGBlocked)
+
+// ddgCooldown is how long searches stay off after a bot check.
+const ddgCooldown = 5 * time.Minute
 
 // ddgSlots and ddgSpacing pace searches across the process: a war council
 // searches from several members at once, and DuckDuckGo blocks bursts.
@@ -33,7 +48,22 @@ var (
 	ddgMu      sync.Mutex
 	ddgNext    time.Time
 	ddgSpacing = 750 * time.Millisecond
+	// ddgBlockedUntil is when the last bot check's cooldown ends.
+	ddgBlockedUntil time.Time
 )
+
+// ddgBlocked reports whether a bot check's cooldown is running.
+func ddgBlocked() bool {
+	ddgMu.Lock()
+	defer ddgMu.Unlock()
+	return time.Now().Before(ddgBlockedUntil)
+}
+
+func ddgBlock() {
+	ddgMu.Lock()
+	ddgBlockedUntil = time.Now().Add(ddgCooldown)
+	ddgMu.Unlock()
+}
 
 // ddgTurn waits for a free slot and the spacing since the last search
 // started; release frees the slot.
@@ -59,6 +89,9 @@ func ddgTurn(ctx context.Context) (release func(), err error) {
 }
 
 func (b *Backend) searchDDG(ctx context.Context, query string, n int) ([]Result, error) {
+	if ddgBlocked() {
+		return nil, errDDGCooling
+	}
 	release, err := ddgTurn(ctx)
 	if err != nil {
 		return nil, err
@@ -78,14 +111,27 @@ func (b *Backend) searchDDG(ctx context.Context, query string, n int) ([]Result,
 		return nil, fmt.Errorf("duckduckgo search: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	// The bot check comes back as 202; 403 and 429 are blocks too.
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+			ddgBlock()
+			return nil, ErrDDGBlocked
+		}
 		return nil, fmt.Errorf("duckduckgo search: HTTP %d; %w", resp.StatusCode, ErrDDGNoResults)
 	}
-	results, err := parseDDG(io.LimitReader(resp.Body, 2<<20))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
+	if err != nil {
+		return nil, fmt.Errorf("duckduckgo search: %w", err)
+	}
+	results, err := parseDDG(bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
 	if len(results) == 0 {
+		if bytes.Contains(body, []byte("anomaly-modal")) {
+			ddgBlock()
+			return nil, ErrDDGBlocked
+		}
 		return nil, ErrDDGNoResults
 	}
 	return results[:min(len(results), n)], nil

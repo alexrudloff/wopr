@@ -10,6 +10,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func fetch(t *testing.T, tool *FetchTool, rawURL string) (string, error) {
@@ -70,8 +71,8 @@ func TestFetchBlocksPrivateNetworksByDefault(t *testing.T) {
 }
 
 // A DuckDuckGo results page yields its organic results with redirect links
-// unwrapped; a page without results (a rate limit or challenge) says so
-// instead of coming back blank.
+// unwrapped; a bot-check page says so and starts a cooldown instead of
+// coming back blank.
 func TestDuckDuckGoSearch(t *testing.T) {
 	page, err := os.ReadFile("testdata/ddg_results.html")
 	if err != nil {
@@ -94,7 +95,15 @@ func TestDuckDuckGoSearch(t *testing.T) {
 		t.Fatalf("results = %q", got)
 	}
 	got, isErr = search(`<html><body><div class="anomaly-modal">Please confirm you are human</div></body></html>`)
-	if !isErr || !strings.Contains(got, "possibly rate-limited") {
+	if !isErr || !strings.Contains(got, "bot check") {
 		t.Fatalf("challenge page = %q, error %v", got, isErr)
 	}
+	// The cooldown keeps further searches from reaching DuckDuckGo, even
+	// when it would answer.
+	if got, isErr = search(string(page)); !isErr || !strings.Contains(got, "bot check") {
+		t.Fatalf("search during cooldown = %q, error %v", got, isErr)
+	}
+	ddgMu.Lock()
+	ddgBlockedUntil = time.Time{}
+	ddgMu.Unlock()
 }

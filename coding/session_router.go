@@ -380,6 +380,9 @@ func (s *Session) privateWebNote(_ context.Context, _, toolName string, _ json.R
 		toolName == "web_search" && s.webSearch.tool != nil && s.webSearch.tool.Backend.Private() {
 		return agent.AfterToolCallResult{}
 	}
+	if d, ok := result.Details.(map[string]any); ok && d["sent"] == false {
+		return agent.AfterToolCallResult{}
+	}
 	content := result.Content + "\n\n[Private mode: this " + strings.ReplaceAll(toolName, "_", " ") + " request left your machine.]"
 	return agent.AfterToolCallResult{Content: &content}
 }
