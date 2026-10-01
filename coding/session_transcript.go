@@ -67,7 +67,7 @@ func (s *Session) preparePrompt(ctx context.Context, messages []agent.AgentMessa
 	if current != nil {
 		previous = current.Sections
 	}
-	patch := prompts.DiffSystemPromptSections(previous, s.baseSystemSections)
+	patch := prompts.DiffSystemPromptSections(previous, s.systemSections())
 	if len(patch) == 0 {
 		return messages, nil
 	}
@@ -171,5 +171,5 @@ func (s *Session) prepareNextTurn(ctx context.Context, turn agent.PrepareNextTur
 	}
 	thinking = s.boostedThinking(model, thinking)
 	context := s.projectedContext()
-	return &agent.AgentLoopTurnUpdate{Context: context, Messages: s.stallNudge(context), Model: model, ThinkingLevel: &thinking}
+	return &agent.AgentLoopTurnUpdate{Context: context, Messages: append(s.stallNudge(context), s.deadlineNote()...), Model: model, ThinkingLevel: &thinking}
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -662,7 +663,7 @@ func main() {
 			Session:     startOpts,
 			SessionName: sessionName,
 		}
-		if err := runPrintMode(ctx, host, printModeOptions{Mode: mode, Messages: extraMessages, InitialMessage: initialMessage, InitialImages: initialImages, GTW: flags.GTW || os.Getenv("WOPR_GTW") == "1"}); err != nil {
+		if err := runPrintMode(ctx, host, printModeOptions{Mode: mode, Messages: extraMessages, InitialMessage: initialMessage, InitialImages: initialImages, GTW: flags.GTW || os.Getenv("WOPR_GTW") == "1", Deadline: deadlineFrom(flags.Deadline)}); err != nil {
 			// A run stopped by a termination signal reports 128+signum and
 			// stays quiet.
 			if signalErr, ok := errors.AsType[*signalExitError](err); ok {
@@ -849,4 +850,10 @@ var validSessionIDPattern = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A
 
 func isValidSessionID(id string) bool {
 	return validSessionIDPattern.MatchString(id)
+}
+
+// deadlineFrom is the run's time budget: --deadline, else WOPR_DEADLINE.
+func deadlineFrom(flag string) time.Duration {
+	d, _ := parseDeadline(cmp.Or(flag, os.Getenv("WOPR_DEADLINE")))
+	return d
 }

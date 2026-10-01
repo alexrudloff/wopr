@@ -180,6 +180,11 @@ More keys in `efficiency.json`, each on by default:
   cleanup leave them alone; a session's backups stop at 200 MB, and a repo
   whose refs and work haven't changed since its last backup isn't copied
   again.
+- `deadlineNotes`: for a run started with `--deadline` (or
+  `WOPR_DEADLINE`), the system prompt states the time budget and when it
+  ends, and the model gets one short note at half, 80%, and 95% of it: check
+  the approach finishes; then finish rather than explore and make sure every
+  required output exists; then write the best answer now.
 - `learn`: every model starts from the numbers above and is tuned from real
   sessions, in small bounded steps, once a knob has enough events since it
   last moved (8, or 5 compactions). Values are per provider/model in

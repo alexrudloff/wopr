@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ─── CLI Flags ────────────────────────────────────────────────────────────────
@@ -79,6 +81,9 @@ type CLIFlags struct {
 	// GTW runs a print or JSON session in Global Thermonuclear War (--gtw or
 	// WOPR_GTW=1).
 	GTW bool
+	// Deadline is a print or JSON run's time budget (--deadline or
+	// WOPR_DEADLINE): a Go duration such as 15m, or seconds.
+	Deadline string
 	// ProjectTrustOverride controls project-local resource loading for this run.
 	// nil uses saved/default trust; true is --approve; false is --no-approve.
 	ProjectTrustOverride *bool
@@ -189,6 +194,13 @@ func parseFlags(args []string) CLIFlags {
 			}
 		}
 		switch {
+		case arg == "--deadline" && i+1 < len(args):
+			i++
+			if _, ok := parseDeadline(args[i]); ok {
+				flags.Deadline = args[i]
+			} else {
+				flags.Diagnostics = append(flags.Diagnostics, argDiagnostic{Type: "warning", Message: fmt.Sprintf("Invalid deadline \"%s\". Use a duration such as 15m or 900s", args[i])})
+			}
 		case arg == "--thinking" && i+1 < len(args):
 			i++
 			level := args[i]
@@ -338,4 +350,17 @@ func validateForkFlags(flags CLIFlags) []argDiagnostic {
 		return nil
 	}
 	return []argDiagnostic{{Type: "error", Message: "--fork cannot be combined with " + strings.Join(conflicts, ", ")}}
+}
+
+// parseDeadline reads a time budget: a Go duration (15m, 1h30m) or a
+// number of seconds.
+func parseDeadline(v string) (time.Duration, bool) {
+	v = strings.TrimSpace(v)
+	if d, err := time.ParseDuration(v); err == nil && d > 0 {
+		return d, true
+	}
+	if n, err := strconv.ParseFloat(v, 64); err == nil && n > 0 {
+		return time.Duration(n * float64(time.Second)), true
+	}
+	return 0, false
 }

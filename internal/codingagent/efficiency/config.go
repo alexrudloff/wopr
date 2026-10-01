@@ -64,6 +64,9 @@ type Config struct {
 	// SQLite database with its -wal/-shm files, before a shell command that
 	// could destroy them.
 	SafetyBackup bool `json:"safetyBackup"`
+	// DeadlineNotes, for a run started with --deadline, states the time
+	// budget in the system prompt and sends a note at half, 80%, and 95%.
+	DeadlineNotes bool `json:"deadlineNotes"`
 }
 
 // DefaultConfig turns every mechanism on.
@@ -85,6 +88,7 @@ func DefaultConfig() Config {
 		KeepImages:                3,
 		FinalCheck:                true,
 		SafetyBackup:              true,
+		DeadlineNotes:             true,
 	}
 }
 
@@ -114,7 +118,7 @@ func Load(agentDir string) (Config, error) {
 		"onlineContextCompact": true, "cacheWriteReadRatio": true,
 		"evidencePreservingReducerProvider": true, "evidencePreservingReducerModel": true,
 		"toolOutputHalfLife": true, "stallNudge": true, "testRerunCap": true, "lazyTools": true /* retired; ignored */, "applyPatch": true, "quotaBalance": true, "learn": true,
-		"imagePruning": true, "keepImages": true, "finalCheck": true, "safetyBackup": true,
+		"imagePruning": true, "keepImages": true, "finalCheck": true, "safetyBackup": true, "deadlineNotes": true,
 	}
 	for key := range raw {
 		if !known[key] {

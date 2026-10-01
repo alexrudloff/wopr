@@ -67,6 +67,7 @@ These options apply to `wopr [options] [prompt]`. Run `wopr --help` for the full
 | `--no-approve`, `-na` | Ignore project-local files for this run. |
 | `--offline` | Turn off startup network operations, as `WOPR_OFFLINE=1` does. |
 | `--gtw` | In print or JSON mode, run the session in Global Thermonuclear War, as `WOPR_GTW=1` does: the top model in your routing order at its maximum thinking, routing off, and the war council on. Needs model routing set up. |
+| `--deadline <duration>` | In print or JSON mode, give the run a time budget (`15m`, `1h30m`, or seconds), as `WOPR_DEADLINE` does. The system prompt states it, and the model gets a short note at half, 80%, and 95% of it. `deadlineNotes: false` in `efficiency.json` ignores it. |
 
 ## Tools
 

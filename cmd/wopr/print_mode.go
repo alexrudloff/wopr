@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
@@ -76,6 +77,8 @@ type printModeOptions struct {
 	InitialImages []ai.ImageContent
 	// GTW starts the session in Global Thermonuclear War.
 	GTW bool
+	// Deadline is the run's time budget; zero has none.
+	Deadline time.Duration
 
 	// stdout and stderr default to the process's raw stdout and stderr.
 	stdout io.Writer
@@ -146,6 +149,7 @@ func runPrintMode(ctx context.Context, host printModeRuntime, opts printModeOpti
 	}
 	defer func() { _ = sess.Close() }()
 
+	sess.SetDeadline(opts.Deadline)
 	if opts.GTW {
 		spec, err := sess.StartWar()
 		if err != nil {

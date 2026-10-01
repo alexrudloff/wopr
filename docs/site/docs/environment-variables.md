@@ -21,6 +21,7 @@ packages together. Use it to run two configurations side by side.
 |---|---|
 | `WOPR_OFFLINE` | Do not check GitHub for a newer wopr release at startup. Accepts `1`, `true` or `yes` |
 | `WOPR_GTW` | `1` runs a print or JSON session in Global Thermonuclear War, like `--gtw` |
+| `WOPR_DEADLINE` | A print or JSON run's time budget (`15m`, or seconds), like `--deadline` |
 | `WOPR_OAUTH_CALLBACK_HOST` | Host the OAuth callback listens on |
 
 Set `WOPR_OFFLINE` in CI. Without it, every run checks for updates and fails

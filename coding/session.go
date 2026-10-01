@@ -62,6 +62,7 @@ type Session struct {
 	// the agent goroutine touches it.
 	stall     stallState
 	final     finalCheckState
+	deadline  deadlineState
 	temp      *tempfiles.Tracker
 	fileWatch fileWatch
 	// anchorsOff holds, per model spec, the learned hashline decision taken

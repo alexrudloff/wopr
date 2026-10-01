@@ -48,6 +48,7 @@ Options:
   --no-approve, -na              Ignore project-local files for this run
   --offline                      Disable startup network operations (same as WOPR_OFFLINE=1)
   --gtw                          Print/JSON mode: run in Global Thermonuclear War (same as WOPR_GTW=1)
+  --deadline <duration>          Print/JSON mode: time budget such as 15m (same as WOPR_DEADLINE)
   --                             End option parsing; treat remaining arguments as messages/files
   --help, -h                     Show this help
   --version, -v                  Show version number
