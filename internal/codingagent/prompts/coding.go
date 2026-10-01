@@ -196,6 +196,9 @@ func guidelinesFor(tools []string, toolGuidelines map[string][]string, promptGui
 			add("Use bash for file operations like ls, rg, find")
 		}
 	}
+	if bash || powershell {
+		add("Check that a tool or interpreter exists before relying on it, and never destroy data the task may need: back up before rewriting git history, deleting work, or opening a database that has -wal/-shm files")
+	}
 	for _, name := range tools {
 		for _, rule := range toolGuidelines[name] {
 			add(rule)
