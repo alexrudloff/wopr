@@ -2,12 +2,14 @@ package coding
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -144,8 +146,9 @@ func (s *Session) stallNudge(context []agent.AgentMessage) []agent.AgentMessage 
 // a nudge's key and text, or "" when there is none: the same call made
 // stallRepeats times with no file change in between, or stallIdleTurns
 // turns and stallIdleTime without progress. Progress is a file change (by a
-// file tool, or a shell command that changed a watched file) or a search or
-// fetch the run hasn't made before.
+// file tool, or a shell command that changed a watched file), a search,
+// fetch, read, or read-only command the run hasn't made before, or a shell
+// command whose output the run hasn't seen before.
 func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bool, now time.Time) (key, text string) {
 	start := 0
 	var since int64 // milliseconds of the last progress, or of the prompt
@@ -160,6 +163,23 @@ func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bo
 		if m.Assistant != nil {
 			since = m.Assistant.Timestamp
 			break
+		}
+	}
+	// outputs holds each successful shell call's output, by call ID: a
+	// command that prints something the run hasn't seen (a new fit, a new
+	// count) found new information, even if it isn't read-only.
+	outputs := map[string]string{}
+	for _, m := range context[start:] {
+		if r := m.ToolResult; r != nil && r.ToolName == "bash" && !r.IsError {
+			var text strings.Builder
+			for _, block := range r.Content {
+				if t, ok := block.(ai.TextContent); ok {
+					text.WriteString(t.Text)
+				}
+			}
+			if strings.TrimSpace(text.String()) != "" {
+				outputs[r.ToolCallID] = text.String()
+			}
 		}
 	}
 	calls := map[string]int{}
@@ -203,6 +223,13 @@ func stallCheck(context []agent.AgentMessage, changedFile func(callID string) bo
 			if command, _ := call.Arguments["command"].(string); call.Name == "bash" && readOnlyCommandRE.MatchString(command) && !seen["bash "+command] {
 				seen["bash "+command] = true
 				found = true
+			}
+			if out, ok := outputs[call.ID]; ok && call.Name == "bash" {
+				key := fmt.Sprintf("output %x", sha256.Sum256([]byte(out)))
+				if !seen[key] {
+					seen[key] = true
+					found = true
+				}
 			}
 		}
 		switch {
