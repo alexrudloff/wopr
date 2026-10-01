@@ -36,7 +36,7 @@ A model exposes only the levels it supports. Cycling follows that supported set.
 - The current label is rendered in the status line.
 - Models that do not support reasoning silently ignore changes; the host does not emit an error.
 
-A model is reasoning-capable when its generated entry sets `Reasoning: true`; `ThinkingLevelMap` controls how each level is wired into the request. See `ai/models_catalog.go` in source for the table.
+A model is reasoning-capable when models.dev or the provider's own list says it reasons; its reasoning efforts decide which levels it supports and how each one is sent (`ai/modeldb_rules.go` in source).
 
 ## Model metadata
 
@@ -49,11 +49,15 @@ Every model entry the host knows about carries:
 - `ThinkingLevelMap` - provider-specific wiring per level.
 - `MaxTokens` / `ContextWindow` - for context usage math.
 - `Input` - `text`, plus `image` for a model that accepts images. Every provider sends images only to models that list `image`; others get a one-line placeholder.
-- `Cost` (if known) - input/output rates.
+- `Cost` - input/output rates from models.dev or the provider's list. A model nothing prices shows its cost as `$?` (or a total as `$1.23+?`): unknown, never free.
 
-## Adding a model
+## Where models come from
 
-New built-in models are added to `ai/models_catalog.go` in source. To add an OpenAI-compatible endpoint with static models, use `~/.wopr/agent/models.json`. See [Custom providers](custom-provider.md) and [Providers](providers.md).
+wopr has no hand-written model list. A provider's models are the ones the provider lists: `/setup` reads the list when you connect, and wopr refreshes the list of every connected provider once a day in the background, so a model released yesterday is there today. What a list leaves out (prices, limits, thinking levels, image input) comes from [models.dev](https://models.dev), refreshed daily too, with a built-in snapshot for first runs and offline use. Both live under `~/.wopr/agent` (`models-store.json`, `models-dev.json`). `WOPR_OFFLINE=1` skips the refreshes.
+
+A model the provider lists that models.dev doesn't know yet borrows its closest relative's settings (claude-sonnet-6 from claude-sonnet-5-5) but not its price.
+
+To add an OpenAI-compatible endpoint with static models, or to override a model's window, thinking levels, or price, use `~/.wopr/agent/models.json`; it wins over everything above. See [Custom providers](custom-provider.md) and [Providers](providers.md).
 
 ## Common errors
 

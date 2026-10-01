@@ -23,7 +23,7 @@ no upstream to match. Change behavior when it makes wopr better.
 | Path | Responsibility |
 |---|---|
 | `agent/` | Agent loop, messages, events, tool execution. |
-| `ai/` | Providers, model catalog, authentication, streaming. |
+| `ai/` | Providers, model database (provider lists + models.dev + rules), authentication, streaming. |
 | `coding/` | Session core, resource discovery. |
 | `tui/` | Terminal components, rendering, input. |
 | `cmd/wopr/` | The CLI and RPC surface. |

@@ -332,8 +332,8 @@ ranking, and, once you turn routing on, `enabled`, the `engine` (`basic` or
 `jev`), and for Jev its endpoint. There are no built-in models, capabilities,
 or classifier endpoint. With routing off the session uses its model (the only
 usable one, or the one you pick). Providers named in
-tiers must exist in `~/.wopr/agent/models.json` or the catalog and must be
-authenticated (`/login`). A router.json like /setup writes:
+tiers must exist in `~/.wopr/agent/models.json` or the provider's model
+list and must be authenticated (`/login`). A router.json like /setup writes:
 
 ```json
 {
