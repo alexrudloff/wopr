@@ -57,6 +57,10 @@ type BashDetails struct {
 	Changes []ShellFileChange `json:"changes,omitempty"`
 }
 
+// MaxShellDiffBytes caps the diff a bash card keeps for one file; a larger
+// one is dropped (the card shows the file changed, without its diff).
+const MaxShellDiffBytes = 256 << 10
+
 // ShellFileChange is one file a shell command changed.
 type ShellFileChange struct {
 	Path string `json:"path"`

@@ -46,6 +46,11 @@ func shellDetailsFrom(details any) shellResultDetails {
 		if raw, ok := d["changes"].([]any); ok {
 			for _, item := range raw {
 				if c, ok := decodeAs[tools.ShellFileChange](item); ok {
+					// Sessions saved before binary files were skipped can
+					// hold megabytes of diff; never draw those.
+					if len(c.Diff) > tools.MaxShellDiffBytes {
+						c.Diff = ""
+					}
 					out.Changes = append(out.Changes, c)
 				}
 			}

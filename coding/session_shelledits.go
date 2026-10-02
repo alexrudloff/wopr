@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/internal/codingagent/tempfiles"
@@ -396,11 +397,21 @@ func shellFileDiff(cwd string, c shellChange, after fileState) tools.ShellFileCh
 	default:
 		out.Kind = "edited"
 	}
-	if after.skipped != "" || c.before.skipped != "" {
+	if after.skipped != "" || c.before.skipped != "" || binaryData(c.before.data) || binaryData(after.data) {
 		return out
 	}
 	out.Diff, _ = tools.GenerateDiffString(string(c.before.data), string(after.data))
+	if len(out.Diff) > tools.MaxShellDiffBytes {
+		out.Diff = ""
+	}
 	return out
+}
+
+// binaryData reports content no text diff can show: a NUL byte in its first
+// 8KB, or bytes that aren't UTF-8. A rendered video or image otherwise turns
+// into a multi-megabyte "diff" saved in the session and drawn on screen.
+func binaryData(b []byte) bool {
+	return bytes.IndexByte(b[:min(len(b), 8192)], 0) >= 0 || !utf8.Valid(b)
 }
 
 // dropTempPaths leaves out files in temp directories, which temp cleanup
