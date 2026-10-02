@@ -19,7 +19,8 @@ const finalCheckText = `Before you finish, check your work against the request:
 1. Re-read the original request and list each explicit requirement: outputs, file names, paths, formats, numeric limits.
 2. Verify each one now with a command or tool, not from memory. Run the tests or the program if there are any.
 3. Leave margin on numeric thresholds instead of landing on the edge, and match the exact names, paths, and output format asked for.
-4. Fix anything that fails, then finish with a one-line confirmation per requirement.`
+4. If you renamed or patched an API across the code, search every source type the build uses (e.g. .pyx, .pxd, .c, .h, .ts, not just .py) for what's left.
+5. Fix anything that fails, then finish with a one-line confirmation per requirement.`
 
 // finalCheckState is one prompt's bookkeeping: whether the run did work,
 // and whether it was already checked.
