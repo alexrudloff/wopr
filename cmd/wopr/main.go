@@ -172,12 +172,13 @@ func readPipedStdin(ctx context.Context, args []string) (string, []string) {
 // which are sent one by one after it. The parts are concatenated in order with no separator, and image files are
 // returned as separate content blocks.
 func buildInitialMessage(messages []string, fileText string, fileImages []ai.ImageContent, stdinContent string) (string, []ai.ImageContent, []string) {
+	// Piped input, @file text, and the prompt are separate blocks; a blank
+	// line keeps "ctx-data" and "summarize" from running together.
 	var parts []string
-	if stdinContent != "" {
-		parts = append(parts, stdinContent)
-	}
-	if fileText != "" {
-		parts = append(parts, fileText)
+	for _, p := range []string{stdinContent, fileText} {
+		if p = strings.TrimRight(p, "\n"); p != "" {
+			parts = append(parts, p)
+		}
 	}
 	if len(messages) > 0 {
 		parts = append(parts, messages[0])
@@ -187,7 +188,7 @@ func buildInitialMessage(messages []string, fileText string, fileImages []ai.Ima
 	if len(fileImages) > 0 {
 		images = fileImages
 	}
-	return strings.Join(parts, ""), images, slices.Clone(messages)
+	return strings.Join(parts, "\n\n"), images, slices.Clone(messages)
 }
 
 // prepareInitialMessage processes the @file arguments and builds the initial
