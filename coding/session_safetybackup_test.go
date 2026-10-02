@@ -55,6 +55,11 @@ func TestSafetyBackupSavesWhatACommandCouldDestroy(t *testing.T) {
 			t.Errorf("backup lacks %s; has %s", want, got)
 		}
 	}
+	// The old commits stay reachable inside the repo, under refs a
+	// rewrite doesn't touch.
+	if out, err := exec.Command("git", "-C", repo, "for-each-ref", "--format=%(refname)", "refs/wopr-backup/").Output(); err != nil || !strings.Contains(string(out), "/heads/") {
+		t.Errorf("no kept refs: %q %v", out, err)
+	}
 	if notes := b.before(context.Background(), dir, repo, "git status && git log"); len(notes) != 0 {
 		t.Errorf("read-only git backed up: %q", notes)
 	}

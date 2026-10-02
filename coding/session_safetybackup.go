@@ -1,6 +1,7 @@
 package coding
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -154,6 +156,7 @@ func gitTop(ctx context.Context, dir string) string {
 // untracked work, unless nothing changed since the last backup of root.
 func (b *safetyBackup) backupRepo(ctx context.Context, dir, root string) string {
 	refs, _ := gitOutput(ctx, root, "for-each-ref", "--format=%(objectname) %(refname)")
+	refs = withoutBackupRefs(refs)
 	diff, _ := gitOutput(ctx, root, "diff", "HEAD", "--binary")
 	untracked, _ := gitOutput(ctx, root, "ls-files", "--others", "--exclude-standard", "-z")
 	h := sha256.New()
@@ -188,6 +191,9 @@ func (b *safetyBackup) backupRepo(ctx context.Context, dir, root string) string 
 		if _, err := gitOutput(ctx, root, "bundle", "create", bundle, "--all"); err == nil {
 			saved = append(saved, "repo.bundle (every ref; restore with git fetch "+bundle+" '+refs/*:refs/wopr-backup/*')")
 		}
+		if ns := keepRefs(ctx, root, refs, time.Now().Format("20060102-150405")); ns != "" {
+			saved = append(saved, "the old refs inside the repo under "+ns+" (the old commits stay reachable: git log "+ns+"heads/<branch>; restore a branch with git reset --hard "+ns+"heads/<branch>; if the point was to purge history, drop them with git for-each-ref --format='delete %(refname)' "+ns+" | git update-ref --stdin)")
+		}
 	}
 	if len(diff) > 0 && os.WriteFile(filepath.Join(dest, "uncommitted.patch"), diff, 0o600) == nil {
 		saved = append(saved, "uncommitted.patch (git apply)")
@@ -202,6 +208,45 @@ func (b *safetyBackup) backupRepo(ctx context.Context, dir, root string) string 
 	b.last[root], b.lastAt[root] = state, dest
 	b.mu.Unlock()
 	return fmt.Sprintf("Backup of git repo %s saved at %s before this command: %s.", root, dest, strings.Join(saved, ", "))
+}
+
+// keepRefs copies root's refs under refs/wopr-backup/<stamp>/ inside the
+// repo, so a history rewrite leaves the old commits reachable where the
+// repo's own tools (and anything checking its objects) can see them. It
+// returns the namespace, or "" when nothing was kept.
+func keepRefs(ctx context.Context, root string, refs []byte, stamp string) string {
+	ns := "refs/wopr-backup/" + stamp + "/"
+	var in strings.Builder
+	for _, line := range strings.Split(strings.TrimSpace(string(refs)), "\n") {
+		sha, name, ok := strings.Cut(line, " ")
+		if !ok || !strings.HasPrefix(name, "refs/") {
+			continue
+		}
+		fmt.Fprintf(&in, "create %s%s %s\n", ns, strings.TrimPrefix(name, "refs/"), sha)
+	}
+	if in.Len() == 0 {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, shellGitTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", "-C", root, "update-ref", "--stdin")
+	cmd.Stdin = strings.NewReader(in.String())
+	if cmd.Run() != nil {
+		return ""
+	}
+	return ns
+}
+
+// withoutBackupRefs drops refs/wopr-backup/ lines from a for-each-ref
+// listing, so kept refs neither change a repo's state nor get kept again.
+func withoutBackupRefs(refs []byte) []byte {
+	var out []byte
+	for _, line := range bytes.SplitAfter(refs, []byte("\n")) {
+		if !bytes.Contains(line, []byte(" refs/wopr-backup/")) {
+			out = append(out, line...)
+		}
+	}
+	return out
 }
 
 // backupDatabase copies a SQLite database and its -wal and -shm files when
