@@ -11,7 +11,7 @@ wopr [options] [prompt]
 | Verb | Purpose |
 |---|---|
 | `wopr` | Start interactive TUI in current directory. |
-| `wopr --print <prompt>` | One-shot: send prompt, print response, exit. |
+| `wopr --print <prompt>` | One-shot: send prompt, print response, exit. Piped stdin is prepended to the prompt if it starts within 3 seconds; `wopr -p -` (or no prompt) reads the whole prompt from stdin. |
 | `wopr --model <provider/model>` | Override model for this run. |
 | `wopr --skill <path>` | Load a Skill file or directory. Repeat the option for several Skills. |
 | `wopr --session-id <id>` | Use an exact session ID; may be combined with `--no-session` for provider cache affinity without disk persistence. |

@@ -270,6 +270,9 @@ func parseFlags(args []string) CLIFlags {
 			// End of options: the rest are message arguments.
 			flags.Args = append(flags.Args, args[i+1:]...)
 			i = len(args)
+		case arg == "-":
+			// The prompt comes from stdin.
+			flags.Args = append(flags.Args, arg)
 		case strings.HasPrefix(arg, "-"):
 			option, _, _ := strings.Cut(arg, "=")
 			if flags.UnknownOption == "" {

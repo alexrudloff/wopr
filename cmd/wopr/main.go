@@ -109,17 +109,62 @@ func loadSkills(skillInputs []string, noSkills bool) ([]*codingagent.SkillDef, e
 
 // ─── Initial Message ──────────────────────────────────────────────────────────
 
-// readPipedStdin returns piped stdin content, trimmed. It returns "" when
-// stdin is a terminal or the content is blank.
-func readPipedStdin() string {
+// stdinWait is how long a run that already has a prompt waits for piped
+// stdin to start before going on without it: a pipe that stays open and
+// silent (a harness, a parent that never closes it) must not hang the run.
+var stdinWait = 3 * time.Second
+
+// readPipedStdin returns piped stdin content, trimmed, and the prompt
+// arguments with a "-" (read the prompt from stdin) removed. Stdin is read
+// when it isn't a terminal: in full when the prompt is "-" or missing, and
+// otherwise only if it starts within stdinWait. Cancelling ctx (SIGTERM)
+// stops the read.
+func readPipedStdin(ctx context.Context, args []string) (string, []string) {
+	dash := slices.Index(args, "-")
+	if dash >= 0 {
+		args = slices.Delete(slices.Clone(args), dash, dash+1)
+	}
 	if term.IsTerminal(int(os.Stdin.Fd())) {
-		return ""
+		return "", args
 	}
-	data, err := io.ReadAll(os.Stdin)
-	if err != nil {
-		return ""
+	type chunk struct {
+		data []byte
+		err  error
 	}
-	return strings.TrimSpace(string(data))
+	first := make(chan chunk, 1)
+	rest := make(chan chunk, 1)
+	go func() {
+		buf := make([]byte, 64<<10)
+		n, err := os.Stdin.Read(buf)
+		first <- chunk{buf[:n], err}
+		if err == nil {
+			data, err := io.ReadAll(os.Stdin)
+			rest <- chunk{data, err}
+		}
+	}()
+	var wait <-chan time.Time
+	if dash < 0 && len(args) > 0 {
+		wait = time.After(stdinWait)
+	}
+	var head chunk
+	select {
+	case head = <-first:
+	case <-wait:
+		fmt.Fprintf(os.Stderr, "warning: no stdin data in %s, going on without it (redirect from /dev/null to skip the wait)\n", stdinWait)
+		return "", args
+	case <-ctx.Done():
+		return "", args
+	}
+	data := head.data
+	if head.err == nil {
+		select {
+		case r := <-rest:
+			data = append(data, r.data...)
+		case <-ctx.Done():
+			return "", args
+		}
+	}
+	return strings.TrimSpace(string(data)), args
 }
 
 // buildInitialMessage combines stdin content, @file text, and the first CLI
@@ -638,7 +683,11 @@ func main() {
 	}
 
 	// Build the initial message from positional args and piped stdin.
-	initialMessage, initialImages, extraMessages, err := prepareInitialMessage(initialCWD, flags.Args, flags.FileArgs, readPipedStdin())
+	stdinContent, promptArgs := readPipedStdin(ctx, flags.Args)
+	if ctx.Err() != nil {
+		exitProcess(128 + int(syscall.SIGTERM))
+	}
+	initialMessage, initialImages, extraMessages, err := prepareInitialMessage(initialCWD, promptArgs, flags.FileArgs, stdinContent)
 	if err != nil {
 		fatalf("Error: %v", err)
 	}
