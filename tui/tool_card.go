@@ -398,7 +398,7 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 			}
 			body = append(body, th.FgText("text", lead+line))
 		}
-		output := strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output)))
+		output := LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output))))
 		if output != "" {
 			body = append(body, "")
 			lines := wrapAll(output, bodyWidth)
@@ -426,7 +426,7 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 		// plain output is shown only for a successful result.
 		var output []string
 		if c.State != ToolStateError {
-			output = colorLines(th, "text", wrapAll(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output))), bodyWidth))
+			output = colorLines(th, "text", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output)))), bodyWidth))
 		}
 		switch {
 		case c.BodyRenderer != nil:
@@ -436,7 +436,7 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 		}
 	}
 	if c.State == ToolStateError && !IsShellTool(c.Name) {
-		body = append(body, colorLines(th, "error", wrapAll(strings.TrimSpace(widthx.StripAnsi(c.Output)), bodyWidth))...)
+		body = append(body, colorLines(th, "error", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(c.Output))), bodyWidth))...)
 	}
 
 	panel := th.Bg("backgroundPanel")

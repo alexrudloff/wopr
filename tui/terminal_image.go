@@ -180,7 +180,9 @@ func detectCapabilitiesFromEnvironment(tmuxForwardsHyperlink func() bool, goos s
 	if os.Getenv("WT_SESSION") != "" {
 		return TerminalCapabilities{Images: "", TrueColor: true, Hyperlinks: true}
 	}
-	if termProgram == "alacritty" || termProgram == "vscode" || termProgram == "zed" {
+	// Orca's terminal handles OSC 8 links (it offers the system or its
+	// built-in browser on click).
+	if termProgram == "alacritty" || termProgram == "vscode" || termProgram == "zed" || termProgram == "orca" {
 		return TerminalCapabilities{Images: "", TrueColor: true, Hyperlinks: true}
 	}
 	if terminalEmulator == "jetbrains-jediterm" {
