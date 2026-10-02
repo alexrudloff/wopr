@@ -170,14 +170,19 @@ func ListModels(provider string) []KnownModel {
 }
 
 // flagshipWindow is how far back from a provider's newest release a model
-// still counts as its current generation.
-const flagshipWindow = 90 * 24 * time.Hour
+// still counts as current. It is long because providers ship cheaper tiers
+// more often than flagships: Google's newest Pro can be months older than
+// its newest Flash.
+const flagshipWindow = 270 * 24 * time.Hour
 
 // PreferredModel picks a provider's default from data, never a fixed id:
 // among the models released within flagshipWindow of its newest one, the
 // one with the highest known output price (its flagship), then the
-// newest. Models whose details are borrowed rank after real ones; without
-// release dates every model counts as current.
+// newest. Ranked last: models whose details are borrowed, variants and
+// aliases, specialty models that answer in more than text, and heavy
+// tiers that can't run light (a "pro" that only thinks hard is not an
+// everyday default). Without release dates every model counts as
+// current.
 func PreferredModel(models []KnownModel) (KnownModel, bool) {
 	var newest time.Time
 	for _, m := range models {
@@ -209,6 +214,8 @@ func PreferredModel(models []KnownModel) (KnownModel, bool) {
 		if c := cmp.Or(
 			-cmp.Compare(boolRank(m.Inferred), boolRank(best.Inferred)),
 			-cmp.Compare(boolRank(variant(m.ID, ids)), boolRank(variant(best.ID, ids))),
+			-cmp.Compare(boolRank(m.Specialty), boolRank(best.Specialty)),
+			-cmp.Compare(boolRank(heavyOnly(m)), boolRank(heavyOnly(best))),
 			cmp.Compare(boolRank(current(m)), boolRank(current(best))),
 			cmp.Compare(price(m), price(best)),
 			cmp.Compare(m.Released, best.Released),
@@ -236,6 +243,16 @@ func variant(id string, ids map[string]bool) bool {
 		}
 	}
 	return false
+}
+
+// heavyOnly reports a model that can't run light: its thinking levels
+// leave out low and minimal, and thinking can't be turned off.
+func heavyOnly(m KnownModel) bool {
+	unsupported := func(l ThinkingLevel) bool {
+		v, ok := m.ThinkingLevelMap[l]
+		return ok && v == nil
+	}
+	return unsupported(ThinkingLow) && unsupported(ThinkingMinimal) && unsupported(ThinkingOff)
 }
 
 func boolRank(b bool) int {

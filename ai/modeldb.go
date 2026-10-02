@@ -50,6 +50,9 @@ type KnownModel struct {
 	Inferred bool
 	// Released is the model's release date (YYYY-MM-DD), or "".
 	Released string
+	// Specialty marks a model that answers in more than text (images,
+	// audio): fine to pick, never a default.
+	Specialty bool
 }
 
 // LiveModel is one entry of a provider's own model list, with whatever

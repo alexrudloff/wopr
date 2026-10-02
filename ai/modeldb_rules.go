@@ -463,6 +463,7 @@ func (r *providerRule) build(id string, md *modelsDevModel, lm *LiveModel) Known
 	if md != nil {
 		m.DisplayName = cmpOr(md.Name, id)
 		m.Released = md.ReleaseDate
+		m.Specialty = slices.ContainsFunc(md.Modalities.Output, func(o string) bool { return o != "text" })
 		m.Reasoning = md.Reasoning
 		m.ContextWindow = md.Limit.Context
 		m.MaxOutputTokens = md.Limit.Output
