@@ -38,9 +38,10 @@ differently, change the source.
 - **Context sized per model.** Compaction fits each model's window, including
   the window you set yourself, and wopr compacts to fit a smaller routed model
   when that model is the better pick.
-- **Subagents that are checked.** Read-only investigations go to routed
-  subagents, in the foreground or background. wopr verifies every line they
-  quote against the files and escalates once when an answer can't be trusted.
+- **Subagents that are checked.** Investigations and changes go to routed
+  subagents, in the foreground or background. Writers work in your directory
+  under /undo and per-file locks; wopr verifies every line an investigation
+  quotes against the files and escalates once when an answer can't be trusted.
   `/goal` keeps working until an independent auditor agrees it's done.
 - **Writes less code.** An always-on minimal-code discipline (reuse, stdlib,
   platform, one line, then the minimum). `/review`, `/audit`, and `/debt`

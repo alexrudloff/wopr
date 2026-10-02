@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexrudloff/wopr/agent"
@@ -20,6 +21,11 @@ import (
 
 // TypeExplore is the read-only investigation type.
 const TypeExplore = "explore"
+
+// TypeGeneral is a general-purpose child with the full tools: it reads,
+// edits, writes, and runs commands in the session's own working directory,
+// and its changes are the session's (/undo covers them).
+const TypeGeneral = "general"
 
 // TypePropose is a war council proposal: a read-only child answers the
 // user's request its own way, for the orchestrator to synthesize. Only the
@@ -66,6 +72,24 @@ type Route struct {
 	Mode string
 	// Handle is the router's decision, handed back to Escalate and Failover.
 	Handle any
+}
+
+// Writer is what a general child works with: its tools and the session's
+// file hooks for them, and the files it has changed so far.
+type Writer struct {
+	Tools  []agent.AgentTool
+	Before []agent.BeforeToolCallHook
+	After  []agent.AfterToolCallHook
+	// Changed returns the files the child has changed, relative to the
+	// working directory where they are inside it.
+	Changed func() []string
+}
+
+// WriterHost is a Host that can run general children.
+type WriterHost interface {
+	// Writer returns a general child's tools and hooks for task id on
+	// model.
+	Writer(id string, model *ai.Model) Writer
 }
 
 // Host is what the task tool needs from the session.
@@ -141,6 +165,8 @@ type Details struct {
 	Quotes      int     `json:"quotes"`
 	Escalated   string  `json:"escalated,omitempty"`
 	Transcript  string  `json:"transcript,omitempty"`
+	// Files are the files a general child changed.
+	Files []string `json:"files,omitempty"`
 	// Background marks a call that started a background task.
 	Background bool `json:"background,omitempty"`
 }
@@ -163,6 +189,9 @@ type Tool struct {
 	// (a build candidate's test run); report shows its phase live, and its
 	// text is appended to the result.
 	Finish func(ctx context.Context, report func(current string)) string
+
+	// writers holds each running general child's Writer by task id.
+	writers sync.Map
 }
 
 func (t *Tool) Name() string  { return "task" }
@@ -175,23 +204,24 @@ func (t *Tool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModePa
 func (t *Tool) Schema() ai.ToolSchema {
 	return ai.ToolSchema{
 		Name:        "task",
-		Description: "Delegate a self-contained read-only investigation to a subagent with fresh context. It runs its own tool loop (read, grep, find, ls, read-only bash) on a model wopr picks and returns a short answer whose quotes wopr verifies. Several task calls in one message run in parallel.",
+		Description: "Delegate self-contained work to a subagent with fresh context, in this working directory. type explore: a read-only investigation (read, grep, find, ls, read-only bash) that returns a short answer whose quotes wopr verifies. type general: the full tools (read, edit, write, bash, web): it makes changes, runs builds and tests, and reports what it changed; its edits are this session's (/undo covers them). Several task calls in one message run in parallel.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"description": map[string]any{"type": "string", "description": "3-6 word label"},
-				"type":        map[string]any{"type": "string", "enum": []string{TypeExplore}},
+				"type":        map[string]any{"type": "string", "enum": []string{TypeExplore, TypeGeneral}, "description": "explore: read-only investigation; general: can edit, write, and run commands"},
 				"brief":       map[string]any{"type": "string", "description": "Everything the subagent knows: objective, known paths and facts, constraints, the exact answer wanted, when to stop"},
 				"paths":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Files or directories to start from"},
-				"effort":      map[string]any{"type": "string", "enum": []string{EffortQuick, EffortMedium, EffortThorough}, "description": "quick: a lookup (where X is defined, callers of Y, where Z is set); medium: understand one area; thorough: survey many files"},
+				"effort":      map[string]any{"type": "string", "enum": []string{EffortQuick, EffortMedium, EffortThorough}, "description": "explore: quick is a lookup (where X is defined, callers of Y), medium understands one area, thorough surveys many files. general: the size of the change (a small fix, one feature, a large change)"},
 				"background":  map[string]any{"type": "boolean", "description": "Run detached; the result arrives later as a message"},
 				"item":        map[string]any{"type": "string", "description": "Queue item id this task works on"},
 			},
 			"required": []string{"description", "type", "brief"},
 		},
 		PromptGuidelines: []string{
-			"Delegate with task: exploration across unknown or more than 3 files, open-ended search or research, and 2+ independent lookups (one task each, all in one message). Keep inline: a known file or symbol (read or grep it), a single command, any edit, and anything that needs this conversation's judgment.",
-			"Use background for longer or independent investigations and keep talking to the user; keep quick lookups blocking.",
+			"Delegate with task: exploration across unknown or more than 3 files, open-ended search or research, and 2+ independent lookups (type explore, one task each, all in one message). Keep inline: a known file or symbol (read or grep it), a single command, a small edit, and anything that needs this conversation's judgment.",
+			"Use type general for a self-contained change you can fully specify (implement X in these files, fix these failing tests, port this module), especially to run independent changes in parallel in the background while you keep working. Give each writer its own files: a file one running writer has changed is locked to it until it finishes, and other writers' (and your) edits to it are refused.",
+			"Use background for longer or independent work and keep going; its result (with the files it changed) arrives as a message when it finishes. Keep quick lookups blocking. Review a writer's changes (git diff, the tests) before building on them.",
 			"A task brief is all the subagent sees: give the objective, known paths and facts, constraints, the exact answer wanted, and when to stop. Treat its result as a lead: re-read cited lines before editing on its strength, and don't redo its work.",
 		},
 	}
@@ -323,8 +353,14 @@ func (t *Tool) Start(ctx context.Context, id string, spec Spec) (Agent, error) {
 // prepare validates spec and routes it.
 func (t *Tool) prepare(ctx context.Context, id string, spec Spec) (Request, Route, error) {
 	spec.Type = cmp.Or(spec.Type, TypeExplore)
-	if spec.Type != TypeExplore && spec.Type != TypePropose && spec.Type != TypeBuild {
-		return Request{}, Route{}, fmt.Errorf("unknown task type %q (available: explore)", spec.Type)
+	switch spec.Type {
+	case TypeExplore, TypePropose, TypeBuild:
+	case TypeGeneral:
+		if _, ok := t.Host.(WriterHost); !ok {
+			return Request{}, Route{}, errors.New("task type general is not available here (available: explore)")
+		}
+	default:
+		return Request{}, Route{}, fmt.Errorf("unknown task type %q (available: explore, general)", spec.Type)
 	}
 	if strings.TrimSpace(spec.Brief) == "" {
 		return Request{}, Route{}, errors.New("task needs a brief")
@@ -342,7 +378,7 @@ func (t *Tool) prepare(ctx context.Context, id string, spec Spec) (Request, Rout
 	}
 	// A brief the router judged a lookup runs on the quick budget whatever
 	// effort the orchestrator asked for.
-	if route.Level == LevelMechanical && req.Effort != EffortQuick {
+	if route.Level == LevelMechanical && req.Effort != EffortQuick && req.Type == TypeExplore {
 		req.Effort = EffortQuick
 		req.ContextTokens = ExpectedContext(t.Host.Cwd(), req)
 	}
@@ -401,14 +437,21 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 		res = ParseResult(out.Text)
 		verified, quotes = res.Verify(t.Host.Cwd(), out.Outputs)
 		trigger = EscalationTrigger(res, verified, quotes, out)
-		if (req.Type == TypePropose || req.Type == TypeBuild) && trigger == "no evidence" {
+		// A writer is judged by its changes and its checks, not its
+		// quotes.
+		if req.Type == TypeGeneral && strings.HasPrefix(trigger, "unverified quotes") {
+			trigger = ""
+		}
+		if req.Type != TypeExplore && trigger == "no evidence" {
 			// A proposal may be ideas or a plan, and a candidate is judged
 			// by its diff and tests, with nothing to quote.
 			trigger = ""
 		}
 		rec.Status, rec.Confidence, rec.Verified, rec.Quotes, rec.Trigger = res.Status, res.Confidence, verified, quotes, trigger
 		rec.Outcome = "accepted"
-		if trigger != "" && attempt < maxAttempts && ctx.Err() == nil {
+		// A general child's changes are already in the working directory,
+		// so it is never rerun on top of them.
+		if trigger != "" && attempt < maxAttempts && ctx.Err() == nil && req.Type != TypeGeneral {
 			if next, ok := t.Host.Escalate(req, route); ok {
 				rec.Outcome, rec.EscalatedTo = "escalated", next.Spec
 				t.Host.Log(rec)
@@ -437,6 +480,9 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 	details.Cost = total.Usage.Cost.Total
 	details.Verified, details.Quotes = verified, quotes
 	details.Escalated = escalated
+	if w, ok := t.writers.LoadAndDelete(req.ID); ok && w.(Writer).Changed != nil {
+		details.Files = w.(Writer).Changed()
+	}
 	return details, t.render(req, route, res, state, trigger, details, total), nil
 }
 
@@ -446,10 +492,21 @@ func (t *Tool) runAttempt(ctx context.Context, req Request, route Route, notes s
 		return Outcome{}, err
 	}
 	defer release()
+	tools := t.Host.Tools
+	var before []agent.BeforeToolCallHook
+	var after []agent.AfterToolCallHook
+	if req.Type == TypeGeneral {
+		w := t.Host.(WriterHost).Writer(req.ID, route.Model)
+		t.writers.Store(req.ID, w)
+		tools = func() []agent.AgentTool { return w.Tools }
+		before, after = w.Before, w.After
+	}
 	return Run(ctx, Attempt{
 		Model:     route.Model,
 		Thinking:  route.Thinking,
-		Tools:     t.Host.Tools(),
+		Tools:     tools(),
+		Before:    before,
+		After:     after,
 		System:    systemPrompt(req.Type, t.Host.Cwd()),
 		Prompt:    BriefPrompt(req, notes),
 		Budget:    budgetFor(req),
@@ -549,7 +606,7 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 	answer := cmp.Or(res.Answer, "(no answer)")
 	full := answer
 	answerBudget, resultBudget := answerBudgetBytes, resultBudgetBytes
-	if req.Type == TypePropose || req.Type == TypeBuild {
+	if req.Type != TypeExplore {
 		answerBudget, resultBudget = 3*answerBudgetBytes, 2*resultBudgetBytes
 	}
 	answer = text.Clip(answer, answerBudget)
@@ -576,6 +633,13 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 	}
 	if res.NotChecked != "" {
 		body.WriteString("NOT_CHECKED: " + text.Clip(res.NotChecked, 500) + "\n")
+	}
+	if req.Type == TypeGeneral {
+		if len(d.Files) == 0 {
+			body.WriteString("FILES CHANGED: none\n")
+		} else {
+			body.WriteString("FILES CHANGED (" + fmt.Sprint(len(d.Files)) + "): " + text.Clip(strings.Join(d.Files, ", "), 1500) + "\n")
+		}
 	}
 	result := body.String()
 	if len(full) > answerBudget || len(result) > resultBudget {
@@ -608,6 +672,9 @@ func (t *Tool) render(req Request, route Route, res Result, state, trigger strin
 
 // summaryLine is the collapsed one-line view of a finished task.
 func summaryLine(d Details) string {
+	if d.Type == TypeGeneral {
+		return fmt.Sprintf("%s · %d tool calls · %s · %d files changed", d.Model, d.ToolCalls, formatDuration(time.Duration(d.DurationMs)*time.Millisecond), len(d.Files))
+	}
 	return fmt.Sprintf("%s · %d tool calls · %s · verified %d/%d", d.Model, d.ToolCalls, formatDuration(time.Duration(d.DurationMs)*time.Millisecond), d.Verified, d.Quotes)
 }
 
@@ -623,6 +690,9 @@ func modelName(r Route) string {
 // reads.
 func ExpectedContext(cwd string, req Request) int {
 	tokens := ai.EstimateTextTokens(req.Brief) + 1500 // system prompt and tools
+	if req.Type == TypeGeneral {
+		tokens += 30000 // edits, builds, and test output
+	}
 	switch req.Effort {
 	case EffortQuick:
 		tokens += 6000

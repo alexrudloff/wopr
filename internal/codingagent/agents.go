@@ -145,6 +145,9 @@ func (b *taskResultBlock) Render(width int) []string {
 	if d.Cost > 0 {
 		stats = append(stats, fmt.Sprintf("$%.4f", d.Cost))
 	}
+	if n := len(d.Files); n > 0 {
+		stats = append(stats, fmt.Sprintf("changed %d: %s", n, strings.Join(d.Files, ", ")))
+	}
 	lines := []string{"", "   " + widthx.TruncateToWidth(head, max(1, width-3), "…", false)}
 	sub := th.FgText("textMuted", "   ↳ "+strings.Join(stats, " · "))
 	if !b.expanded && b.hint != "" {

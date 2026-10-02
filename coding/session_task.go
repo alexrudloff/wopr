@@ -33,11 +33,13 @@ func (s *Session) initSubagents(install bool) {
 	cfg := s.router.Config().Subagents
 	registry := subagent.NewRegistry()
 	tool := &subagent.Tool{
-		Host:          taskHost{s: s},
-		Limiter:       subagent.NewLimiter(cfg.MaxParallel, cfg.ProviderParallel),
-		SessionID:     s.ID(),
-		Registry:      registry,
-		CanBackground: func() bool { return s.tasks.deliver.Load() != nil },
+		Host:      taskHost{s: s},
+		Limiter:   subagent.NewLimiter(cfg.MaxParallel, cfg.ProviderParallel),
+		SessionID: s.ID(),
+		Registry:  registry,
+		// Without a frontend, finished background results wait for the
+		// run (see awaitBackground).
+		CanBackground: func() bool { return true },
 	}
 	s.tasks.tool = tool
 	registry.OnStart = func(a subagent.Agent) {
@@ -45,6 +47,7 @@ func (s *Session) initSubagents(install bool) {
 		s.goalTaskStarted(a)
 	}
 	registry.OnFinish = func(a subagent.Agent) {
+		s.tasks.locks.release(a.ID)
 		s.goalTaskFinished(a)
 		s.taskFinished(a)
 	}
@@ -56,6 +59,15 @@ func (s *Session) initSubagents(install bool) {
 	if install {
 		s.tools = append(s.tools, tool)
 		s.agent.SetTools(append(s.agent.Tools(), tool))
+		s.agent.AddBeforeToolCallHook(s.writerGuard)
+		finish := s.agent.FinishTurnHook()
+		s.agent.SetFinishTurn(func(ctx context.Context, turn agent.AgentTurnContext) *agent.AgentTurnDecision {
+			s.awaitBackground(ctx, turn)
+			if finish == nil {
+				return nil
+			}
+			return finish(ctx, turn)
+		})
 	}
 }
 
@@ -69,6 +81,12 @@ type sessionTasks struct {
 	deliver atomic.Pointer[func(agent.AgentMessage)]
 	// changed is called after any registry change.
 	changed atomic.Pointer[func()]
+	// files are the session's file hooks general children run; locks
+	// holds the files running writers changed; headless queues background
+	// results while no frontend delivers them.
+	files    fileHooks
+	locks    fileLocks
+	headless headlessResults
 }
 
 // interruptWait bounds how long closing waits for background tasks to
@@ -151,6 +169,7 @@ func (s *Session) taskFinished(a subagent.Agent) {
 	}
 	deliver := s.tasks.deliver.Load()
 	if deliver == nil {
+		s.tasks.headless.push(taskResultMessage(a, note))
 		return
 	}
 	(*deliver)(taskResultMessage(a, note))

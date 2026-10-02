@@ -1071,6 +1071,12 @@ func (a *Agent) AddAfterToolCallHook(h AfterToolCallHook) {
 	a.opts.AfterToolCall = append(a.opts.AfterToolCall, h)
 }
 
+// ToolCallHooks returns copies of the before and after tool call hooks, in
+// order; a caller can hand a range of them to another agent.
+func (a *Agent) ToolCallHooks() ([]BeforeToolCallHook, []AfterToolCallHook) {
+	return slices.Clone(a.opts.BeforeToolCall), slices.Clone(a.opts.AfterToolCall)
+}
+
 // persistMessage invokes the OnMessagePersist hook for a newly produced
 // message. Driven by message_end in emit(), the single incremental
 // persistence site. System, user, assistant, toolResult and custom messages

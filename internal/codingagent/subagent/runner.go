@@ -36,16 +36,32 @@ const (
 // limit ends it sooner.
 var buildBudget = Budget{Turns: 80, Time: 2 * time.Hour, Tokens: 6_000_000, ToolCalls: 160}
 
-// budgetFor is a request's budget: its effort's, or a build candidate's.
+// budgetFor is a request's budget: its effort's, a general child's, or a
+// build candidate's.
 func budgetFor(req Request) Budget {
 	b := BudgetFor(req.Effort)
-	if req.Type == TypeBuild {
+	switch req.Type {
+	case TypeBuild:
 		b = buildBudget
+	case TypeGeneral:
+		b = generalBudget(req.Effort)
 	}
 	if req.TimeBudget > 0 {
 		b.Time = req.TimeBudget
 	}
 	return b
+}
+
+// generalBudget bounds a general child by the size of its change; a
+// thorough one gets a build candidate's budget.
+func generalBudget(effort string) Budget {
+	switch effort {
+	case EffortQuick:
+		return Budget{Turns: 30, Time: 10 * time.Minute, Tokens: 1_500_000, ToolCalls: 60}
+	case EffortThorough:
+		return buildBudget
+	}
+	return Budget{Turns: 60, Time: 30 * time.Minute, Tokens: 4_000_000, ToolCalls: 120}
 }
 
 // BudgetFor returns the explore budget for an effort (default medium).
@@ -82,9 +98,13 @@ var graceTick = 5 * time.Second
 
 // Attempt is one child run.
 type Attempt struct {
-	Model     *ai.Model
-	Thinking  ai.ThinkingLevel
-	Tools     []agent.AgentTool
+	Model    *ai.Model
+	Thinking ai.ThinkingLevel
+	Tools    []agent.AgentTool
+	// Before and After are tool call hooks for the child: a general
+	// child's are the session's file hooks.
+	Before    []agent.BeforeToolCallHook
+	After     []agent.AfterToolCallHook
 	System    string
 	Prompt    string
 	Budget    Budget
@@ -152,13 +172,15 @@ func Run(ctx context.Context, at Attempt) Outcome {
 		}
 	}
 	child = agent.NewAgent(agent.AgentOptions{
-		Model:         at.Model,
-		Tools:         gated,
-		SystemPrompt:  at.System,
-		ThinkingLevel: at.Thinking,
-		MaxTurns:      at.Budget.Turns + graceTurns + 1,
-		SessionID:     at.SessionID,
-		StreamFn:      at.StreamFn,
+		Model:          at.Model,
+		Tools:          gated,
+		BeforeToolCall: at.Before,
+		AfterToolCall:  at.After,
+		SystemPrompt:   at.System,
+		ThinkingLevel:  at.Thinking,
+		MaxTurns:       at.Budget.Turns + graceTurns + 1,
+		SessionID:      at.SessionID,
+		StreamFn:       at.StreamFn,
 		PrepareRequest: func(_ context.Context, req agent.PrepareRequestContext) *agent.AgentRequestUpdate {
 			mu.Lock()
 			out.Turns++

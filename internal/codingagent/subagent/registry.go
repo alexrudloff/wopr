@@ -59,6 +59,8 @@ type Agent struct {
 	Result string
 	// Log is the child's tool calls, oldest first.
 	Log []string
+	// Files are the files a general child changed.
+	Files []string
 }
 
 // Running reports whether the agent has not finished.
@@ -170,7 +172,7 @@ func (r *Registry) finish(id string, d Details, result string) Agent {
 	if d.Model != "" {
 		e.Model, e.ModelSpec = d.Model, d.Spec
 	}
-	e.Transcript, e.Result = d.Transcript, result
+	e.Transcript, e.Result, e.Files = d.Transcript, result, d.Files
 	e.cancel = nil
 	snapshot := e.snapshot()
 	r.mu.Unlock()
@@ -193,6 +195,7 @@ func (r *Registry) find(id string) *registryEntry {
 func (e *registryEntry) snapshot() Agent {
 	a := e.Agent
 	a.Log = slices.Clone(e.Log)
+	a.Files = slices.Clone(e.Files)
 	a.Spec.Paths = slices.Clone(e.Spec.Paths)
 	return a
 }
@@ -299,6 +302,8 @@ type ResultDetails struct {
 	Cost       float64 `json:"cost"`
 	DurationMs int64   `json:"durationMs"`
 	Item       string  `json:"item,omitempty"`
+	// Files are the files a general child changed.
+	Files []string `json:"files,omitempty"`
 }
 
 // Label is the task's short label: its description, else its type.
@@ -322,5 +327,6 @@ func (a Agent) ResultDetails() ResultDetails {
 	return ResultDetails{
 		ID: a.ID, Label: a.Label(), State: a.State, Model: a.Model, Spec: a.ModelSpec, ToolCalls: a.ToolCalls,
 		Tokens: a.Tokens, Cost: a.Cost, DurationMs: a.Elapsed(a.Finished).Milliseconds(), Item: a.Spec.Item,
+		Files: slices.Clone(a.Files),
 	}
 }

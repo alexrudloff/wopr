@@ -176,7 +176,7 @@ The built-in tools are `read`, `bash`, `powershell`, `edit`, `write`, `grep`,
 
 With hashline on, `read` prefixes each line with an anchor, the line number plus two letters hashed from the line and the one before it: `12ab|  return x`. `edit` then takes `{"anchor": "12ab", "end": "15cd", "newText": "..."}` in place of `oldText`; the range is inclusive and an empty `newText` deletes it. When a line changed since the read, the edit is rejected and the error shows fresh anchors around it. A successful anchored edit returns fresh anchors for the lines it changed. Exact `oldText` edits keep working in both modes.
 
-The mode is decided per model, for each request: the model serving it sees the matching `read` and `edit` descriptions, so a routed local model and a frontier orchestrator can differ within one session. Weak local models gain the most, because they no longer have to reproduce text exactly. Anchors cost four to five tokens per line read, so `auto` leaves them off for subscription and paid models. Subagents are read-only and never get anchors.
+The mode is decided per model, for each request: the model serving it sees the matching `read` and `edit` descriptions, so a routed local model and a frontier orchestrator can differ within one session. Weak local models gain the most, because they no longer have to reproduce text exactly. Anchors cost four to five tokens per line read, so `auto` leaves them off for subscription and paid models. Subagents never get anchors.
 
 ### Post-edit diagnostics
 

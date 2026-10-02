@@ -150,6 +150,16 @@ a footer with the model, tool calls, duration, tokens, cost, and how many
 quotes verified. Several tasks in one reply run in parallel. Subagents cannot
 start subagents.
 
+Type `general` is a writer: the full tools (read, edit, write, bash, and the
+web tools the routing mode allows) in your working directory, not a copy. Its
+tool calls go through the same undo snapshots, shell-edit capture, overwrite
+guard, and safety backups as the main conversation's, so `/undo` covers its
+changes. Its result ends with the files it changed, and it is never retried
+on another model on top of its own changes. A file a running writer has
+changed is locked to it until it finishes: another writer's edit to it, or
+the main model's, is refused with the holder's name. Effort sizes a writer's
+budget (`quick` 10 minutes, `medium` 30, `thorough` 2 hours).
+
 In the transcript a task is one row: `│ Explore — description`, then
 `↳ current tool` while it runs and `↳ n toolcalls · duration · model` when it
 is done. Ctrl+O shows the checked result. The sidebar counts
@@ -163,8 +173,9 @@ child runs under the same routing, limits, verification, escalation, and log.
 Its checked result reaches the model as a message after its current turn, or
 starts a turn when it is idle. Interrupting a turn does not stop background
 tasks; `/agents stop`, the palette's "Stop agent…", or `ctrl+k` in `/agents`
-does. Without the interactive UI (print and RPC modes) a background call runs
-blocking.
+does. Without the interactive UI (print, JSON, and RPC modes) background
+results queue up: when the model would end its run with background tasks
+still running, the run waits for them and reads their results first.
 
 The model keeps a work queue with `update_plan`: items with an id, a goal, and
 a status (`pending`, `in_progress`, `completed`, `blocked`, and `failed` or

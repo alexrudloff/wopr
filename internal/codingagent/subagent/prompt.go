@@ -46,6 +46,21 @@ EVIDENCE:
 - cmd: <command> "<exact line from its output>"
 NOT_CHECKED: <what you did not verify, or none>`
 
+// generalSystem is a general child's system prompt: it works on the
+// user's own files, beside the lead agent and possibly other children.
+const generalSystem = `You are a subagent working for a coding agent, on the user's real working directory: your edits are the user's files, not a copy. You get a brief and nothing else: no conversation history.
+- Do exactly what the brief asks, completely: read what you need, edit and write files, run the build and the tests with bash, and fix what fails. Keep to the brief; don't refactor or touch files it doesn't need.
+- Other agents may be working in the same directory. If an edit is refused because another agent holds the file, don't work around it: finish what you can and report it.
+- Don't commit, push, or rewrite git history, and don't delete files the brief didn't ask you to, unless the brief says so.
+- When done, check your work (build, tests, or a command that shows it works) and leave the tree in the state you'd ship.
+Finish with exactly this format and nothing after it:
+STATUS: done | partial | failed | blocked
+CONFIDENCE: high | medium | low
+ANSWER: <what you changed and why, what the checks show, and anything left undone, at most about 400 words>
+EVIDENCE:
+- cmd: <command> "<exact line from its output>"
+NOT_CHECKED: <what you did not verify, or none>`
+
 // ExploreSystemPrompt is the explore child's system prompt for cwd.
 func ExploreSystemPrompt(cwd string) string {
 	return exploreSystem + "\nWorking directory: " + cwd
@@ -58,6 +73,8 @@ func systemPrompt(taskType, cwd string) string {
 		return proposeSystem + "\nWorking directory: " + cwd
 	case TypeBuild:
 		return buildSystem + "\nWorking directory: " + cwd
+	case TypeGeneral:
+		return generalSystem + "\nWorking directory: " + cwd
 	}
 	return ExploreSystemPrompt(cwd)
 }
@@ -71,10 +88,11 @@ func BriefPrompt(req Request, notes string) string {
 		b.WriteString("\n\nStart from: " + strings.Join(req.Paths, ", "))
 	}
 	b.WriteString("\n\nEffort: " + req.Effort)
-	switch req.Effort {
-	case EffortQuick:
+	switch {
+	case req.Type == TypeGeneral:
+	case req.Effort == EffortQuick:
 		b.WriteString(" (a lookup: start with one grep or rg across the repo, read only what it points to, and answer within a few tool calls)")
-	case EffortThorough:
+	case req.Effort == EffortThorough:
 		b.WriteString(" (be complete; check every relevant place)")
 	}
 	if notes != "" {
