@@ -165,6 +165,15 @@ const (
 	ToolModeParallel   ToolExecutionMode = "parallel"
 )
 
+// ConcurrencySafeTool is a parallel tool that says, per call, whether the
+// call only reads and so may run alongside the other reads of its batch. A
+// parallel tool without it is a barrier: it runs after every earlier call of
+// the batch finishes, and later calls wait for it, so `ffmpeg … out.png`
+// followed by `read out.png` in one message reads the finished file.
+type ConcurrencySafeTool interface {
+	ConcurrencySafe(args json.RawMessage) bool
+}
+
 // AgentToolResult is the result of a tool execution.
 //
 // Content (string) is the primary text-only path; Images carries optional

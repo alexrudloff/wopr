@@ -183,6 +183,9 @@ func (t *SearchTool) Schema() ai.ToolSchema {
 
 func (t *SearchTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *SearchTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 func (t *SearchTool) Execute(ctx context.Context, _ string, raw json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var p struct {
 		Query string `json:"query"`

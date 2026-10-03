@@ -6,6 +6,7 @@ import (
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
+	"github.com/alexrudloff/wopr/internal/codingagent/shellread"
 )
 
 // ─── Bash Tool ────────────────────────────────────────────────────────────────
@@ -56,6 +57,17 @@ func (t *BashTool) Schema() ai.ToolSchema {
 
 // ExecutionMode is parallel.
 func (t *BashTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
+
+// ConcurrencySafe: a command that only reads (shellread's allowlisted
+// pipelines) may run alongside other reads; anything else may create or
+// change files a later call of the batch reads, so it is a barrier.
+func (t *BashTool) ConcurrencySafe(args json.RawMessage) bool {
+	var in struct {
+		Command    string `json:"command"`
+		Background bool   `json:"run_in_background"`
+	}
+	return json.Unmarshal(args, &in) == nil && !in.Background && shellread.CheckReadOnly(in.Command) == nil
+}
 
 // Execute runs the command through the shared shell tool execution with the
 // bash config: the resolved bash, the settings command prefix, and bash temp

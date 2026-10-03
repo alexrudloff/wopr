@@ -45,6 +45,10 @@ type orderableScriptTool struct {
 	log   *orderLog
 }
 
+// ConcurrencySafe lets the batch overlap, so reservation order (not barrier
+// serialization) is what keeps the calls in source order.
+func (t *orderableScriptTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 func (t *orderableScriptTool) ReserveMutationOrder(args json.RawMessage) (*MutationTicket, bool) {
 	t.log.add("reserve:" + argValue(args))
 	return t.queue.reserve(), true

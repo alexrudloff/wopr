@@ -59,6 +59,13 @@ func (t *FusedTool) Name() string                           { return t.base.Name
 func (t *FusedTool) Label() string                          { return t.base.Label() }
 func (t *FusedTool) ExecutionMode() agent.ToolExecutionMode { return t.base.ExecutionMode() }
 
+// ConcurrencySafe is the base tool's answer; a base that doesn't say is a
+// barrier.
+func (t *FusedTool) ConcurrencySafe(args json.RawMessage) bool {
+	safe, ok := t.base.(agent.ConcurrencySafeTool)
+	return ok && safe.ConcurrencySafe(args)
+}
+
 // Schema adds the optional then_run object to the base schema.
 func (t *FusedTool) Schema() ai.ToolSchema {
 	schema := t.base.Schema()

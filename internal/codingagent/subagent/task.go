@@ -199,6 +199,15 @@ func (t *Tool) Label() string { return "Task" }
 
 func (t *Tool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: an explore task only reads; a general one may change
+// files, so it waits for the calls before it.
+func (t *Tool) ConcurrencySafe(args json.RawMessage) bool {
+	var in struct {
+		Type string `json:"type"`
+	}
+	return json.Unmarshal(args, &in) == nil && (in.Type == "" || in.Type == TypeExplore)
+}
+
 // Schema is the tool definition. Its guidelines are the orchestrator's
 // "when to delegate" rules, present only while the tool is active.
 func (t *Tool) Schema() ai.ToolSchema {

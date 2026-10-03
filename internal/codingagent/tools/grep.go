@@ -65,6 +65,9 @@ func (t *GrepTool) Schema() ai.ToolSchema {
 
 func (t *GrepTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *GrepTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 // grepDefaultLimit is the default match limit.
 const grepDefaultLimit = 100
 

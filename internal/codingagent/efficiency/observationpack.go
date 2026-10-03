@@ -502,6 +502,9 @@ func (t *RecallTool) Schema() ai.ToolSchema {
 
 func (t *RecallTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *RecallTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 func (t *RecallTool) Execute(_ context.Context, _ string, params json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var in struct {
 		ID     string `json:"id"`

@@ -61,6 +61,9 @@ func (t *FetchTool) Schema() ai.ToolSchema {
 
 func (t *FetchTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *FetchTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 func (t *FetchTool) Execute(ctx context.Context, toolCallID string, raw json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var p struct {
 		URL string `json:"url"`

@@ -57,6 +57,9 @@ func (t *ReadTool) Schema() ai.ToolSchema {
 
 func (t *ReadTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *ReadTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 // Execute resolves the path, checks it is readable, returns a supported image
 // as an attachment, and otherwise decodes the text (invalid UTF-8 becomes
 // U+FFFD) and applies

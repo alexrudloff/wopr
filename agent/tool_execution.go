@@ -87,60 +87,84 @@ func (r *loopRun) executeToolCallsSequential(calls []pendingToolCall) executedTo
 	return executedToolCallBatch{messages: messages, terminate: shouldTerminateToolBatch(finalized)}
 }
 
-// executeToolCallsParallel emits tool_execution_start and prepares every call
-// sequentially in source order, then executes the prepared calls
-// concurrently. tool_execution_end follows completion order; tool-result
-// messages follow source order once every call has finished.
+// executeToolCallsParallel runs a batch in source order, overlapping the
+// calls that only read: a run of concurrency-safe calls executes at once, and
+// any other call is a barrier that starts after every earlier call finishes
+// and holds back the calls after it. Each call is prepared (lookup, argument
+// preparation, before hooks) just before it starts, so a hook that snapshots
+// files sees the work of the barriers before it. tool_execution_end follows
+// completion order; tool-result messages follow source order once every call
+// has finished.
 //
 // A tool implementing QueueOrderable has its shared-queue position reserved
-// here too, in this same source-order loop, before any goroutine starts, so
+// in this same source-order loop, before its goroutine starts, so
 // file-mutation-queue registration happens in call order; the per-call
-// goroutines below give no such guarantee on their own (see QueueOrderable).
+// goroutines give no such guarantee on their own (see QueueOrderable).
 func (r *loopRun) executeToolCallsParallel(calls []pendingToolCall) executedToolCallBatch {
 	ctx := r.toolCtx()
-	outcomes := make([]toolCallOutcome, 0, len(calls))
-	callCtxs := make([]context.Context, 0, len(calls))
-	for _, call := range calls {
-		r.a.emitToolExecutionStart(call)
-		outcome := r.a.prepareToolCall(ctx, call)
+	finalized := make([]finalizedToolCall, len(calls))
+	n := 0
+	// prepare emits a call's start, prepares it, and reserves its queue
+	// position; a call that can't run is finalized here.
+	prepare := func(i int) (preparedToolCall, context.Context, bool) {
+		r.a.emitToolExecutionStart(calls[i])
+		outcome := r.a.prepareToolCall(ctx, calls[i])
+		n = i + 1
+		if outcome.prepared == nil {
+			r.a.emitToolExecutionEnd(*outcome.finalized)
+			finalized[i] = *outcome.finalized
+			return preparedToolCall{}, nil, false
+		}
 		callCtx := ctx
-		if outcome.prepared != nil {
-			if orderer, ok := outcome.prepared.tool.(QueueOrderable); ok {
-				if ticket, has := orderer.ReserveMutationOrder(outcome.prepared.args); has {
-					callCtx = WithMutationTicket(ctx, ticket)
-				}
+		if orderer, ok := outcome.prepared.tool.(QueueOrderable); ok {
+			if ticket, has := orderer.ReserveMutationOrder(outcome.prepared.args); has {
+				callCtx = WithMutationTicket(ctx, ticket)
 			}
 		}
-		if outcome.finalized != nil {
-			r.a.emitToolExecutionEnd(*outcome.finalized)
-		}
-		outcomes = append(outcomes, outcome)
-		callCtxs = append(callCtxs, callCtx)
-		if ctx.Err() != nil {
-			break
-		}
+		return *outcome.prepared, callCtx, true
 	}
-
-	finalized := make([]finalizedToolCall, len(outcomes))
-	var wg sync.WaitGroup
-	for i, outcome := range outcomes {
-		if outcome.prepared == nil {
-			finalized[i] = *outcome.finalized
+	for i := 0; i < len(calls) && ctx.Err() == nil; {
+		if !r.a.concurrencySafe(calls[i]) {
+			if prepared, callCtx, ok := prepare(i); ok {
+				finalized[i] = r.a.runPreparedToolCall(callCtx, prepared)
+			}
+			i++
 			continue
 		}
-		callCtx := callCtxs[i]
-		// Every prepared call runs at once. A CPU-count cap would serialize I/O-bound tools on small machines.
-		wg.Go(func() {
-			finalized[i] = r.a.runPreparedToolCall(callCtx, *outcome.prepared)
-		})
+		// A run of safe calls: prepare them all in source order, then run
+		// them at once. A CPU-count cap would serialize I/O-bound tools on
+		// small machines.
+		type ready struct {
+			at       int
+			prepared preparedToolCall
+			ctx      context.Context
+		}
+		var run []ready
+		for ; i < len(calls) && ctx.Err() == nil && r.a.concurrencySafe(calls[i]); i++ {
+			if prepared, callCtx, ok := prepare(i); ok {
+				run = append(run, ready{i, prepared, callCtx})
+			}
+		}
+		var wg sync.WaitGroup
+		for _, c := range run {
+			wg.Go(func() { finalized[c.at] = r.a.runPreparedToolCall(c.ctx, c.prepared) })
+		}
+		wg.Wait()
 	}
-	wg.Wait()
 
-	messages := make([]ToolResultMessage, 0, len(finalized))
-	for _, f := range finalized {
+	messages := make([]ToolResultMessage, 0, n)
+	for _, f := range finalized[:n] {
 		messages = append(messages, r.appendToolResult(f))
 	}
-	return executedToolCallBatch{messages: messages, terminate: shouldTerminateToolBatch(finalized)}
+	return executedToolCallBatch{messages: messages, terminate: shouldTerminateToolBatch(finalized[:n])}
+}
+
+// concurrencySafe reports whether call may overlap the other safe calls of
+// its batch: its tool says so for these arguments. Unknown tools and tools
+// that don't say are barriers.
+func (a *Agent) concurrencySafe(call pendingToolCall) bool {
+	tool, ok := a.findTool(call.name).(ConcurrencySafeTool)
+	return ok && tool.ConcurrencySafe(json.RawMessage(call.args.String()))
 }
 
 // runPreparedToolCall executes and finalizes one call of a parallel batch,

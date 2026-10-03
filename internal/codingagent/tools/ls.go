@@ -49,6 +49,9 @@ func (t *LsTool) Schema() ai.ToolSchema {
 
 func (t *LsTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *LsTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 // Execute lists a directory.
 func (t *LsTool) Execute(ctx context.Context, _ string, rawParams json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var p lsParams

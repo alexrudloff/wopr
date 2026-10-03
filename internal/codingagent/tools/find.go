@@ -59,6 +59,9 @@ func (t *FindTool) Schema() ai.ToolSchema {
 
 func (t *FindTool) ExecutionMode() agent.ToolExecutionMode { return agent.ToolModeParallel }
 
+// ConcurrencySafe: it only reads, so it may run alongside other reads.
+func (t *FindTool) ConcurrencySafe(json.RawMessage) bool { return true }
+
 // Execute runs fd and formats its results.
 func (t *FindTool) Execute(ctx context.Context, _ string, rawParams json.RawMessage, _ agent.ToolUpdateCallback) (agent.AgentToolResult, error) {
 	var p findParams
