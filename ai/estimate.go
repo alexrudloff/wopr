@@ -190,12 +190,25 @@ func lastAssistantUsageIndex(messages []Message) int {
 		if assistant, ok := message.(AssistantMessage); ok &&
 			assistant.Timestamp >= latestPrefixTimestamp &&
 			assistant.StopReason != StopReasonAborted && assistant.StopReason != StopReasonError &&
-			CalculateContextTokens(assistant.Usage) > 0 {
+			!usesServerTools(assistant) && CalculateContextTokens(assistant.Usage) > 0 {
 			index = i
 		}
 		latestPrefixTimestamp = max(latestPrefixTimestamp, messageTimestamp(message))
 	}
 	return index
+}
+
+// usesServerTools reports a reply that ran provider-side tools (Anthropic's
+// web search). Its usage adds up every round the provider ran inside the
+// reply, so it measures work, not the context: one search reply reported
+// 1.04M tokens for a 370K context.
+func usesServerTools(message AssistantMessage) bool {
+	for _, block := range message.Content {
+		if _, ok := block.(ServerToolContent); ok {
+			return true
+		}
+	}
+	return false
 }
 
 // EstimateContextTokens estimates a transcript's context size from the last

@@ -83,6 +83,15 @@ func ClampMaxTokensToContext(model *Model, context TranscriptContext, maxTokens 
 	if contextWindow <= 0 {
 		return max(minMaxTokens, maxTokens)
 	}
-	available := contextWindow - EstimateContextTokens(context.messages).Tokens - contextSafetyTokens
+	estimate := EstimateContextTokens(context.messages).Tokens
+	// An estimate past the window itself can't be the context the provider
+	// just accepted, so it's wrong: clamping to it would send max_tokens=1
+	// and every reply would stop after one token. Send the model's limit and
+	// let a real overflow come back as the provider's error, which
+	// compaction handles.
+	if estimate > contextWindow {
+		return maxTokens
+	}
+	available := contextWindow - estimate - contextSafetyTokens
 	return min(maxTokens, max(minMaxTokens, available))
 }

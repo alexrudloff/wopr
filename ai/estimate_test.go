@@ -84,3 +84,20 @@ func TestClampMaxTokensToContext(t *testing.T) {
 		t.Errorf("unknown window: got %d, want 500", got)
 	}
 }
+
+// A reply that ran Anthropic's web search reports usage summed over every
+// round it ran (here 1.04M for a far smaller context). Taking that as the
+// context size clamped max_tokens to 1, and every later reply stopped after
+// one token while still paying for a full cache read.
+func TestServerToolUsageDoesNotClampReplies(t *testing.T) {
+	model := &Model{Capabilities: ModelCapabilities{ContextWindow: 1_000_000}}
+	search := AssistantMessage{
+		Content:    []AssistantContentBlock{TextContent{Text: "searched"}, ServerToolContent{Raw: []byte(`{"type":"server_tool_use"}`)}},
+		Usage:      Usage{CacheRead: 1_040_667, Output: 1362},
+		StopReason: StopReasonToolUse,
+	}
+	ctx := NormalizeContext(Context{Messages: []Message{UserMessage{Content: UserText("look it up")}, search, UserMessage{Content: UserText("continue")}}})
+	if got := ClampMaxTokensToContext(model, ctx, 128_000); got != 128_000 {
+		t.Fatalf("max tokens after a web search reply = %d, want 128000", got)
+	}
+}
