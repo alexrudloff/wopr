@@ -66,6 +66,12 @@ func compactionTrimIndex(branch []parsedEntry) int {
 
 func (m *InteractiveMode) renderSessionEntries() {
 	defer m.refreshFooterContextUsage()
+	if sess := m.currentSession(); sess != nil {
+		if n := sess.TakeTrimmed(); n > 0 {
+			m.showToast("warning", fmt.Sprintf("Trimmed %d oversized %s", n, plural(n, "entry", "entries")),
+				"Tool details over the session's size limit were left out, so it loads and scrolls normally.")
+		}
+	}
 	// Reset all component tracking: all are stale after a branch navigation.
 	m.toolMu.Lock()
 	clear(m.toolByID)

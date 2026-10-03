@@ -171,7 +171,8 @@ func FromJSONL(data []byte) (SessionData, error) {
 			sd.Header = json.RawMessage(line)
 			continue
 		}
-		sd.Entries = append(sd.Entries, json.RawMessage(line))
+		shrunk, _, _ := sessionblob.Shrink([]byte(line))
+		sd.Entries = append(sd.Entries, json.RawMessage(shrunk))
 		if id, _ := m["id"].(string); id != "" {
 			sd.LeafID = &id
 		}

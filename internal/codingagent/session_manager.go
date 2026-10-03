@@ -148,6 +148,12 @@ func loadSessionFile(path string) (*Session, error) {
 		// Images stored in the blob store come back inline, so the entries
 		// in memory match what was written.
 		line = sessionblob.Resolve(path, line)
+		// Sessions written before the line limit can hold entries of
+		// many megabytes; trim them so the session loads and draws.
+		if shrunk, n, _ := sessionblob.Shrink(line); n > 0 {
+			line = shrunk
+			sess.trimmed++
+		}
 		var base SessionEntryBase
 		if err := json.Unmarshal(line, &base); err != nil {
 			return nil // malformed entry: skip but keep parsing the rest
@@ -289,7 +295,8 @@ func (sm *SessionManager) ForkFromFile(sourcePath string) (*Session, error) {
 			continue
 		}
 		// The source may keep its images in another directory's blob store.
-		entries = append(entries, sessionblob.Resolve(abs, []byte(line)))
+		shrunk, _, _ := sessionblob.Shrink(sessionblob.Resolve(abs, []byte(line)))
+		entries = append(entries, shrunk)
 	}
 	return sm.writeDerivedSession("fork", abs, entries)
 }
