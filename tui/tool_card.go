@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/alexrudloff/wopr/tui/widthx"
 )
@@ -20,9 +21,15 @@ import (
 // anything else is separated by one.
 
 const (
-	toolIndent        = 3  // columns before an inline card's icon
-	toolBlockPadX     = 2  // columns between a block card's notch and its text
-	toolShellPreview  = 10 // output lines a collapsed shell block shows
+	toolIndent       = 3  // columns before an inline card's icon
+	toolBlockPadX    = 2  // columns between a block card's notch and its text
+	toolShellPreview = 10 // output lines a collapsed shell block shows
+	// A card draws at most toolCardMaxSource bytes of any one text and
+	// toolCardMaxRows rows, whatever its result or details hold: tool output
+	// is already truncated far below this, so only a runaway payload (a
+	// diff of a binary file, an old bloated session) is cut.
+	toolCardMaxSource = 256 << 10
+	toolCardMaxRows   = 2000
 	toolWritePreview  = 10 // content lines a collapsed write block shows
 	toolErrorPreview  = 3  // error lines an inline card shows
 	toolSpinnerPeriod = 80 * time.Millisecond
@@ -351,7 +358,8 @@ func (c *ToolExecutionComponent) renderInlineHead(width int) []string {
 		out = append(out, indent+"  "+th.FgText(token, line))
 	}
 	if c.State == ToolStateError {
-		for _, line := range errorPreviewLines(stripControlEscapes(c.Output), toolErrorPreview, width-toolIndent-2) {
+		preview, _ := capCardSource(c.Output)
+		for _, line := range errorPreviewLines(stripControlEscapes(preview), toolErrorPreview, width-toolIndent-2) {
 			out = append(out, indent+"  "+th.FgText("error", line))
 		}
 	}
@@ -382,6 +390,14 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 	var body []string
 	icon, text, _ := c.inlineSpec()
 	expanded := !c.Collapsed
+	// Cap the texts a card draws before wrapping them, and its rows after.
+	cutLines := 0
+	capped := func(s string) string {
+		s, cut := capCardSource(s)
+		cutLines += cut
+		return s
+	}
+	cOutput := capped(c.Output)
 	switch {
 	case IsShellTool(c.Name):
 		if dir := c.toolPath("cwd", "workdir"); dir != "" && dir != "." {
@@ -398,7 +414,7 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 			}
 			body = append(body, th.FgText("text", lead+line))
 		}
-		output := LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output))))
+		output := LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(cOutput))))
 		if output != "" {
 			body = append(body, "")
 			lines := wrapAll(output, bodyWidth)
@@ -419,14 +435,14 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 		body = flattenVisualRows(c.BodyRenderer(bodyWidth, true))
 	case c.Name == "write":
 		title = "# Wrote " + c.toolPath("path", "file_path", "filePath")
-		body = c.numberedContent(c.arg("content"), bodyWidth, expanded)
+		body = c.numberedContent(capped(c.arg("content")), bodyWidth, expanded)
 	default:
 		title = "# " + text
 		// An error's output is appended below in the error color, so the
 		// plain output is shown only for a successful result.
 		var output []string
 		if c.State != ToolStateError {
-			output = colorLines(th, "text", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(c.Output)))), bodyWidth))
+			output = colorLines(th, "text", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(stripControlEscapes(cOutput)))), bodyWidth))
 		}
 		switch {
 		case c.BodyRenderer != nil:
@@ -436,7 +452,14 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 		}
 	}
 	if c.State == ToolStateError && !IsShellTool(c.Name) {
-		body = append(body, colorLines(th, "error", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(c.Output))), bodyWidth))...)
+		body = append(body, colorLines(th, "error", wrapAll(LinkifyURLs(strings.TrimSpace(widthx.StripAnsi(cOutput))), bodyWidth))...)
+	}
+	if len(body) > toolCardMaxRows {
+		cutLines += len(body) - toolCardMaxRows
+		body = body[:toolCardMaxRows:toolCardMaxRows]
+	}
+	if cutLines > 0 {
+		body = append(body, "", th.FgText("textMuted", fmt.Sprintf("… %d more lines not shown", cutLines)))
 	}
 
 	panel := th.Bg("backgroundPanel")
@@ -458,6 +481,22 @@ func (c *ToolExecutionComponent) renderBlockCard(width int) []string {
 		out = append(out, row(line))
 	}
 	return append(out, row(""))
+}
+
+// capCardSource cuts s to toolCardMaxSource bytes at a line break, and
+// returns how many lines it left out.
+func capCardSource(s string) (string, int) {
+	if len(s) <= toolCardMaxSource {
+		return s, 0
+	}
+	cut := strings.LastIndexByte(s[:toolCardMaxSource], '\n')
+	if cut <= 0 {
+		cut = toolCardMaxSource
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+	}
+	return s[:cut], strings.Count(s[cut:], "\n") + 1
 }
 
 // numberedContent renders file content with a muted line-number gutter,
