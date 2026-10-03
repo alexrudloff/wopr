@@ -87,7 +87,7 @@ func shellToolSchema(name, shellName string, exposeSessionEnvironment, backgroun
 
 // backgroundGuideline tells the model how to use and follow a background
 // job.
-const backgroundGuideline = "For a long-running job (dev server, watcher, render, training run), use bash with run_in_background: true rather than & or nohup; read its log with tail and stop it with the kill command the result gives. The user sees background jobs below the prompt."
+const backgroundGuideline = "For a long-running job (dev server, watcher, render, training run), use bash with run_in_background: true rather than & or nohup; read its log with tail and stop it with the kill command the result gives. When a background job ends you get a message with its exit code and last output, so don't sleep-poll it (no ps/sleep loops): continue other work or end your turn and wait. The user sees background jobs below the prompt."
 
 // strictToolSampling is the constrained sampling the read, bash, powershell,
 // edit and write definitions request: { type: "json_schema", strict: "prefer" }.
@@ -177,7 +177,7 @@ func executeShellTool(ctx context.Context, cwd string, cfg shellToolConfig, rawP
 	text, details := formatShellOutput(snapshot, lastLineBytes, "(no output)")
 	if cfg.background != nil && result.ProcessGroup > 0 {
 		if job, ok := cfg.background.Adopt(p.Command, result.ProcessGroup); ok {
-			text = appendShellStatus(text, fmt.Sprintf("[Still running in the background as %s (process group %d); stop it with: kill -- -%d. Next time use run_in_background: true to capture its output.]", job.ID, job.PGID, job.PGID))
+			text = appendShellStatus(text, fmt.Sprintf("[Still running in the background as %s (process group %d); stop it with: kill -- -%d. You'll be told when it ends; don't poll it. Next time use run_in_background: true to capture its output.]", job.ID, job.PGID, job.PGID))
 		}
 	}
 	if result.ExitCode == nil {
@@ -272,7 +272,7 @@ func startBackground(cfg shellToolConfig, cwd, command, resolved string, env []s
 	job.Command = command
 	cfg.background.setCommand(job.ID, command)
 	return agent.AgentToolResult{
-		Content: fmt.Sprintf("Started in the background as %s (process group %d).\nOutput: %s\nRead it with: tail -n 50 %s\nStop it with: kill -- -%d",
+		Content: fmt.Sprintf("Started in the background as %s (process group %d). You'll get a message with its exit code and last output when it ends; don't poll it.\nOutput: %s\nRead it with: tail -n 50 %s\nStop it with: kill -- -%d",
 			job.ID, job.PGID, job.LogPath, job.LogPath, job.PGID),
 		Details: map[string]any{"background": job.ID, "pgid": job.PGID, "log": job.LogPath},
 	}, nil

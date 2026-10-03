@@ -47,12 +47,14 @@ func (s *Session) preparePrompt(ctx context.Context, messages []agent.AgentMessa
 	s.pruneOfferAtPrompt()
 	s.thinkingBoost.Store(0)
 	s.stall = stallState{}
-	s.final.done = false
-	s.final.worked.Store(false)
 	s.undo.prompt.Store(time.Now().UnixNano())
 	if !slices.ContainsFunc(messages, func(message agent.AgentMessage) bool { return message.User != nil }) {
+		// A run a background result started continues the prompt's work, so
+		// the final check still owes it.
 		return messages, nil
 	}
+	s.final.done = false
+	s.final.worked.Store(false)
 	var systems []ai.Message
 	for _, message := range append(s.agent.Messages(), messages...) {
 		if message.System != nil {

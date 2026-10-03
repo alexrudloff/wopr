@@ -103,6 +103,9 @@ func (m *InteractiveMode) handleAgentEvent(ev agent.AgentEvent) {
 		if custom := e.Message.Custom; custom != nil {
 			if customType, _ := custom["customType"].(string); customType != "" {
 				if label, ok := efficiency.NoteLabel(customType); ok {
+					if specific, _ := custom["label"].(string); specific != "" {
+						label = specific
+					}
 					m.appendHarnessNote(label)
 					m.tuiInst.RequestRender()
 				}

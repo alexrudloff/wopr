@@ -7,12 +7,16 @@ const (
 	StallNudgeMessageType = "stall_nudge"
 	FinalCheckMessageType = "final_check"
 	DeadlineMessageType   = "deadline_note"
+	// BackgroundExitMessageType says a background shell job ended; its
+	// "label" names the job and how it ended.
+	BackgroundExitMessageType = "background_exit"
 )
 
 var noteLabels = map[string]string{
-	StallNudgeMessageType: "Nudged the model to change approach",
-	FinalCheckMessageType: "Final check: verifying each requirement before finishing",
-	DeadlineMessageType:   "Time note",
+	StallNudgeMessageType:     "Nudged the model to change approach",
+	FinalCheckMessageType:     "Final check: verifying each requirement before finishing",
+	DeadlineMessageType:       "Time note",
+	BackgroundExitMessageType: "Background job finished",
 }
 
 // NoteLabel returns the transcript line for a harness note's custom type.

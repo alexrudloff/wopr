@@ -43,6 +43,8 @@ type BackgroundShell struct {
 	Finished time.Time
 	// Adopted reports a job found still running after a plain command.
 	Adopted bool
+	// reported is set once OnExit has been told the job ended.
+	reported bool
 }
 
 // Running reports whether the job has not ended.
@@ -62,6 +64,39 @@ type BackgroundShells struct {
 	entries  []*BackgroundShell
 	next     int
 	onChange atomic.Pointer[func()]
+	onExit   atomic.Pointer[func(BackgroundShell)]
+}
+
+// adoptedPoll is how often an adopted job's process group is checked, so
+// its end is reported without waiting for someone to list the jobs.
+const adoptedPoll = 2 * time.Second
+
+// OnExit sets what runs once when a job ends (done, failed, stopped, or an
+// adopted job's group gone), outside the lock; nil removes it.
+func (b *BackgroundShells) OnExit(fn func(BackgroundShell)) {
+	if fn == nil {
+		b.onExit.Store(nil)
+		return
+	}
+	b.onExit.Store(&fn)
+}
+
+// reportEnded tells OnExit about every ended job it hasn't been told about.
+func (b *BackgroundShells) reportEnded() {
+	b.mu.Lock()
+	var ended []BackgroundShell
+	for _, e := range b.entries {
+		if !e.Running() && !e.reported && (e.ExitCode != nil || e.Adopted) {
+			e.reported = true
+			ended = append(ended, *e)
+		}
+	}
+	b.mu.Unlock()
+	if fn := b.onExit.Load(); fn != nil {
+		for _, job := range ended {
+			(*fn)(job)
+		}
+	}
 }
 
 // OnChange sets what runs after a job starts or ends, outside the lock;
@@ -138,6 +173,7 @@ func (b *BackgroundShells) Start(command, cwd string, env []string, shell ShellC
 		}
 		b.mu.Unlock()
 		b.changed()
+		b.reportEnded()
 	}()
 	return job, nil
 }
@@ -157,7 +193,29 @@ func (b *BackgroundShells) Adopt(command string, pgid int) (BackgroundShell, boo
 		}
 	}
 	b.mu.Unlock()
-	return b.add(BackgroundShell{Command: command, PGID: pgid, State: ShellRunning, Started: time.Now(), Adopted: true}), true
+	job := b.add(BackgroundShell{Command: command, PGID: pgid, State: ShellRunning, Started: time.Now(), Adopted: true})
+	go b.watchAdopted(job.ID)
+	return job, true
+}
+
+// watchAdopted polls an adopted job's process group until it is gone (or
+// the job was stopped), then reports the end.
+func (b *BackgroundShells) watchAdopted(id string) {
+	for {
+		time.Sleep(adoptedPoll)
+		b.mu.Lock()
+		changed := b.refresh(time.Now())
+		e := b.find(id)
+		done := e == nil || !e.Running()
+		b.mu.Unlock()
+		if changed {
+			b.changed()
+		}
+		if done {
+			b.reportEnded()
+			return
+		}
+	}
 }
 
 func (b *BackgroundShells) find(id string) *BackgroundShell {

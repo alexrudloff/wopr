@@ -3,12 +3,14 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sync/atomic"
 	"time"
 
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/internal/codingagent/efficiency"
+	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
 )
 
 // Final check: the first time a run that changed something would end, the
@@ -58,6 +60,11 @@ func (s *Session) finalCheckAtTurnEnd(turn agent.AgentTurnContext) {
 	if _, followUps := s.agent.PendingMessages(); len(followUps) > 0 {
 		return
 	}
+	// With a person at the frontend, background work that is still running
+	// reports back and starts another run; check at the end of that one.
+	if s.tasks.deliver.Load() != nil && s.backgroundWorkRunning() {
+		return
+	}
 	s.final.done = true
 	s.agent.FollowUp(agent.AgentMessage{Custom: map[string]any{
 		"role":       agent.RoleCustom,
@@ -66,4 +73,18 @@ func (s *Session) finalCheckAtTurnEnd(turn agent.AgentTurnContext) {
 		"display":    true,
 		"timestamp":  time.Now().UnixMilli(),
 	}})
+}
+
+// backgroundWorkRunning reports a background shell job or background task
+// that has not finished.
+func (s *Session) backgroundWorkRunning() bool {
+	for _, job := range s.bgShells.List() {
+		if job.Running() {
+			return true
+		}
+	}
+	if registry := s.Agents(); registry != nil {
+		return slices.ContainsFunc(registry.Running(), func(a subagent.Agent) bool { return a.Background })
+	}
+	return false
 }

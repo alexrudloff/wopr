@@ -544,6 +544,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	sess.initBashArchive()
 	sess.initPruning()
 	sess.initSubagents(toolAllowed(opts, "task"))
+	bgShells.OnExit(sess.backgroundShellEnded)
 	sess.restoreWarCouncil(inner)
 	sess.model.Store(opts.Model)
 	sess.initSystemPrompt(opts)
