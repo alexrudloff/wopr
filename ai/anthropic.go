@@ -984,8 +984,11 @@ func (p *anthropicProvider) sessionAffinityHeaders(sessionID string, env Provide
 
 // cacheControl returns the cache breakpoint, which applies to the
 // system prompt, tools, and conversation history.
-func (p *anthropicProvider) cacheControl(env ProviderEnv) *anthCacheControl {
-	cacheRetention := getProviderEnvValue("WOPR_CACHE_RETENTION", env)
+func (p *anthropicProvider) cacheControl(env ProviderEnv, retention CacheRetention) *anthCacheControl {
+	cacheRetention := string(retention)
+	if cacheRetention == "" {
+		cacheRetention = getProviderEnvValue("WOPR_CACHE_RETENTION", env)
+	}
 	if cacheRetention == "none" {
 		return nil
 	}
@@ -1104,7 +1107,7 @@ func (p *anthropicProvider) buildParams(model *Model, transcript TranscriptConte
 	params := anthropicParams{
 		conversation:        WithoutInitialSystemMessage(messages),
 		tools:               GetCurrentTools(messages),
-		cacheControl:        p.cacheControl(env),
+		cacheControl:        p.cacheControl(env, opts.CacheRetention),
 		allowEmptySignature: modelAllowsEmptySignature(model),
 		nativeToolChanges: supportsMidConversation &&
 			anthropicCompatFlag(model, func(c *ModelCompat) *bool { return c.SupportsMidConvoToolChanges }) &&

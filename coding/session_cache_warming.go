@@ -3,6 +3,7 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"reflect"
 	"slices"
 	"sync"
@@ -37,10 +38,26 @@ func cacheWarmingStreamFn(session func() *Session) agent.StreamFn {
 				return nil, err
 			}
 			options.ServerWebSearch = s.useServerSearch(model, transcript)
+			options.CacheRetention = s.promptCacheRetention(options)
 			s.startCacheWarming(model, transcript, options)
 		}
 		return model.Provider.Stream(ctx, transcript, options)
 	}
+}
+
+// promptCacheRetention asks for the long prompt cache (Anthropic's 1 hour,
+// OpenAI's 24 hours) while a person is at the frontend: their pauses outlast
+// the 5-minute cache, and each lapse rewrites the whole conversation. On a
+// 441-request Opus session with 16 pauses over 5 minutes, the 1-hour cache
+// cost $67 against $79 with idle warming and $95 with warming only while
+// the agent runs, despite its higher write price. Print, JSON, and RPC runs
+// keep the short cache, and an explicit WOPR_CACHE_RETENTION wins.
+func (s *Session) promptCacheRetention(options ai.StreamOptions) ai.CacheRetention {
+	if options.CacheRetention != "" || s.tasks.deliver.Load() == nil ||
+		os.Getenv("WOPR_CACHE_RETENTION") != "" || options.Env["WOPR_CACHE_RETENTION"] != "" {
+		return options.CacheRetention
+	}
+	return ai.CacheRetentionLong
 }
 
 // streamWarmRequest replays a warm request directly through the provider,

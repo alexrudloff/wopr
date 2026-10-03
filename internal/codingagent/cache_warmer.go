@@ -45,12 +45,12 @@ func GetCacheWarmingDelayMs(ttlMs int64) (int64, bool) {
 // writes, from the model's promptCache tier for the retention the request
 // used. The bool is false when the model has no lifetime for that tier.
 //
-// WOPR's StreamOptions has no per-request cacheRetention (providers read only
-// WOPR_CACHE_RETENTION), so the retention comes from the environment, as it does
-// for every session request.
+// The request's CacheRetention decides, else WOPR_CACHE_RETENTION, as the
+// providers do.
 func GetPromptCacheTtlMs(model *ai.Model, options ai.StreamOptions) (int64, bool) {
 	retention := "short"
-	if cacheWarmingEnvValue("WOPR_CACHE_RETENTION", options.Env) == "long" {
+	if options.CacheRetention == ai.CacheRetentionLong ||
+		options.CacheRetention == "" && cacheWarmingEnvValue("WOPR_CACHE_RETENTION", options.Env) == "long" {
 		retention = "long"
 	}
 	seconds, ok := model.PromptCache[retention]

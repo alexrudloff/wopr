@@ -70,7 +70,7 @@ Each provider in the table above reads the variable in its credential column. Us
 
 `github-copilot` reads only `COPILOT_GITHUB_TOKEN`. A general `GITHUB_TOKEN` is not a Copilot credential.
 
-`WOPR_CACHE_RETENTION` sets the prompt cache retention that WOPR passes to the provider.
+`WOPR_CACHE_RETENTION` sets the prompt cache retention that WOPR passes to the provider (`none`, `short`, or `long`). Without it, the interactive conversation uses the long cache (Anthropic's 1 hour, OpenAI's 24 hours), since a pause longer than 5 minutes would otherwise rewrite the whole cached conversation; print, JSON, and RPC runs and subagents use the short one.
 
 ## Authentication
 
