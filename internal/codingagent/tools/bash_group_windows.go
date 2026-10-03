@@ -32,3 +32,19 @@ func shellExitCode(state *os.ProcessState) int {
 	}
 	return 1
 }
+
+// processGroupAlive is unknown on Windows, so adopted jobs aren't tracked.
+func processGroupAlive(int) bool { return false }
+
+// terminateProcessGroup kills the process tree rooted at pid.
+func terminateProcessGroup(pid int) error {
+	kill := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(pid))
+	kill.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	return kill.Run()
+}
+
+// killProcessGroupID kills the process tree rooted at pid.
+func killProcessGroupID(pid int) error { return terminateProcessGroup(pid) }
+
+// ownProcessGroup is wopr's own process id, the closest Windows analog.
+func ownProcessGroup() int { return os.Getpid() }

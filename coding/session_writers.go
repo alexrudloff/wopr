@@ -237,6 +237,7 @@ func (h taskHost) Writer(id string, model *ai.Model) subagent.Writer {
 			out = append(out, tool)
 		}
 	}
+	withBackgroundShells(out, s.bgShells)
 	out = append(out, s.councilWebTools()...)
 	if s.efficiency != nil && s.efficiency.pack != nil {
 		out = append(out, efficiency.NewRecallTool(s.efficiency.pack))

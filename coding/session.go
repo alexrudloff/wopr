@@ -36,6 +36,8 @@ import (
 //
 // Construct a Session via NewSession or through Runtime.
 type Session struct {
+	// bgShells are the jobs the session's bash tools left running.
+	bgShells      *tools.BackgroundShells
 	services      *Services
 	inner         *icodingagent.Session
 	agent         *agent.Agent
@@ -311,6 +313,8 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 	if len(opts.ExcludedTools) > 0 {
 		allTools = removeExcludedTools(allTools, opts.ExcludedTools)
 	}
+	bgShells := tools.NewBackgroundShells()
+	withBackgroundShells(allTools, bgShells)
 
 	bufSize := opts.EventBufferSize
 	if bufSize <= 0 {
@@ -495,6 +499,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 
 	sess = &Session{
 		tasks:         &sessionTasks{},
+		bgShells:      bgShells,
 		services:      svcs,
 		inner:         inner,
 		agent:         agent,

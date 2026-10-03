@@ -28,3 +28,18 @@ func shellExitCode(state *os.ProcessState) int {
 	}
 	return state.ExitCode()
 }
+
+// processGroupAlive reports whether any process of group pgid exists.
+func processGroupAlive(pgid int) bool {
+	err := syscall.Kill(-pgid, 0)
+	return err == nil || err == syscall.EPERM
+}
+
+// terminateProcessGroup sends SIGTERM to group pgid.
+func terminateProcessGroup(pgid int) error { return syscall.Kill(-pgid, syscall.SIGTERM) }
+
+// killProcessGroupID sends SIGKILL to group pgid.
+func killProcessGroupID(pgid int) error { return syscall.Kill(-pgid, syscall.SIGKILL) }
+
+// ownProcessGroup is wopr's own process group.
+func ownProcessGroup() int { return syscall.Getpgrp() }

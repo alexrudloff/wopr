@@ -57,7 +57,7 @@ func (t *PowerShellTool) Name() string  { return "powershell" }
 func (t *PowerShellTool) Label() string { return "" }
 
 func (t *PowerShellTool) Schema() ai.ToolSchema {
-	return shellToolSchema("powershell", "PowerShell", !t.HideSessionEnvironment)
+	return shellToolSchema("powershell", "PowerShell", !t.HideSessionEnvironment, false)
 }
 
 // ExecutionMode is parallel.

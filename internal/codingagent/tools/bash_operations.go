@@ -29,6 +29,9 @@ type BashOperationsExecOptions struct {
 // BashOperationsResult is the outcome of one shell command.
 type BashOperationsResult struct {
 	ExitCode *int
+	// ProcessGroup is the shell's process group, which descendants it
+	// left running in the background still belong to; 0 when unknown.
+	ProcessGroup int
 }
 
 // BashOperations executes shell commands for the shell tools and user bash.
@@ -215,7 +218,7 @@ func (o *LocalShellOperations) Exec(ctx context.Context, command, cwd string, op
 		return BashOperationsResult{}, waitErr
 	}
 	code := shellExitCode(cmd.ProcessState)
-	return BashOperationsResult{ExitCode: &code}, nil
+	return BashOperationsResult{ExitCode: &code, ProcessGroup: cmd.Process.Pid}, nil
 }
 
 // exitStdioGrace is how long output may stay idle after the shell exits.

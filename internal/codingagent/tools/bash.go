@@ -42,13 +42,16 @@ type BashTool struct {
 	// compacted result and returns its obs_recall id.
 	Compact bool
 	Archive func(key, text string) string
+	// Background, when set, offers run_in_background and tracks the jobs
+	// a command leaves running.
+	Background *BackgroundShells
 }
 
 func (t *BashTool) Name() string  { return "bash" }
 func (t *BashTool) Label() string { return "" }
 
 func (t *BashTool) Schema() ai.ToolSchema {
-	return shellToolSchema("bash", "bash", !t.HideSessionEnvironment)
+	return shellToolSchema("bash", "bash", !t.HideSessionEnvironment, t.Background != nil)
 }
 
 // ExecutionMode is parallel.
@@ -68,5 +71,7 @@ func (t *BashTool) Execute(ctx context.Context, _ string, rawParams json.RawMess
 		binDir:                   t.BinDir,
 		compact:                  t.Compact,
 		archive:                  t.Archive,
+		background:               t.Background,
+		resolveShell:             func() (ShellConfig, error) { return GetShellConfig(t.Settings) },
 	}, rawParams, onUpdate)
 }

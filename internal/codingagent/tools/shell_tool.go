@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"os"
 	"strconv"
 	"strings"
 
@@ -16,8 +17,9 @@ import (
 // shellParams is the shell tool input: a command and an optional timeout in
 // seconds. Timeout is a pointer because the tool rejects an explicit zero or negative timeout while an omitted one means none.
 type shellParams struct {
-	Command string   `json:"command"`
-	Timeout *float64 `json:"timeout"`
+	Command         string   `json:"command"`
+	Timeout         *float64 `json:"timeout"`
+	RunInBackground bool     `json:"run_in_background"`
 }
 
 // shellToolConfig configures a shell tool definition.
@@ -37,14 +39,35 @@ type shellToolConfig struct {
 	// when set, stores the raw output and returns an obs_recall id.
 	compact bool
 	archive func(key, text string) string
+	// background, when set, offers run_in_background and adopts process
+	// groups a command leaves running; resolveShell starts those jobs.
+	background   *BackgroundShells
+	resolveShell func() (ShellConfig, error)
 }
 
 // shellToolSchema builds the shell tool's name, description, parameters,
 // guidelines, and constrained sampling request.
-func shellToolSchema(name, shellName string, exposeSessionEnvironment bool) ai.ToolSchema {
+func shellToolSchema(name, shellName string, exposeSessionEnvironment, background bool) ai.ToolSchema {
 	var guidelines []string
 	if exposeSessionEnvironment {
 		guidelines = []string{sessionGuideline}
+	}
+	properties := map[string]any{
+		"command": map[string]any{
+			"type":        "string",
+			"description": "Shell command to execute",
+		},
+		"timeout": map[string]any{
+			"type":        "number",
+			"description": "Timeout in seconds (optional, no default timeout)",
+		},
+	}
+	if background {
+		properties["run_in_background"] = map[string]any{
+			"type":        "boolean",
+			"description": "Start the command in the background and return at once with its id, process group, and log file. Use it for servers, watchers, renders, and other jobs that run for minutes, instead of & or nohup.",
+		}
+		guidelines = append(guidelines, backgroundGuideline)
 	}
 	return ai.ToolSchema{
 		Name:             name,
@@ -54,22 +77,17 @@ func shellToolSchema(name, shellName string, exposeSessionEnvironment bool) ai.T
 			strconv.Itoa(DefaultMaxBytes/1024) + "KB (whichever is hit first). " +
 			"If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.",
 		Parameters: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				"command": map[string]any{
-					"type":        "string",
-					"description": "Shell command to execute",
-				},
-				"timeout": map[string]any{
-					"type":        "number",
-					"description": "Timeout in seconds (optional, no default timeout)",
-				},
-			},
-			"required": []string{"command"},
+			"type":       "object",
+			"properties": properties,
+			"required":   []string{"command"},
 		},
 		ConstrainedSampling: strictToolSampling(),
 	}
 }
+
+// backgroundGuideline tells the model how to use and follow a background
+// job.
+const backgroundGuideline = "For a long-running job (dev server, watcher, render, training run), use bash with run_in_background: true rather than & or nohup; read its log with tail and stop it with the kill command the result gives. The user sees background jobs below the prompt."
 
 // strictToolSampling is the constrained sampling the read, bash, powershell,
 // edit and write definitions request: { type: "json_schema", strict: "prefer" }.
@@ -108,6 +126,9 @@ func executeShellTool(ctx context.Context, cwd string, cfg shellToolConfig, rawP
 		command = cfg.commandPrefix + "\n" + command
 	}
 	env := sessionEnvironment(ctx, cfg.exposeSessionEnvironment, cfg.binDir)
+	if p.RunInBackground && cfg.background != nil && cfg.resolveShell != nil {
+		return startBackground(cfg, cwd, p.Command, command, env)
+	}
 	output := NewOutputAccumulator(cfg.tempFilePrefix)
 	var updates *shellUpdateScheduler
 	if onUpdate != nil {
@@ -154,6 +175,11 @@ func executeShellTool(ctx context.Context, cwd string, cfg shellToolConfig, rawP
 		snapshot, lastLineBytes = compactSnapshot(snapshot, lastLineBytes, p.Command, cfg.archive)
 	}
 	text, details := formatShellOutput(snapshot, lastLineBytes, "(no output)")
+	if cfg.background != nil && result.ProcessGroup > 0 {
+		if job, ok := cfg.background.Adopt(p.Command, result.ProcessGroup); ok {
+			text = appendShellStatus(text, fmt.Sprintf("[Still running in the background as %s (process group %d); stop it with: kill -- -%d. Next time use run_in_background: true to capture its output.]", job.ID, job.PGID, job.PGID))
+		}
+	}
 	if result.ExitCode == nil {
 		return agent.ErrorResult(appendShellStatus(text, "Command terminated without an exit code")), nil
 	}
@@ -224,4 +250,30 @@ func formatShellOutput(snapshot OutputSnapshot, lastLineBytes int, emptyText str
 			startLine, endLine, tr.TotalLines, FormatSize(DefaultMaxBytes), snapshot.FullOutputPath)
 	}
 	return text, details
+}
+
+// startBackground starts a run_in_background command and reports where its
+// output goes and how to stop it.
+func startBackground(cfg shellToolConfig, cwd, command, resolved string, env []string) (agent.AgentToolResult, error) {
+	if _, err := os.Stat(cwd); err != nil {
+		return agent.ErrorResult("Working directory does not exist: " + cwd), nil
+	}
+	shell, err := cfg.resolveShell()
+	if err != nil {
+		return agent.ErrorResult(err.Error()), nil
+	}
+	if env == nil {
+		env = GetShellEnv(cfg.binDir)
+	}
+	job, err := cfg.background.Start(resolved, cwd, env, shell)
+	if err != nil {
+		return agent.ErrorResult("Could not start the background job: " + err.Error()), nil
+	}
+	job.Command = command
+	cfg.background.setCommand(job.ID, command)
+	return agent.AgentToolResult{
+		Content: fmt.Sprintf("Started in the background as %s (process group %d).\nOutput: %s\nRead it with: tail -n 50 %s\nStop it with: kill -- -%d",
+			job.ID, job.PGID, job.LogPath, job.LogPath, job.PGID),
+		Details: map[string]any{"background": job.ID, "pgid": job.PGID, "log": job.LogPath},
+	}, nil
 }
