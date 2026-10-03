@@ -309,6 +309,20 @@ func (s *Session) messageFor(e SessionEntry) (MessageEntry, bool) {
 	return me, ok
 }
 
+// oversizedOnce limits the warning about an entry whose model-facing
+// content alone is over the line limit to once per process.
+var oversizedOnce sync.Once
+
+// TakeTrimmed returns how many entries loading trimmed to the line limit,
+// once: later calls return 0, so the caller warns once per session.
+func (s *Session) TakeTrimmed() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := s.trimmed
+	s.trimmed = 0
+	return n
+}
+
 // UndecodableCount returns how many distinct message entries failed to
 // decode. Such entries are omitted from BuildContext, so a non-zero count
 // means the reconstructed conversation is missing turns. Only entries
@@ -328,6 +342,9 @@ func (s *Session) UndecodableCount() int {
 // become orphaned subtrees in the same file).
 type Session struct {
 	mu sync.RWMutex
+	// trimmed counts entries loading shrank to the line limit; TakeTrimmed
+	// reports it.
+	trimmed int
 	// leafAppendMu makes reading the leaf and appending its child one step,
 	// so a background appender (cache warming) cannot fork the active chain.
 	leafAppendMu sync.Mutex
@@ -485,6 +502,12 @@ func (s *Session) AppendEntry(entry any) error {
 	raw, err := marshalJSONLine(entry)
 	if err != nil {
 		return fmt.Errorf("session: marshal entry: %w", err)
+	}
+	// No entry may bloat the session: oversized tool details are left out
+	// here, before the entry is kept in memory or written.
+	raw, _, over := sessionblob.Shrink(raw)
+	if over {
+		oversizedOnce.Do(func() { debugLog("session: an entry's model-facing content is over %d bytes", sessionblob.LineLimit) })
 	}
 	var base SessionEntryBase
 	if err := json.Unmarshal(raw, &base); err != nil {

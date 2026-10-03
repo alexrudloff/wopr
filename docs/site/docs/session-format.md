@@ -200,6 +200,8 @@ return scanner.Err()
 
 Set an explicit scanner limit. A Session line can contain a large tool result or image.
 
+WOPR keeps each line under 1 MiB, not counting image data (images are stored as blobs beside the session). When an entry would be larger, the biggest strings in its non-model-facing parts (any `details` object, and a custom entry's `data`) become a short note such as `[omitted from the session: 8.4 MB]`. Message content, summaries, and custom message content are never changed. Loading an older file applies the same trim in memory and reports how many entries it trimmed.
+
 ## Compatibility rules
 
 - Preserve the header schema version.

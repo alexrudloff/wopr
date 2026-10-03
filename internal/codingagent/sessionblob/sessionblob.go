@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -119,7 +120,8 @@ func Relocate(src, dst string) error {
 	}
 	lines := bytes.Split(data, []byte("\n"))
 	for i, line := range lines {
-		lines[i] = Externalize(dst, Resolve(src, line))
+		line, _, _ = Shrink(Resolve(src, line))
+		lines[i] = Externalize(dst, line)
 	}
 	return os.WriteFile(dst, bytes.Join(lines, []byte("\n")), 0o644)
 }
@@ -151,17 +153,25 @@ func Sweep(sessionDir string, minAge time.Duration) error {
 			// An unreadable session might hold references: keep everything.
 			return err
 		}
-		scanner := bufio.NewScanner(f)
-		scanner.Buffer(make([]byte, 64*1024), 64<<20)
-		for scanner.Scan() {
-			for _, m := range blobRef.FindAllSubmatch(scanner.Bytes(), -1) {
+		// Lines have no length limit: a session written before the line
+		// limit can hold lines of many megabytes.
+		reader := bufio.NewReaderSize(f, 64*1024)
+		var readErr error
+		for {
+			line, err := reader.ReadBytes('\n')
+			for _, m := range blobRef.FindAllSubmatch(line, -1) {
 				used[string(m[1])] = true
 			}
+			if err != nil {
+				if !errors.Is(err, io.EOF) {
+					readErr = err
+				}
+				break
+			}
 		}
-		scanErr := scanner.Err()
 		_ = f.Close()
-		if scanErr != nil {
-			return scanErr
+		if readErr != nil {
+			return readErr
 		}
 	}
 	for _, blob := range blobs {
