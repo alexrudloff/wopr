@@ -9,6 +9,7 @@ import (
 	"github.com/alexrudloff/wopr/internal/codingagent/goal"
 	"github.com/alexrudloff/wopr/internal/codingagent/queue"
 	"github.com/alexrudloff/wopr/internal/codingagent/subagent"
+	"github.com/alexrudloff/wopr/internal/codingagent/tools"
 	"github.com/alexrudloff/wopr/tui"
 	"github.com/alexrudloff/wopr/tui/widthx"
 )
@@ -61,12 +62,12 @@ func agentGlyph(state string) (string, string) {
 func (s *sidebar) agentsSection(width, rows int, now time.Time) []string {
 	side := &s.m.side
 	side.agentRowIDs = side.agentRowIDs[:0]
-	registry := s.m.agentsRegistry()
-	if registry == nil {
-		return nil
+	var agents []subagent.Agent
+	if registry := s.m.agentsRegistry(); registry != nil {
+		agents = registry.List()
 	}
-	agents := registry.List()
-	if len(agents) == 0 {
+	jobs := visibleJobs(s.m.backgroundShells().List(), now)
+	if len(agents) == 0 && len(jobs) == 0 {
 		return nil
 	}
 	th := tui.ActiveTheme()
@@ -74,6 +75,11 @@ func (s *sidebar) agentsSection(width, rows int, now time.Time) []string {
 	running := 0
 	for _, a := range visible {
 		if a.Running() {
+			running++
+		}
+	}
+	for _, job := range jobs {
+		if job.Running() {
 			running++
 		}
 	}
@@ -108,6 +114,27 @@ func (s *sidebar) agentsSection(width, rows int, now time.Time) []string {
 		}
 		out = append(out, spread(th.FgText(token, glyph)+" "+th.FgText("textMuted", widthx.TruncateToWidth(label, max(1, width-3-widthx.VisibleWidth(right)), "…", false)), th.FgText("textMuted", right), width))
 		ids = append(ids, a.ID)
+	}
+	for _, job := range jobs {
+		command := "$ " + strings.Join(strings.Fields(job.Command), " ")
+		if job.Running() {
+			dot := hexFg(phosphorHex(), agentSpinner[int(now.Unix())%len(agentSpinner)])
+			right := th.FgText("textMuted", formatDuration(job.Elapsed(now).Truncate(time.Second)))
+			out = append(out, spread(dot+" "+th.FgText("text", widthx.TruncateToWidth(command, max(1, width-3-widthx.VisibleWidth(right)), "…", false)), right, width))
+			out = append(out, th.FgText("textMuted", widthx.TruncateToWidth(fmt.Sprintf("  pid %d · background shell", job.PGID), width, "…", false)))
+			ids = append(ids, job.ID, job.ID)
+			continue
+		}
+		glyph, token := agentGlyph(job.State)
+		if job.State == tools.ShellExited {
+			glyph, token = agentGlyph(subagent.StateDone)
+		}
+		right := job.State
+		if job.ExitCode != nil {
+			right = fmt.Sprintf("exit %d", *job.ExitCode)
+		}
+		out = append(out, spread(th.FgText(token, glyph)+" "+th.FgText("textMuted", widthx.TruncateToWidth(command, max(1, width-3-widthx.VisibleWidth(right)), "…", false)), th.FgText("textMuted", right), width))
+		ids = append(ids, job.ID)
 	}
 	if folded > 0 {
 		out = append(out, th.FgText("textMuted", fmt.Sprintf("%d done · $%.2f", folded, foldedCost)))
@@ -208,4 +235,20 @@ func goalRows(st goal.State, width int) []string {
 		th.FgText(token, "◎") + " " + th.FgText("text", oneLine(st.Objective, max(1, width-2))),
 		th.FgText("textMuted", widthx.TruncateToWidth("  "+st.Summary(), width, "…", false)),
 	}
+}
+
+// visibleJobs are the background jobs the Agents section lists: running
+// ones, newest first, then those that ended within sidebarAgentLinger.
+func visibleJobs(jobs []tools.BackgroundShell, now time.Time) []tools.BackgroundShell {
+	var running, recent []tools.BackgroundShell
+	for _, job := range jobs {
+		switch {
+		case job.Running():
+			running = append(running, job)
+		case now.Sub(job.Finished) < sidebarAgentLinger:
+			recent = append(recent, job)
+		}
+	}
+	slices.Reverse(running)
+	return append(running, recent...)
 }

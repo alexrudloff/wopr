@@ -91,6 +91,7 @@ func (m *InteractiveMode) buildChatViewport() ChatViewport {
 		PendingMessages:     m.pendingMessagesContainer,
 		Status:              m.statusContainer,
 		Editor:              m.editorContainer,
+		WidgetsAbove:        &bgStrip{m: m},
 		Sidebar:             &sidebar{m: m},
 		SidebarVisible:      m.sidebarShown,
 		Scrollbar:           m.settings().GetFullscreenScrollbar(),

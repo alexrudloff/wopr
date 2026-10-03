@@ -42,6 +42,9 @@ func (m *InteractiveMode) startAgents(ctx context.Context) func() {
 		return func() {}
 	}
 	host.SetTaskDelivery(func(msg agent.AgentMessage) { m.deliverTaskResult(ctx, msg) })
+	if shells := m.backgroundShells(); shells != nil {
+		shells.OnChange(func() { m.postUITask(func() { m.tuiInst.RequestRender() }) })
+	}
 	host.OnAgentsChange(func() {
 		m.postUITask(func() {
 			m.tuiInst.RequestRender()
@@ -55,6 +58,9 @@ func (m *InteractiveMode) startAgents(ctx context.Context) func() {
 	return func() {
 		host.SetTaskDelivery(nil)
 		host.OnAgentsChange(nil)
+		if shells := m.backgroundShells(); shells != nil {
+			shells.OnChange(nil)
+		}
 	}
 }
 
@@ -181,6 +187,9 @@ func (m *InteractiveMode) sessionQueue() *queue.Queue {
 // agentsLive reports whether the sidebar's Agents section changes with the
 // clock: an agent runs, or a finished one has yet to fold.
 func (m *InteractiveMode) agentsLive(now time.Time) bool {
+	if m.bgLive(now) {
+		return true
+	}
 	registry := m.agentsRegistry()
 	if registry == nil {
 		return false
@@ -195,11 +204,16 @@ func (m *InteractiveMode) agentsLive(now time.Time) bool {
 
 // runningAgentsText is the prompt's "2 running" indicator, or "".
 func (m *InteractiveMode) runningAgentsText() string {
-	registry := m.agentsRegistry()
-	if registry == nil {
-		return ""
+	n := 0
+	if registry := m.agentsRegistry(); registry != nil {
+		n = len(registry.Running())
 	}
-	if n := len(registry.Running()); n > 0 {
+	for _, job := range m.backgroundShells().List() {
+		if job.Running() {
+			n++
+		}
+	}
+	if n > 0 {
 		return fmt.Sprintf("%d running", n)
 	}
 	return ""
@@ -302,8 +316,11 @@ func (m *InteractiveMode) openAgentDialog(id string) {
 		m.showWarning("No agent " + id)
 		return
 	}
-	view := &agentView{host: host, id: id, height: func() int { return max(6, m.tuiInst.Height()/2) }}
-	m.runDialog(modal{component: view, handleInput: view.HandleInput, done: func() bool { return view.done }}, dialogLarge)
+	// Close is focused first, so a stray Enter never stops the agent.
+	view := &agentView{host: host, id: id, button: 1, height: func() int { return max(6, m.tuiInst.Height()/2) }}
+	wake, stop := everySecond()
+	defer stop()
+	m.runDialog(modal{component: view, handleInput: view.HandleInput, done: func() bool { return view.done }, wake: wake}, dialogLarge)
 }
 
 // agentView is the agent transcript dialog: a header, then the brief,
@@ -315,15 +332,38 @@ type agentView struct {
 	height func() int
 	top    int
 	done   bool
+	// button is the focused one of buttons().
+	button int
 	// transcript caches the archived transcript of a finished agent.
 	transcript *string
 }
 
+// buttons are Stop and Close while the agent runs, then Close.
+func (v *agentView) buttons() []string {
+	if a, ok := v.host.Agents().Get(v.id); ok && a.Running() {
+		return []string{"Stop", "Close"}
+	}
+	return []string{"Close"}
+}
+
 func (v *agentView) HandleInput(data string) {
 	page := max(1, v.height()-2)
+	buttons := v.buttons()
+	v.button = min(v.button, len(buttons)-1)
 	switch {
-	case tui.MatchesKeyID(data, "escape"), tui.MatchesKeyID(data, "ctrl+c"), tui.MatchesKeyID(data, "q"), tui.MatchesKeyID(data, "enter"):
+	case tui.MatchesKeyID(data, "escape"), tui.MatchesKeyID(data, "ctrl+c"), tui.MatchesKeyID(data, "q"):
 		v.done = true
+	case tui.MatchesKeyID(data, "enter"):
+		if buttons[v.button] == "Stop" {
+			v.host.StopAgent(v.id)
+			v.button = 0
+		} else {
+			v.done = true
+		}
+	case tui.MatchesKeyID(data, "tab"), tui.MatchesKeyID(data, "right"):
+		v.button = (v.button + 1) % len(buttons)
+	case tui.MatchesKeyID(data, "shift+tab"), tui.MatchesKeyID(data, "left"):
+		v.button = (v.button + len(buttons) - 1) % len(buttons)
 	case tui.MatchesKeyID(data, "up"), tui.MatchesKeyID(data, "k"):
 		v.top--
 	case tui.MatchesKeyID(data, "down"), tui.MatchesKeyID(data, "j"):
@@ -400,11 +440,17 @@ func (v *agentView) Render(width int) []string {
 	for _, line := range lines[v.top:min(len(lines), v.top+height)] {
 		out = append(out, pad+line)
 	}
-	hint := "↑↓ scroll · esc close"
+	buttons := v.buttons()
+	v.button = min(v.button, len(buttons)-1)
+	var row []string
+	for i, b := range buttons {
+		row = append(row, dialogButton(b, i == v.button))
+	}
+	hint := "↑↓ scroll · ←→ choose · enter select · esc close"
 	if len(lines) > height {
 		hint = fmt.Sprintf("%d-%d of %d · ", v.top+1, min(len(lines), v.top+height), len(lines)) + hint
 	}
-	return append(out, "", pad+th.FgText("textMuted", hint), "")
+	return append(out, "", pad+strings.Join(row, "  "), pad+th.FgText("textMuted", widthx.TruncateToWidth(hint, inner, "…", false)), "")
 }
 
 // quitPrompt is the question asked before quitting while background agents

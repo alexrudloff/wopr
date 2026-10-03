@@ -197,7 +197,11 @@ func (s *sidebar) HandleMouse(event tui.TuiMouseEvent) *tui.TuiMouseDispatchResu
 		s.m.nextSidebarPage()
 	case side.agentTop >= 0 && row >= 0 && row < len(side.agentRowIDs) && side.agentRowIDs[row] != "":
 		id := side.agentRowIDs[row]
-		s.m.postUITask(func() { s.m.openAgentDialog(id) })
+		if strings.HasPrefix(id, "sh_") {
+			s.m.postUITask(func() { s.m.openShellDialog(id) })
+		} else {
+			s.m.postUITask(func() { s.m.openAgentDialog(id) })
+		}
 	default:
 		return nil
 	}

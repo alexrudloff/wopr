@@ -208,6 +208,8 @@ type InteractiveMode struct {
 	spinnerEpoch      time.Time
 	leaderDeadline    time.Time
 	interruptDeadline time.Time
+	// bg is the background-work strip above the prompt (bg_strip.go).
+	bg bgStripState
 	// firstPrompt titles an unnamed session; modifiedFiles lists the files
 	// edited or written this session for the sidebar.
 	firstPrompt   string

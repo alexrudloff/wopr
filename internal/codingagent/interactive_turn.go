@@ -93,6 +93,8 @@ func (m *InteractiveMode) handleSubmitWithImages(ctx context.Context, prompt str
 // unresolved `/foo` is ordinary user text: it goes to the model rather than
 // reporting an unknown command.
 func (m *InteractiveMode) promptUserInput(ctx context.Context, text string, images []ai.ImageContent, followUp bool) {
+	// Finished background work leaves the strip with the next prompt.
+	m.bg.since = time.Now()
 	if _, secret := router.ScanSecrets(text); secret {
 		// Sent as typed: the model may need it. The user should know where it goes.
 		m.showToast("warning", "That looks like a secret", "It goes to the model's provider and is saved in this session's file. Rotate it if it matters.")

@@ -383,6 +383,9 @@ func (m *InteractiveMode) handleKey(ctx context.Context, data string) error {
 	}
 
 	m.cursorEpoch = time.Now()
+	if m.bg.focus && m.handleBgKey(ctx, data) {
+		return nil
+	}
 	if m.handleLeaderKey(ctx, data) {
 		return nil
 	}
@@ -394,6 +397,8 @@ func (m *InteractiveMode) handleKey(ctx context.Context, data string) error {
 			return nil
 		case tui.MatchesKeyID(data, "shift+tab"):
 			m.cycleModelMode(ctx, -1)
+			return nil
+		case tui.MatchesKeyID(data, "down") && m.focusBgStrip():
 			return nil
 		}
 	}
