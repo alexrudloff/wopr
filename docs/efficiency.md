@@ -154,7 +154,9 @@ More keys in `efficiency.json`, each on by default:
   newest `keepImages` images (screenshots from `read`, pasted images); older
   ones become a one-line placeholder such as `[image removed from context:
   /tmp/shot.png, 01:43]`. Pruning happens three images at a time, so the
-  cached prompt prefix changes only every few images. Your own pasted images
+  cached prompt prefix changes only every few images; on a model with a
+  window of 200K tokens or more it happens 24 at a time, since each prune
+  rewrites the whole cached conversation there. Your own pasted images
   stay while they are among your three newest. The session file keeps every
   image. Independently of the switch, a request over a provider's size limit
   (24 MB for Anthropic and Bedrock, under their 32 MB cap; 40 MB elsewhere)

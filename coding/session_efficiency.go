@@ -200,8 +200,16 @@ func (s *Session) projectImages(messages []agent.AgentMessage) []agent.AgentMess
 		keep = s.efficiency.cfg.KeepImages
 	}
 	limit := defaultRequestLimit
-	if model := s.activeModel(); model != nil && (model.ProviderMeta.API == ai.APIAnthropicMessages || model.ProviderMeta.API == ai.APIBedrockConverseStream) {
-		limit = anthropicRequestLimit
+	step := efficiency.ImagePruneStep
+	if model := s.activeModel(); model != nil {
+		if model.ProviderMeta.API == ai.APIAnthropicMessages || model.ProviderMeta.API == ai.APIBedrockConverseStream {
+			limit = anthropicRequestLimit
+		}
+		// A large window has room for a few dozen images, and pruning one
+		// changes the cached prefix (a full rewrite there), so prune rarely.
+		if s.effectiveWindow(model) >= largeImageWindow {
+			step = efficiency.ImagePruneStepLarge
+		}
 	}
 	// The read tool's path names a pruned screenshot.
 	paths := map[string]string{}
@@ -217,7 +225,7 @@ func (s *Session) projectImages(messages []agent.AgentMessage) []agent.AgentMess
 			}
 		}
 	}
-	projected, report := efficiency.ProjectImages(messages, keep, limit, func(id string) string { return paths[id] })
+	projected, report := efficiency.ProjectImages(messages, keep, step, limit, func(id string) string { return paths[id] })
 	if prev := s.efficiency.imagesPruned.Swap(int64(report.Pruned)); int64(report.Pruned) > prev {
 		n := report.Pruned - int(prev)
 		s.emitSavings("Image pruning", fmt.Sprintf("%d old %s left out of the request", n, images(n)), n*imageTokens)
@@ -228,6 +236,10 @@ func (s *Session) projectImages(messages []agent.AgentMessage) []agent.AgentMess
 	}
 	return projected
 }
+
+// largeImageWindow is the context window from which images are pruned in
+// ImagePruneStepLarge steps.
+const largeImageWindow = 200_000
 
 func images(n int) string {
 	if n == 1 {
