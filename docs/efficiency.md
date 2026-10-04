@@ -160,9 +160,10 @@ More keys in `efficiency.json`, each on by default:
   stay while they are among your three newest. The session file keeps every
   image. Independently of the switch, a request over a provider's size limit
   (24 MB for Anthropic and Bedrock, under their 32 MB cap; 40 MB elsewhere)
-  drops its oldest images until it fits, down to the newest one, and never
-  drops text; an HTTP 413 that still comes back is treated as context
-  overflow and compacted.
+  drops its oldest images until it fits, a block of about half the limit at
+  a time so the next several images fit without moving the cut again, down
+  to the newest one, and never drops text; an HTTP 413 that still comes back
+  is treated as context overflow and compacted.
 - `finalCheck`: the first time a run that changed something (a file tool,
   or a shell command that isn't read-only) would end, the model gets one
   message asking it to re-read the request, list each requirement, verify

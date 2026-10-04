@@ -95,3 +95,39 @@ func TestImagePruningKeepsTheSessionWhole(t *testing.T) {
 		t.Fatalf("newest batch of 10 after a reply: pruned %d, want 3", report.Pruned)
 	}
 }
+
+// An image-heavy session sits at the request size limit: each new frame
+// pushed one more old one out, the cached prefix changed on nearly every
+// request, and each change rewrote a 600K-token Opus prefix. The size limit
+// now moves its cut a block of images at a time.
+func TestSizeLimitRarelyMovesTheCut(t *testing.T) {
+	const limit = 24 << 20
+	frame := ai.ImageContent{Data: strings.Repeat("x", 1200<<10), MimeType: "image/png"}
+	var conversation []agent.AgentMessage
+	var previous string
+	changes := 0
+	for i := range 80 {
+		conversation = append(conversation,
+			agent.AgentMessage{Assistant: &agent.AssistantMessage{Content: []ai.AssistantContentBlock{ai.TextContent{Text: "look"}}}},
+			agent.AgentMessage{ToolResult: &agent.ToolResultMessage{ToolCallID: fmt.Sprint(i), ToolName: "read", Content: []ai.ToolResultMessageContent{frame}}})
+		projected, report := ProjectImages(conversation, 3, ImagePruneStepLarge, limit, nil)
+		if report.Bytes > limit {
+			t.Fatalf("request %d: %d bytes over the %d limit", i, report.Bytes, limit)
+		}
+		var cut strings.Builder
+		for _, m := range projected {
+			if m.ToolResult != nil {
+				if _, ok := m.ToolResult.Content[0].(ai.TextContent); ok {
+					cut.WriteString(m.ToolResult.ToolCallID + ",")
+				}
+			}
+		}
+		if cut.String() != previous {
+			changes++
+			previous = cut.String()
+		}
+	}
+	if changes > 10 {
+		t.Fatalf("the cut moved on %d of 80 requests, want at most 10", changes)
+	}
+}

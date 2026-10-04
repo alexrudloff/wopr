@@ -127,8 +127,37 @@ func ProjectImages(messages []agent.AgentMessage, keep, step, maxBytes int, name
 			}
 		}
 	}
-	if maxBytes > 0 {
-		left := len(locs) - out.Pruned
+	if maxBytes > 0 && out.Bytes > maxBytes {
+		// Move the cut forward a whole block at a time. Blocks are runs of
+		// images about half the limit in size, counted from the start of
+		// the conversation, so adding images never moves an earlier
+		// boundary, and each move frees room for several more images:
+		// dropping one image per new image changed the cached prefix on
+		// nearly every request of an image-heavy session at the size limit.
+		blockBytes := max(maxBytes/2, 1)
+		var starts []int
+		for k, run := 0, 0; k < len(locs); k++ {
+			if k == 0 || run >= blockBytes {
+				starts = append(starts, k)
+				run = 0
+			}
+			run += locs[k].size
+		}
+		for _, frontier := range starts[1:] {
+			if out.Bytes <= maxBytes {
+				break
+			}
+			for k := range frontier {
+				if !pruned[k] && !protected[k] && !unseen(k) {
+					pruned[k] = true
+					out.SizePruned++
+					out.Bytes -= locs[k].size
+				}
+			}
+		}
+		// Still over (the user's or unseen images alone are too big): the
+		// oldest remaining ones go too, down to the newest one.
+		left := len(locs) - out.Pruned - out.SizePruned
 		for _, unseenToo := range []bool{false, true} {
 			for k := 0; k < len(locs) && out.Bytes > maxBytes && left > 1; k++ {
 				if pruned[k] || unseen(k) && !unseenToo {
