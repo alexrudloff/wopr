@@ -46,12 +46,21 @@ func (m *InteractiveMode) oauthProviderList(mode string) []tui.OAuthProvider {
 		}
 		all = m.withLlamaLoginProvider(all)
 	}
-	auth, err := ai.NewAuthStorage(filepath.Join(m.opts.AgentDir, "auth.json"))
-	if err != nil {
-		return all
+	if mode == "logout" {
+		for _, p := range ai.APIKeyProviders() {
+			all = append(all, tui.OAuthProvider{ID: p.ID, Name: p.Name, AuthType: "api_key"})
+		}
+		all = m.withLlamaLoginProvider(all)
 	}
-	creds, err := auth.Load()
+	auth, err := ai.NewAuthStorage(filepath.Join(m.opts.AgentDir, "auth.json"))
+	var creds map[string]ai.Credential
+	if err == nil {
+		creds, err = auth.Load()
+	}
 	if err != nil {
+		if mode == "logout" {
+			return nil
+		}
 		return all
 	}
 	for i := range all {
@@ -70,12 +79,28 @@ func (m *InteractiveMode) oauthProviderList(mode string) []tui.OAuthProvider {
 	}
 	m.applyLlamaAuthStatus(all)
 	if mode == "logout" {
-		logged := make([]tui.OAuthProvider, 0, len(all))
+		// Every stored credential can be removed, including keys for
+		// providers outside both catalogs (endpoints added in /setup).
+		logged := make([]tui.OAuthProvider, 0, len(creds))
+		listed := map[string]bool{}
 		for _, p := range all {
-			if p.Stored {
+			if p.Stored && !listed[p.ID] {
+				listed[p.ID] = true
 				logged = append(logged, p)
 			}
 		}
+		for id, c := range creds {
+			if !listed[id] {
+				authType := "api_key"
+				if c.Type == ai.CredentialOAuth {
+					authType = "oauth"
+				}
+				logged = append(logged, tui.OAuthProvider{ID: id, Name: buildAuthProviderName(id), AuthType: authType, Stored: true, StoredType: string(c.Type), AuthStatusSource: "stored"})
+			}
+		}
+		slices.SortFunc(logged, func(a, b tui.OAuthProvider) int {
+			return strings.Compare(a.Name, b.Name)
+		})
 		return logged
 	}
 	return all

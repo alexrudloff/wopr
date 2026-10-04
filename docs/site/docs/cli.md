@@ -25,7 +25,7 @@ wopr [options] [prompt]
 |---|---|
 | `wopr setup` | Open the interactive UI on the setup screen, as `/setup` does. |
 | `wopr login [provider]` | Authenticate an OAuth provider. Credentials go to `auth.json`. |
-| `wopr logout [provider]` | Remove OAuth credentials from `auth.json`, as TUI `/logout` does. |
+| `wopr logout [provider]` | Remove a provider's stored credentials (OAuth or API key) from `auth.json`, as TUI `/logout` does. |
 | `wopr auth check --provider <provider> [--model <model>] [--json] [--credentials] [--no-refresh]` | Print `ready`, `not_ready`, or `invalid` and exit 0, 1, or 2. `--json` writes the structured result; `--credentials` emits the resolved credential when ready. Expired OAuth credentials are refreshed unless `--no-refresh` is given, which also leaves `auth.json` and its directory untouched. |
 | `wopr auth print-api-key --provider <provider> [--model <model>]` | Print the resolved API key for an external client. Refuses a provider configured with OAuth. |
 | `wopr auth print-bearer-token --provider <provider> [--model <model>] [--min-expiry <duration>]` | Print an OAuth bearer token, refreshing it when less than `--min-expiry` (default `30m`; units `ms`, `s`, `m`, `h`) remains. Refuses a provider configured with an API key. |

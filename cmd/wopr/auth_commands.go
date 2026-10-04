@@ -235,11 +235,9 @@ func resolveLogoutProvider(store *ai.AuthStorage, input string) (string, error) 
 	}
 	var providers []string
 	providersByID := make(map[string]struct{})
-	for id, cred := range creds {
-		if cred.Type == ai.CredentialOAuth {
-			providers = append(providers, id)
-			providersByID[id] = struct{}{}
-		}
+	for id := range creds {
+		providers = append(providers, id)
+		providersByID[id] = struct{}{}
 	}
 	for _, provider := range ai.GetOAuthProviders() {
 		if _, exists := providersByID[provider.ID()]; exists {
@@ -256,7 +254,7 @@ func resolveLogoutProvider(store *ai.AuthStorage, input string) (string, error) 
 	}
 	slices.Sort(providers)
 	if len(providers) == 0 {
-		return "", fmt.Errorf("No OAuth providers logged in.")
+		return "", fmt.Errorf("No providers logged in.")
 	}
 	if len(providers) == 1 {
 		return providers[0], nil
