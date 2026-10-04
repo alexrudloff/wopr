@@ -173,7 +173,7 @@ func (b *safetyBackup) backupRepo(ctx context.Context, dir, root string) string 
 	b.mu.Unlock()
 
 	size := dirSize(filepath.Join(root, ".git")) + int64(len(diff))
-	for _, rel := range strings.Split(string(untracked), "\x00") {
+	for rel := range strings.SplitSeq(string(untracked), "\x00") {
 		if info, err := os.Stat(filepath.Join(root, rel)); rel != "" && err == nil {
 			size += info.Size()
 		}
@@ -217,7 +217,7 @@ func (b *safetyBackup) backupRepo(ctx context.Context, dir, root string) string 
 func keepRefs(ctx context.Context, root string, refs []byte, stamp string) string {
 	ns := "refs/wopr-backup/" + stamp + "/"
 	var in strings.Builder
-	for _, line := range strings.Split(strings.TrimSpace(string(refs)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(refs)), "\n") {
 		sha, name, ok := strings.Cut(line, " ")
 		if !ok || !strings.HasPrefix(name, "refs/") {
 			continue
@@ -303,7 +303,7 @@ func (b *safetyBackup) reserve(size int64) bool {
 // dest, keeping their paths.
 func copyUntracked(root, dest string, list []byte) int {
 	n := 0
-	for _, rel := range strings.Split(string(list), "\x00") {
+	for rel := range strings.SplitSeq(string(list), "\x00") {
 		if rel == "" {
 			continue
 		}

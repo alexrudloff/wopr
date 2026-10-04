@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -344,11 +345,11 @@ func printModeFailure(messages []agent.AgentMessage, stderr io.Writer) error {
 
 // lastAssistant is the run's last reply, skipping any notices after it.
 func lastAssistant(messages []agent.AgentMessage) *agent.AssistantMessage {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if a := messages[i].Assistant; a != nil {
+	for _, message := range slices.Backward(messages) {
+		if a := message.Assistant; a != nil {
 			return a
 		}
-		if messages[i].User != nil || messages[i].ToolResult != nil {
+		if message.User != nil || message.ToolResult != nil {
 			return nil
 		}
 	}

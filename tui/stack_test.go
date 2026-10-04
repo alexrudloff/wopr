@@ -18,8 +18,8 @@ func (c *countingComponent) Render(width int) []string {
 func TestHStackRendersBasisChildOnce(t *testing.T) {
 	child := &countingComponent{}
 	h := NewHStack([]StackChild{
-		{Component: NewSpacer(0), StackEntryOptions: StackEntryOptions{Basis: new(2), Grow: new(0), Shrink: new(0)}},
-		{Component: child, StackEntryOptions: StackEntryOptions{Basis: new(0), Grow: new(1), Shrink: new(1)}},
+		{Component: NewSpacer(0), Basis: new(2), Grow: new(0), Shrink: new(0)},
+		{Component: child, Basis: new(0), Grow: new(1), Shrink: new(1)},
 	}, StackOptions{})
 	h.Render(100)
 	if len(child.widths) != 1 || child.widths[0] != 98 {

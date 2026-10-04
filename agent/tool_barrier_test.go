@@ -35,8 +35,8 @@ func (t *fileTool) Execute(context.Context, string, json.RawMessage, ToolUpdateC
 // 32 times in one session), and results stay in call order.
 func TestBarrierCallRunsBeforeLaterReads(t *testing.T) {
 	var exists atomic.Bool
-	writer := &fileTool{fakeTool: fakeTool{name: "make", mode: ToolModeParallel}, exists: &exists}
-	reader := &fileTool{fakeTool: fakeTool{name: "look", mode: ToolModeParallel}, exists: &exists, safe: true}
+	writer := &fileTool{name: "make", mode: ToolModeParallel, exists: &exists}
+	reader := &fileTool{name: "look", mode: ToolModeParallel, exists: &exists, safe: true}
 	calls := toolCallSeq(struct{ id, name string }{"tc-m", "make"}, struct{ id, name string }{"tc-l", "look"})
 	a := NewAgent(AgentOptions{Model: fakeTestModel(providerFromSeqs(calls, textSeq("done"))), Tools: []AgentTool{writer, reader}, MaxTurns: 5})
 
