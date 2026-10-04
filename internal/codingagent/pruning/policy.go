@@ -11,6 +11,14 @@ import (
 // use (Anthropic's default, and the low end of OpenAI's automatic caching).
 const CacheTTL = 5 * time.Minute
 
+// LongCacheTTL is the long prompt cache's lifetime (Anthropic's 1 hour; the
+// low end of the long caches).
+const LongCacheTTL = time.Hour
+
+// LongCacheWriteReadRatio is a long-cache write's cost in cache reads
+// (Anthropic: 2x input to write, 0.1x to read).
+const LongCacheWriteReadRatio = 20
+
 // MinBatchTokens is the smallest saving that justifies breaking a warm
 // cache on its own.
 const MinBatchTokens = 2000

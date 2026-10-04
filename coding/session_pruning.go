@@ -69,10 +69,25 @@ func (s *Session) pruneCold() {
 	}
 }
 
-func (st *sessionPruning) isCold(idleWarm bool) bool {
+func (st *sessionPruning) isCold(idleWarm bool, ttl time.Duration) bool {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.cold || (!idleWarm && time.Since(st.lastRequest) >= pruning.CacheTTL)
+	return st.cold || (!idleWarm && time.Since(st.lastRequest) >= ttl)
+}
+
+// pruneCache is the prompt cache the conversation uses: its lifetime and a
+// write's cost in reads. With the long cache, a pause over 5 minutes leaves
+// the prefix cached, and taking the cache for cold there applied every queued
+// edit and rewrote a warm 600K-token Opus prefix.
+func (s *Session) pruneCache() (time.Duration, float64) {
+	if s.promptCacheRetention(ai.StreamOptions{}) == ai.CacheRetentionLong {
+		return pruning.LongCacheTTL, pruning.LongCacheWriteReadRatio
+	}
+	ratio := efficiency.DefaultCacheWriteReadRatio
+	if s.efficiency != nil && s.efficiency.cfg.CacheWriteReadRatio > 1 {
+		ratio = s.efficiency.cfg.CacheWriteReadRatio
+	}
+	return pruning.CacheTTL, ratio
 }
 
 // pruneProjection plans the automatic edits, applies the batch the policy
@@ -90,10 +105,8 @@ func (s *Session) pruneProjection(force bool) (icodingagent.SessionProjection, [
 	st.pending = nil
 	st.mu.Unlock()
 	idleWarm := s.services.SettingsManager().GetCacheWarmingMode() == "idle"
-	policy := pruning.Policy{Cold: st.isCold(idleWarm), Force: force, WriteReadRatio: efficiency.DefaultCacheWriteReadRatio}
-	if s.efficiency != nil && s.efficiency.cfg.CacheWriteReadRatio > 1 {
-		policy.WriteReadRatio = s.efficiency.cfg.CacheWriteReadRatio
-	}
+	ttl, ratio := s.pruneCache()
+	policy := pruning.Policy{Cold: st.isCold(idleWarm, ttl), Force: force, WriteReadRatio: ratio}
 	requests := 0
 	for _, item := range items {
 		if item.Message.Assistant != nil {
@@ -234,7 +247,8 @@ func (s *Session) pruneMaybeOffer(tokens, window int) {
 		return
 	}
 	idleWarm := s.services.SettingsManager().GetCacheWarmingMode() == "idle"
-	if !st.isCold(idleWarm) && usage < st.cfg.CompressThreshold+compressForceMargin {
+	ttl, _ := s.pruneCache()
+	if !st.isCold(idleWarm, ttl) && usage < st.cfg.CompressThreshold+compressForceMargin {
 		return
 	}
 	st.mu.Lock()
