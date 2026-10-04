@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.2.2] - 2026-10-04
+
+- **Background work**: `bash` with `run_in_background` starts long jobs in their own process group and returns at once; the model is told when a job ends (exit code and last output), so it never sleep-polls. A strip above the prompt lists running subagents and shell jobs; down on an empty prompt focuses it, enter opens a live view with Stop and Close.
+- **Subagents can write**: `task` type `general` runs with the full tools under the session's undo and backup hooks, locks the files it changes, and reports them.
+- **Longer prompt cache**: the interactive conversation uses Anthropic's 1-hour and OpenAI's 24-hour cache, so a pause over 5 minutes no longer rewrites the whole cached conversation. Context pruning and image pruning move the cached prefix far less often.
+- **Images**: sent only to models that accept them, sized by tile budget; requests carry the newest images and older ones become placeholders, with a size guard under the provider's limit.
+- **Safety backup**: before a shell command rewrites git history or opens a SQLite database with live `-wal`/`-shm` files, wopr saves what it could destroy and tells the model how to restore it.
+- **Final check**: the first time a run that changed something would end, the model verifies each requirement against the request.
+- **Tool batches**: read-only calls run together; any other call waits for the ones before it, so a write and a read of the same file in one message see the finished file.
+- **Edits**: `edit` matches looser when the text isn't found as written (indentation, whitespace, doubled backslashes) and lists each failing edit with its closest lines; hashline anchors turn off per model when they fail more than exact-text edits.
+- **Models**: model lists come from providers and models.dev, not a hand-written catalog; a provider's default is its current flagship; an unpriced model shows "unknown", never $0.
+- **Providers and auth**: OpenCode Zen under Add an API key (thanks @krishnaglick), with a real key check; `/logout` and `wopr logout` list every stored credential, API keys included.
+- **Print mode**: `--deadline` / `WOPR_DEADLINE` gives a run a time budget; piped stdin no longer hangs on a pipe that never closes; provider errors exit nonzero in JSON mode; `--gtw` runs Global Thermonuclear War.
+- **Fixes**: large tool output and oversized session lines no longer freeze scrolling or resume; bare URLs in output are clickable; faster rendering per keystroke; Anthropic web-search replies are replayed correctly and no longer inflate context size; war council time budgets scale with each member's speed; `web_fetch` retries HTTP 406; a DuckDuckGo bot check pauses searches instead of retrying.
+
 ## [0.2.1] - 2026-09-30
 
 - **`/undo` covers shell edits**: when a command (`sed -i`, a Python script, `cat >`) changes files, they become normal undo changes, and the command's card shows their diff. The "before" comes from wopr's copies of files the model read, wrote, or named, or from git for clean tracked files; files a command created are removed on undo.
