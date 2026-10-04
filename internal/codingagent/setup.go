@@ -425,7 +425,7 @@ func verifyAPIKey(ctx context.Context, provider, key string) (bool, error) {
 	switch {
 	case base == "":
 		return false, nil
-	case provider == "opencode-go":
+	case provider == "opencode" || provider == "opencode-go":
 		// The model list is public, so ask for a completion with no
 		// messages: a bad key is refused before the empty request is, and
 		// an empty request runs nothing.
