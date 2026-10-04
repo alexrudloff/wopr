@@ -78,6 +78,7 @@ func (t *EditTool) Schema() ai.ToolSchema {
 		ConstrainedSampling: strictToolSampling(),
 		PromptGuidelines: []string{
 			"Use edit for precise changes (edits[].oldText must match exactly)",
+			"Change files with edit (write for a whole new file), not sed, perl, or python scripts in the shell: edit checks the match, shows the diff, and keeps /undo exact",
 			"When changing multiple separate locations in one file, use one edit call with multiple entries in edits[] instead of multiple edit calls",
 			"Each edits[].oldText is matched against the original file, not after earlier edits are applied. Do not emit overlapping or nested edits. Merge nearby changes into one edit.",
 			"Keep edits[].oldText as small as possible while still being unique in the file. Do not pad with large unchanged regions.",
