@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3] - 2026-10-05
+
+- **Compaction at 200k**: a large window no longer fills to 98% before compacting; the context compacts past 200k tokens, so each turn re-reads far less. `/settings` → Compact at picks 100k, 200k, 400k, or the window (`compaction.maxContextTokens`).
+- **Compaction on the conversation's model**: summaries run on the model running the conversation, never a routed side model such as a slow local one; when the conversation is larger than its window, it summarizes the newest messages that fit, so compaction never fails on size.
+- **Fixed: sessions that pruned never compacted**: after context pruning the size estimate read about a third low (a 994k-token session read as 666k), so the window filled and replies were cut off. Automatic compaction now says when it fails instead of failing silently.
+- **Plans**: the model lists a multi-step task's steps with `update_plan` up front and marks each done, giving online compaction its boundaries.
+
 ## [0.2.2] - 2026-10-04
 
 - **Background work**: `bash` with `run_in_background` starts long jobs in their own process group and returns at once; the model is told when a job ends (exit code and last output), so it never sleep-polls. A strip above the prompt lists running subagents and shell jobs; down on an empty prompt focuses it, enter opens a live view with Stop and Close.
