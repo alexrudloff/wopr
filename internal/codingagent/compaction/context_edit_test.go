@@ -139,6 +139,21 @@ func TestSessionContextEditDoesNotTrustPreEditAssistantUsageForProjectedContextE
 	}
 }
 
+func TestSessionContextEditScalesEstimateByPreEditUsage(t *testing.T) {
+	// A provider counting 3x the character estimate must still read near its
+	// real size after a small edit, or the conversation never compacts.
+	e := newEditSession(t)
+	e.message(editUser(strings.Repeat("kept input ", 4_000)))
+	prunedID := e.message(editUser("pruned"))
+	counted := EstimateMessagesTokens(e.sess.BuildSessionProjection().Messages)
+	e.message(editAssistant("answer", ai.Usage{Input: 3 * counted, TotalTokens: 3 * counted}))
+	e.edit(prunedID, nil)
+
+	if got := e.estimate(); got.Tokens < 2*counted {
+		t.Fatalf("edited estimate = %+v, want near %d (3x the character count %d)", got, 3*counted, counted)
+	}
+}
+
 func TestSessionContextEditPreparesCompactionFromEditedModelContent(t *testing.T) {
 	e := newEditSession(t)
 	omittedID := e.message(editUser(strings.Repeat("OMIT-ME ", 100)))
