@@ -610,6 +610,42 @@ func summarizationFailure(operation string, err error) error {
 	return fmt.Errorf("%s failed: %s", operation, message)
 }
 
+// SummaryRequestTokens estimates the input of the largest request Compact
+// sends for prep: the serialized conversation it summarizes, with tool
+// results already cut short, not the full context it replaces. A summarizer
+// is chosen by this size, so a context past every model's window still
+// compacts. The count is padded by half: the character estimate runs up to
+// a third under a provider's count on code and tool output.
+func SummaryRequestTokens(prep CompactionPreparation) int {
+	history := ai.EstimateTextTokens(SummarizationSystemPrompt + UPDATE_SUMMARIZATION_PROMPT + prep.PreviousSummary + SerializeConversation(convertToLlm(prep.MessagesToSummarize)))
+	prefix := ai.EstimateTextTokens(SummarizationSystemPrompt + turnPrefixSummarizationPrompt + SerializeConversation(convertToLlm(prep.TurnPrefixMessages)))
+	return max(history, prefix) * 3 / 2
+}
+
+// FitSummaryRequest drops the oldest messages to summarize until
+// SummaryRequestTokens(*prep) is at most budget, so a summarizer whose window
+// can't take the whole conversation summarizes its newest part.
+func FitSummaryRequest(prep *CompactionPreparation, budget int) {
+	if SummaryRequestTokens(*prep) <= budget {
+		return
+	}
+	used := SummaryRequestTokens(CompactionPreparation{PreviousSummary: prep.PreviousSummary, TurnPrefixMessages: prep.TurnPrefixMessages})
+	start := len(prep.MessagesToSummarize)
+	for start > 0 {
+		cost := ai.EstimateTextTokens(SerializeConversation(convertToLlm(prep.MessagesToSummarize[start-1:start]))) * 3 / 2
+		if used+cost > budget {
+			break
+		}
+		used += cost
+		start--
+	}
+	prep.MessagesToSummarize = prep.MessagesToSummarize[start:]
+	// Per-message sums miss the separators the whole serialization adds.
+	for len(prep.MessagesToSummarize) > 0 && SummaryRequestTokens(*prep) > budget {
+		prep.MessagesToSummarize = prep.MessagesToSummarize[1:]
+	}
+}
+
 // ─── Main Compaction Function ─────────────────────────────────────────────────
 
 // Compact generates summaries for compaction using PrepareCompaction output.

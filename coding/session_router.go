@@ -623,13 +623,26 @@ func (s *Session) sideTaskModel(contextTokens int) *ai.Model {
 	return m
 }
 
-// compactionModel is the side-task model for summarizing the current branch.
-func (s *Session) compactionModel() *ai.Model {
+// compactionModel is the side-task model for a summary request of
+// requestTokens input tokens.
+func (s *Session) compactionModel(requestTokens int) *ai.Model {
 	if !s.subagentRoutingActive() {
 		return s.subagentBaseModel()
 	}
-	tokens := compaction.EstimateProjectedContextTokens(s.inner.BuildSessionProjection(), s.currentBranch()).Tokens
-	return s.sideTaskModel(tokens)
+	return s.sideTaskModel(requestTokens)
+}
+
+// summaryModel picks the summarizer for prep. When the request fits no model
+// it may use, the model that takes the largest share summarizes only the
+// newest messages that fit its window, so compaction never fails on size.
+func (s *Session) summaryModel(prep *compaction.CompactionPreparation) *ai.Model {
+	for tokens := compaction.SummaryRequestTokens(*prep); tokens > 0; tokens /= 2 {
+		if model := s.compactionModel(tokens); model != nil {
+			compaction.FitSummaryRequest(prep, ai.UsableContext(model.Capabilities.ContextWindow, model.Capabilities.MaxOutputTokens))
+			return model
+		}
+	}
+	return nil
 }
 
 // RouterCommand implements the /router slash command.

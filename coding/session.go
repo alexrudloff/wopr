@@ -1887,8 +1887,6 @@ func (s *Session) compact(ctx context.Context, customInstructions string) (*Comp
 	if err := s.beginManualCompaction(ctx); err != nil {
 		return nil, err
 	}
-	model := s.compactionModel()
-
 	s.mu.Lock()
 	entries := s.currentBranch()
 	settings := s.compactionSettings()
@@ -1938,7 +1936,7 @@ func (s *Session) compact(ctx context.Context, customInstructions string) (*Comp
 
 	var result *compaction.CompactionResult
 	var err error
-	if model == nil {
+	if model := s.summaryModel(prep); model == nil {
 		err = errors.New("no model can summarize the session")
 	} else {
 		var generated compaction.CompactionResult
@@ -2131,7 +2129,7 @@ func (s *Session) navigateTree(ctx context.Context, targetID string, opts Naviga
 	if opts.Summarize && len(collected.Entries) > 0 {
 		// The summary runs where compaction does, so a routing mode (private,
 		// cost) also governs it.
-		summaryModel := s.compactionModel()
+		summaryModel := s.compactionModel(compaction.EstimateProjectedContextTokens(s.inner.BuildSessionProjection(), s.currentBranch()).Tokens)
 		if summaryModel == nil {
 			return NavigateTreeResult{}, errors.New("no model this routing mode allows can summarize the branch")
 		}
@@ -2393,18 +2391,20 @@ func (s *Session) runAutoCompactionWith(ctx context.Context, reason string, will
 // runCompaction is runAutoCompactionWith with settings sized for the model
 // the compacted conversation is for.
 func (s *Session) runCompaction(ctx context.Context, reason string, willRetry bool, instructions string, settings compaction.CompactionSettings) bool {
-	model := s.compactionModel()
 	if !s.beginCompaction() {
 		return false
 	}
 	defer s.finishCompaction()
-	if model == nil {
-		return false
-	}
 
 	entries := s.currentBranch()
 	prep := compaction.PrepareCompaction(entries, settings)
 	if prep == nil {
+		return false
+	}
+	model := s.summaryModel(prep)
+	if model == nil {
+		s.emitCompactionEvent(agent.CompactionStartEvent{Reason: reason})
+		s.emitOrderedEventSync(agent.CompactionEndEvent{Reason: reason, ErrorMessage: "Compaction failed: no model can summarize the session"})
 		return false
 	}
 
