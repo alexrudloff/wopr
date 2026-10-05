@@ -65,8 +65,7 @@ prompt line and the sidebar name the subagents' choice only when it differs
 from the orchestrator's, for example `Claude Opus 5.5 · subagents auto`.
 `/model <name>` sets the orchestrator directly.
 
-Side tasks (compaction summaries and the log reducer) follow the subagent
-half: routed to the cheapest model that fits unless routing is off.
+The log reducer follows the subagent half: routed to the cheapest model that fits unless routing is off. Compaction and branch summaries run on the model running the conversation, which has already seen what it summarizes.
 
 ## Basic rules
 

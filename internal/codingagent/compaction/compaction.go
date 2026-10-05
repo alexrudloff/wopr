@@ -36,6 +36,9 @@ type CompactionSettings struct {
 	Enabled          bool `json:"enabled"`
 	ReserveTokens    int  `json:"reserveTokens"`    // tokens reserved for response; default ai.ContextReserve
 	KeepRecentTokens int  `json:"keepRecentTokens"` // tokens to keep from recent history; default a fifth of the window, at most 20000
+	// MaxContextTokens compacts once the context passes it even when the
+	// window is larger; 0 leaves the window alone to decide.
+	MaxContextTokens int `json:"maxContextTokens"`
 }
 
 // DefaultCompactionSettings are the compaction defaults.
@@ -257,7 +260,11 @@ func ShouldCompact(contextTokens, contextWindow int, s CompactionSettings) bool 
 	if contextWindow <= 0 {
 		contextWindow = ai.DefaultContextWindow
 	}
-	return contextTokens > contextWindow-s.ReserveTokens
+	threshold := contextWindow - s.ReserveTokens
+	if s.MaxContextTokens > 0 {
+		threshold = min(threshold, s.MaxContextTokens)
+	}
+	return contextTokens > threshold
 }
 
 // ─── Cut Point Detection ──────────────────────────────────────────────────────

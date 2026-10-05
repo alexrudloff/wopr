@@ -600,49 +600,16 @@ func (s *Session) routeFailover(message *agent.AssistantMessage, toolResults []a
 	return false
 }
 
-// sideTaskModel picks the cheapest model that fits contextTokens for
-// background work such as compaction summaries. In uncensored and cost mode
-// it is nil when no model the mode admits is available.
-func (s *Session) sideTaskModel(contextTokens int) *ai.Model {
-	fallback := s.subagentBaseModel()
-	if s.subagentGate(fallback) != nil || s.RouteError() != nil {
-		// A mode never falls back to a model it didn't choose.
-		fallback = nil
-	}
-	if !s.subagentRoutingActive() {
-		return fallback
-	}
-	ref, _, ok := s.router.SideTask(contextTokens)
-	if !ok {
-		return fallback
-	}
-	m, err := s.routeModel(ref.Provider, ref.Model)
-	if err != nil {
-		return fallback
-	}
-	return m
-}
-
-// compactionModel is the side-task model for a summary request of
-// requestTokens input tokens.
-func (s *Session) compactionModel(requestTokens int) *ai.Model {
-	if !s.subagentRoutingActive() {
-		return s.subagentBaseModel()
-	}
-	return s.sideTaskModel(requestTokens)
-}
-
-// summaryModel picks the summarizer for prep. When the request fits no model
-// it may use, the model that takes the largest share summarizes only the
-// newest messages that fit its window, so compaction never fails on size.
+// summaryModel is the model that summarizes for compaction: the one running
+// the conversation, which has already seen everything it summarizes, so no
+// other model (and no slow local prefill) is involved. When the request is
+// larger than its window, it summarizes only the newest messages that fit.
 func (s *Session) summaryModel(prep *compaction.CompactionPreparation) *ai.Model {
-	for tokens := compaction.SummaryRequestTokens(*prep); tokens > 0; tokens /= 2 {
-		if model := s.compactionModel(tokens); model != nil {
-			compaction.FitSummaryRequest(prep, ai.UsableContext(model.Capabilities.ContextWindow, model.Capabilities.MaxOutputTokens))
-			return model
-		}
+	model := s.activeModel()
+	if model != nil {
+		compaction.FitSummaryRequest(prep, ai.UsableContext(s.effectiveWindow(model), model.Capabilities.MaxOutputTokens))
 	}
-	return nil
+	return model
 }
 
 // RouterCommand implements the /router slash command.

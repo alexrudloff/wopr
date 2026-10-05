@@ -43,6 +43,7 @@ func (t *Tool) Schema() ai.ToolSchema {
 	}
 	guidelines := []string{
 		"Keep the work queue with update_plan: queue what you can't do right now, update items as you and background agents finish (their results say what changed), and answer status questions from it.",
+		"On a task with more than one step, put its steps in the queue with update_plan before you start, and mark each done as soon as it is finished: a finished step is where the context can be compacted without losing work in progress.",
 	}
 	return ai.ToolSchema{
 		Name:        "update_plan",

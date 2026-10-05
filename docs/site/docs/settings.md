@@ -83,7 +83,7 @@ set it in `~/.wopr/agent/settings.json`:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
-| `compaction` | object | see meaning | Automatic compaction: `enabled` (default `true`), `reserveTokens` and `keepRecentTokens` (default sized to the model's window; see compaction), and `modelOverrides` (per-model `reserveTokens` and `keepRecentTokens` keyed by exact `provider/modelId`). See [compaction](compaction.md). |
+| `compaction` | object | see meaning | Automatic compaction: `enabled` (default `true`), `reserveTokens` and `keepRecentTokens` (default sized to the model's window; see compaction), `maxContextTokens` (default `200000`: compact once the context passes it even on a larger window; `0` lets the window decide), and `modelOverrides` (per-model `reserveTokens` and `keepRecentTokens` keyed by exact `provider/modelId`). See [compaction](compaction.md). |
 | `contextPruning` | object | see meaning | Context pruning: `enabled`, `dedupe`, `purgeErrors`, `supersedeReads` and `compress` (each default `true`), and `compressThreshold` (default `0.4`). See [context pruning](compaction.md#context-pruning). |
 | `branchSummary` | object | see meaning | Summary written when you leave a branch: `reserveTokens` (default `16384`) and `skipPrompt` (default `false`, skip the prompt and write no summary). |
 | `steeringMode` | string | `one-at-a-time` | How queued steering messages are dispatched. |

@@ -6,14 +6,16 @@ session continues instead of failing.
 
 ## When WOPR compacts
 
-WOPR compacts when the context in use passes the window minus a reserve:
+WOPR compacts when the context in use passes the window minus a reserve, or 200000 tokens on a larger window:
 
 ```
-contextTokens > contextWindow - reserveTokens
+contextTokens > min(contextWindow - reserveTokens, maxContextTokens)
 ```
 
 The reserve leaves room for the next prompt and its answer. Without it, WOPR would
-compact only after a request was already too large to send.
+compact only after a request was already too large to send. The ceiling keeps a 1M-token window from growing a conversation that every turn re-reads in full.
+
+The model running the conversation writes the summary; it has already seen everything it summarizes. When the conversation is larger than that model's window, it summarizes the newest messages that fit.
 
 The sizes follow the model in use (the routed one while routing is on): the
 reserve is the model's max output, at most 16384 and at most a quarter of its
@@ -29,6 +31,7 @@ fit a better model (see routing).
 | `compaction.enabled` | `true` | Compact automatically |
 | `compaction.reserveTokens` | sized to the model | Tokens held back from the window |
 | `compaction.keepRecentTokens` | sized to the model | Recent conversation kept in full |
+| `compaction.maxContextTokens` | `200000` | Compact past this even on a larger window; `0` lets the window decide |
 
 Set them in [settings](settings.md):
 

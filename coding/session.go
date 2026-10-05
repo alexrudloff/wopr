@@ -2127,11 +2127,10 @@ func (s *Session) navigateTree(ctx context.Context, targetID string, opts Naviga
 
 	var summary *treeBranchSummary
 	if opts.Summarize && len(collected.Entries) > 0 {
-		// The summary runs where compaction does, so a routing mode (private,
-		// cost) also governs it.
-		summaryModel := s.compactionModel(compaction.EstimateProjectedContextTokens(s.inner.BuildSessionProjection(), s.currentBranch()).Tokens)
+		// The summary runs on the conversation's model, as compaction does.
+		summaryModel := s.activeModel()
 		if summaryModel == nil {
-			return NavigateTreeResult{}, errors.New("no model this routing mode allows can summarize the branch")
+			return NavigateTreeResult{}, errors.New("no model can summarize the branch")
 		}
 		bsResult := compaction.GenerateBranchSummary(branchCtx, collected.Entries, compaction.GenerateBranchSummaryOptions{
 			Model:               summaryModel,
