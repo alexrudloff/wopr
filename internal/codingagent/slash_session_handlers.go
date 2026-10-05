@@ -741,6 +741,25 @@ func settingsItems() []settingItem {
 				}
 				return &s.Compaction.Enabled
 			}),
+		{
+			id: "compact-at", label: "Compact at",
+			desc:   "Compact once the context passes this many tokens, even on a larger window; 'window' waits until the model's window is nearly full",
+			values: []string{"100k", "200k", "400k", "window"},
+			get: func(s Settings) string {
+				n := s.GetModelCompactionSettings("", "").MaxContextTokens
+				if n <= 0 {
+					return "window"
+				}
+				return strconv.Itoa(n/1000) + "k"
+			},
+			apply: func(s *Settings, v string) {
+				n, _ := strconv.Atoi(strings.TrimSuffix(v, "k"))
+				if s.Compaction == nil {
+					s.Compaction = &CompactionSettingsJSON{}
+				}
+				s.Compaction.MaxContextTokens = new(n * 1000)
+			},
+		},
 		gatedOnImages(boolSetting("show-images", "Show images", "Render images inline in terminal",
 			Settings.GetShowImages, func(s *Settings) **bool { return &s.terminal().ShowImages })),
 		{
