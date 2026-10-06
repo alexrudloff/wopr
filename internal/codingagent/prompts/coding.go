@@ -58,7 +58,16 @@ type Options struct {
 	// section) or "replace" (CustomPrompt replaces the preamble, and the tools,
 	// rules, and docs sections are omitted).
 	AppendMode string
+	// Persona is a saved system prompt: it replaces the preamble and the
+	// discipline section, which are what make the default a coding prompt,
+	// and keeps the tools, rules, and project sections. Empty keeps the
+	// default.
+	Persona string
 }
+
+// DefaultPersona is the text the default prompt's persona parts carry: the
+// preamble and the discipline rules, as a saved prompt starts from.
+func DefaultPersona() string { return preamble + "\n\n" + discipline }
 
 const preamble = "You are an expert coding assistant operating inside wopr, a coding agent harness. You help users by reading files, executing commands, editing code, and writing new files."
 
@@ -87,6 +96,10 @@ func BuildDefaultPrompt(o Options) string {
 // BuildSystemPromptSections retains the ordered, independently replaceable prompt sections.
 func BuildSystemPromptSections(o Options) ai.OrderedSections {
 	head := preamble
+	persona := strings.TrimSpace(o.Persona)
+	if persona != "" {
+		head = persona
+	}
 	var sections []section
 	if o.AppendMode == "replace" && o.CustomPrompt != "" {
 		head = o.CustomPrompt
@@ -117,7 +130,9 @@ func BuildSystemPromptSections(o Options) ai.OrderedSections {
 			sections = append(sections, section{"addendum", o.AppendSystemPrompt})
 		}
 	}
-	sections = append(sections, section{"discipline", discipline})
+	if persona == "" {
+		sections = append(sections, section{"discipline", discipline})
+	}
 	if len(o.ContextFiles) > 0 {
 		parts := []string{"Project-specific instructions and guidelines:"}
 		for _, f := range o.ContextFiles {

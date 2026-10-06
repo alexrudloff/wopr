@@ -194,6 +194,7 @@ func (m *InteractiveMode) newSession() error {
 	}
 	m.replaceSession(newSess)
 	m.restoreSidebar()
+	m.restoreSystemPrompt()
 	if m.agent != nil {
 		m.agent.SetMessages(nil)
 	}
@@ -269,6 +270,7 @@ func (m *InteractiveMode) loadSessionPath(path string) error {
 	m.replaceSession(loaded)
 	m.syncSessionModel()
 	m.restoreSidebar()
+	m.restoreSystemPrompt()
 	m.rebuildChatFromSession()
 	m.offerRedispatch()
 	if name := loaded.GetSessionName(); name != "" {

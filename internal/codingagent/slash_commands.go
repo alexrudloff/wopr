@@ -58,6 +58,7 @@ func BuiltinSlashCommands() []BuiltinSlashCommand {
 		{Name: "setup", Description: "Set up models: subscriptions, API keys, endpoints, and routing", run: (*InteractiveMode).setupCommand},
 		{Name: "new", Description: "Start a new session", run: (*InteractiveMode).newCommand, headless: headlessNew},
 		{Name: "undo", Description: "Undo the last file change (or: /undo <path>, /undo prompt)", ArgumentHint: "[path|prompt]", run: (*InteractiveMode).undoCommand},
+		{Name: "prompt", Description: "Switch this session's system prompt (saved prompts are managed in /settings)", ArgumentHint: "[name]", run: (*InteractiveMode).promptCommand},
 		{Name: "compact", Description: "Manually compact the session context, with an optional note for the summary and the agent", ArgumentHint: "[note]", run: (*InteractiveMode).compactCommand},
 		{Name: "resume", Description: "Resume a different session", run: (*InteractiveMode).resumeCommand, headless: headlessResume},
 		{Name: "reload", Description: "Reload keybindings, skills, prompts, themes, and context files", run: (*InteractiveMode).reloadCommand},

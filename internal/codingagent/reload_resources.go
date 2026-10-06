@@ -76,7 +76,9 @@ func (m *InteractiveMode) rebuildSystemPromptFromResources() {
 	if m.opts.RebuildSystemPrompt == nil {
 		return
 	}
-	systemPrompt := m.opts.RebuildSystemPrompt(m.opts.Skills, m.opts.ContextFiles)
+	name := m.systemPromptName()
+	systemPrompt := m.opts.RebuildSystemPrompt(m.opts.Skills, m.opts.ContextFiles, name)
+	m.builtSystemPrompt = name
 	m.opts.SystemPrompt = systemPrompt
 	if m.agent != nil {
 		m.agent.SetSystemPrompt(systemPrompt)

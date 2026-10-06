@@ -221,6 +221,11 @@ type InteractiveMode struct {
 	measureOnce sync.Once
 	// lastSidebarSnapshot is the sidebar snapshot last saved to the session.
 	lastSidebarSnapshot []byte
+	// sessionSystemPrompt is the saved system prompt /prompt chose for this
+	// session ("" uses the systemPrompt setting); builtSystemPrompt is the
+	// one the agent's prompt was last built with ("" at startup: the
+	// setting's).
+	sessionSystemPrompt, builtSystemPrompt string
 	// homeEpoch is when the home screen first drew; its animations run
 	// from it.
 	homeEpoch time.Time
@@ -704,9 +709,10 @@ type InteractiveOptions struct {
 	// Skills is the loaded set of skill definitions, used to expand
 	// /skill:name commands in user prompts.
 	Skills []*SkillDef
-	// RebuildSystemPrompt reconstructs the base system prompt + structured
-	// prompt options after /reload from the current skills/context files.
-	RebuildSystemPrompt func(skills []*SkillDef, contextFiles []ContextFile) string
+	// RebuildSystemPrompt reconstructs the base system prompt from the
+	// current skills, context files, and saved system prompt (/reload,
+	// /prompt).
+	RebuildSystemPrompt func(skills []*SkillDef, contextFiles []ContextFile, systemPrompt string) string
 	// SkillPaths are the source paths from which Skills were loaded.
 	// Used by /reload to re-discover skills from disk. If empty, skills
 	// are not reloaded (only the initial set from startup is used).
@@ -1033,6 +1039,7 @@ func (m *InteractiveMode) Run(ctx context.Context) (err error) {
 	if m.opts.ResumePath != "" {
 		m.renderSessionEntries()
 		m.restoreSidebar()
+		m.restoreSystemPrompt()
 	}
 
 	// Show "what's new" when the binary version differs from the last

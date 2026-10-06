@@ -83,6 +83,7 @@ set it in `~/.wopr/agent/settings.json`:
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
+| `systemPrompt` | string | `coding` | The saved system prompt new sessions start with. See [saved system prompts](configuration.md#saved-system-prompts). |
 | `compaction` | object | see meaning | Automatic compaction: `enabled` (default `true`), `reserveTokens` and `keepRecentTokens` (default sized to the model's window; see compaction), `maxContextTokens` (default `200000`: compact once the context passes it even on a larger window; `0` lets the window decide), and `modelOverrides` (per-model `reserveTokens` and `keepRecentTokens` keyed by exact `provider/modelId`). See [compaction](compaction.md). |
 | `contextPruning` | object | see meaning | Context pruning: `enabled`, `dedupe`, `purgeErrors`, `supersedeReads` and `compress` (each default `true`), and `compressThreshold` (default `0.4`). See [context pruning](compaction.md#context-pruning). |
 | `branchSummary` | object | see meaning | Summary written when you leave a branch: `reserveTokens` (default `16384`) and `skipPrompt` (default `false`, skip the prompt and write no summary). |

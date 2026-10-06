@@ -629,7 +629,7 @@ func main() {
 	}
 	trace.Mark("pre-system-prompt")
 	projectCtxFiles := loadContextFiles(cwd, agentDir, flags.NoContextFiles)
-	promptOptions := systemPromptOptions(cwd, agentDir, projectTrusted, flags, agentToolNames, skillDefs, projectCtxFiles)
+	promptOptions := systemPromptOptions(cwd, agentDir, projectTrusted, flags, agentToolNames, skillDefs, projectCtxFiles, services.SettingsManager().Get().GetSystemPrompt())
 	systemPromptSections := prompts.BuildSystemPromptSections(promptOptions)
 	systemPrompt := prompts.BuildDefaultPrompt(promptOptions)
 

@@ -75,6 +75,16 @@ WOPR looks for `SYSTEM.md` and for `APPEND_SYSTEM.md` separately. For each name,
 
 The command line overrides both files. `--system-prompt` replaces the discovered `SYSTEM.md`. `--append-system-prompt` replaces the discovered `APPEND_SYSTEM.md`, and you can give it more than once. Each value can be text or a path to a file.
 
+### Saved system prompts
+
+The default system prompt is written for coding: it opens as a coding assistant and carries minimal-code rules. For other work (writing, video, research), save a prompt of your own in `/settings` → System prompts: New prompt, then edit its text (Enter is a newline, ctrl+s saves). A saved prompt replaces only those coding parts; the tool list, tool rules, context files, skills, and working directory stay, so tools keep working.
+
+- `/prompt <name>` switches the current session; it keeps the prompt when resumed. `/prompt` alone lists them.
+- Make the default (`systemPrompt` in settings) sets the prompt new sessions start with.
+- The built-in prompt is `coding`. Editing it saves an override you can reset to the built-in.
+
+Prompts are files in `~/.wopr/agent/system-prompts/<name>.md`. `SYSTEM.md` and `--system-prompt` still replace the opening of whichever prompt is in use.
+
 ## Context files
 
 Context files hold instructions for the model, such as build commands, code conventions and project rules. WOPR adds their content to the system prompt.

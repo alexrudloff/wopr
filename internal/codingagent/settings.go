@@ -51,6 +51,9 @@ type Settings struct {
 	// SteeringMode and FollowUpMode dispatch queued messages "all" at once or
 	// "one-at-a-time" (the default).
 	SteeringMode string `json:"steeringMode,omitempty"`
+	// SystemPrompt names the saved system prompt new sessions start with
+	// (system-prompts/<name>.md in the agent directory). Default: "coding".
+	SystemPrompt string `json:"systemPrompt,omitempty"`
 	FollowUpMode string `json:"followUpMode,omitempty"`
 
 	Theme string `json:"theme,omitempty"`
@@ -630,6 +633,9 @@ func (s Settings) GetDoubleEscapeAction() string { return cmp.Or(s.DoubleEscapeA
 // GetSteeringMode and GetFollowUpMode return the queue dispatch modes.
 // Default: "one-at-a-time".
 func (s Settings) GetSteeringMode() string { return cmp.Or(s.SteeringMode, "one-at-a-time") }
+
+// GetSystemPrompt is the saved system prompt new sessions start with.
+func (s Settings) GetSystemPrompt() string { return cmp.Or(s.SystemPrompt, CodingSystemPrompt) }
 func (s Settings) GetFollowUpMode() string { return cmp.Or(s.FollowUpMode, "one-at-a-time") }
 
 // GetTerminalCapabilityOverrides maps the terminal settings onto capability

@@ -27,7 +27,7 @@ func reloadResourceSnapshotProvider(cwd, agentDir string, sm *codingagent.Settin
 
 // systemPromptOptions assembles the system prompt inputs every mode and
 // /reload share.
-func systemPromptOptions(cwd, agentDir string, projectTrusted bool, flags CLIFlags, toolNames []string, skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile) prompts.Options {
+func systemPromptOptions(cwd, agentDir string, projectTrusted bool, flags CLIFlags, toolNames []string, skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile, systemPrompt string) prompts.Options {
 	promptSkills := make([]prompts.Skill, 0, len(skills))
 	for _, skill := range skills {
 		promptSkills = append(promptSkills, prompts.Skill{
@@ -41,6 +41,7 @@ func systemPromptOptions(cwd, agentDir string, projectTrusted bool, flags CLIFla
 		Skills: promptSkills, DocsPath: filepath.Join(codingagent.ConfigRoot(), "docs"),
 		AppendMode: "append", ContextFiles: toPromptContextFiles(contextFiles),
 		CustomPrompt: resolvedPrompts.custom, AppendSystemPrompt: resolvedPrompts.append,
+		Persona: codingagent.SystemPromptPersona(agentDir, systemPrompt),
 	}
 	if resolvedPrompts.custom != "" {
 		options.AppendMode = "replace"
@@ -48,9 +49,9 @@ func systemPromptOptions(cwd, agentDir string, projectTrusted bool, flags CLIFla
 	return options
 }
 
-func systemPromptRebuilder(cwd, agentDir string, projectTrusted bool, flags CLIFlags, startupToolNames []string) func(skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile) string {
+func systemPromptRebuilder(cwd, agentDir string, projectTrusted bool, flags CLIFlags, startupToolNames []string) func(skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile, systemPrompt string) string {
 	toolNames := append([]string(nil), startupToolNames...)
-	return func(skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile) string {
-		return prompts.BuildDefaultPrompt(systemPromptOptions(cwd, agentDir, projectTrusted, flags, toolNames, skills, contextFiles))
+	return func(skills []*codingagent.SkillDef, contextFiles []codingagent.ContextFile, systemPrompt string) string {
+		return prompts.BuildDefaultPrompt(systemPromptOptions(cwd, agentDir, projectTrusted, flags, toolNames, skills, contextFiles, systemPrompt))
 	}
 }

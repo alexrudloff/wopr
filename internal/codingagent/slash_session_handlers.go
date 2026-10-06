@@ -742,6 +742,13 @@ func settingsItems() []settingItem {
 				return &s.Compaction.Enabled
 			}),
 		{
+			id: "system-prompts", label: "System prompts",
+			desc:   "Saved system prompts: the default for new sessions, and new, edit, rename, delete. /prompt <name> switches a session",
+			values: []string{"manage"},
+			get:    Settings.GetSystemPrompt,
+			apply:  func(*Settings, string) {},
+		},
+		{
 			id: "compact-at", label: "Compact at",
 			desc:   "Compact once the context passes this many tokens, even on a larger window; 'window' waits until the model's window is nearly full",
 			values: []string{"100k", "200k", "400k", "window"},
@@ -1062,6 +1069,9 @@ func (m *InteractiveMode) settingsCommand(string) error {
 		}
 		switch {
 		case selected == nil:
+			continue
+		case changedID == "system-prompts":
+			m.manageSystemPrompts()
 			continue
 		case changedID == "theme":
 			chosen, ok := m.pickThemeDialog()
