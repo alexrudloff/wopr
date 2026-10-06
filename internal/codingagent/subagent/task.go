@@ -516,7 +516,7 @@ func (t *Tool) runAttempt(ctx context.Context, req Request, route Route, notes s
 		Tools:     tools(),
 		Before:    before,
 		After:     after,
-		System:    systemPrompt(req.Type, t.Host.Cwd()),
+		System:    systemPrompt(req.Type, t.Host.Cwd(), t.persona()),
 		Prompt:    BriefPrompt(req, notes),
 		Budget:    budgetFor(req),
 		SessionID: t.SessionID + ":task",
@@ -524,6 +524,14 @@ func (t *Tool) runAttempt(ctx context.Context, req Request, route Route, notes s
 		Progress:  progress,
 		StreamFn:  t.StreamFn,
 	}), nil
+}
+
+// persona is the lead agent's saved system prompt, when its host has one.
+func (t *Tool) persona() string {
+	if h, ok := t.Host.(PersonaHost); ok {
+		return h.Persona()
+	}
+	return ""
 }
 
 func (t *Tool) record(req Request, attempt int, route Route, out Outcome) Record {

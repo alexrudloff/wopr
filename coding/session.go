@@ -37,12 +37,15 @@ import (
 // Construct a Session via NewSession or through Runtime.
 type Session struct {
 	// bgShells are the jobs the session's bash tools left running.
-	bgShells      *tools.BackgroundShells
-	services      *Services
-	inner         *icodingagent.Session
-	agent         *agent.Agent
-	tools         []agent.AgentTool
-	model         atomic.Pointer[ai.Model]
+	bgShells *tools.BackgroundShells
+	services *Services
+	inner    *icodingagent.Session
+	agent    *agent.Agent
+	tools    []agent.AgentTool
+	model    atomic.Pointer[ai.Model]
+	// persona is the saved system prompt the conversation runs with (nil
+	// or "" for the default), passed to subagents as context.
+	persona       atomic.Pointer[string]
 	modelRuntime  *ModelRuntime
 	modelRegistry *ModelRegistry
 	sessionDir    string
@@ -970,6 +973,10 @@ func (s *Session) SessionName() string { return s.inner.GetSessionName() }
 // SetSessionName persists a Session name entry. An empty name clears the
 // current name, as API calls can do. RPC and slash-command
 // boundaries validate their own non-empty input before calling this method.
+// SetPersona records the saved system prompt the conversation runs with,
+// so subagents get it as context; "" is the default prompt.
+func (s *Session) SetPersona(text string) { s.persona.Store(&text) }
+
 func (s *Session) SetSessionName(name string) error {
 	id, err := icodingagent.GenerateEntryID()
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 
 // exploreSystem is the explore child's system prompt. It is byte-stable for
 // a working directory so provider prefix caches hit across sibling tasks.
-const exploreSystem = `You are a read-only code explorer working for a coding agent. You get a brief and nothing else: no conversation history. Investigate the working directory with your tools and answer the brief.
+const exploreSystem = `You are a read-only explorer working for an agent. You get a brief and nothing else: no conversation history. Investigate the working directory with your tools and answer the brief.
 - Tools: read, grep, find, ls, and bash limited to read-only commands. You cannot edit files, run builds, or start other agents.
 - Be fast: search before reading, read only the ranges you need, and batch independent tool calls in one turn. Stop as soon as the brief is answered.
 - Every claim needs evidence. Quote lines exactly as they appear, same characters and whitespace: one line per quote, no line numbers, no "...". wopr checks every quote and rejects answers it cannot verify.
@@ -22,9 +22,9 @@ NOT_CHECKED: <what you did not look at, or none>`
 // proposeSystem is a war council member's system prompt. It keeps the
 // explore result format, so its quotes are verified the same way.
 const proposeSystem = `You are one of several models on a war council. Each member gets the same request and answers it independently; a lead model reads every proposal and builds the final answer from the best parts. You get the request and a short brief of the conversation, not its history.
-- Give your best independent answer: for a coding task, the approach and plan you would follow, with the specific changes; for a question, your answer; for ideas, your strongest ones. Say what you would not do and why. Don't hedge toward what others might say.
-- Tools: read, grep, find, ls, and bash limited to read-only commands. Look at the code you rely on; you cannot edit files.
-- When you rely on code, quote lines exactly as they appear, same characters and whitespace: one line per quote, no line numbers, no "...". wopr checks every quote. Ideas and plans need no quotes.
+- Give your best independent answer: for a task, the approach and plan you would follow, with the specific changes; for a question, your answer; for ideas, your strongest ones. Say what you would not do and why. Don't hedge toward what others might say.
+- Tools: read, grep, find, ls, and bash limited to read-only commands. Look at the files you rely on; you cannot edit files.
+- When you rely on a file, quote lines exactly as they appear, same characters and whitespace: one line per quote, no line numbers, no "...". wopr checks every quote. Ideas and plans need no quotes.
 Finish with exactly this format and nothing after it:
 STATUS: done | partial | failed | blocked
 CONFIDENCE: high | medium | low
@@ -48,11 +48,11 @@ NOT_CHECKED: <what you did not verify, or none>`
 
 // generalSystem is a general child's system prompt: it works on the
 // user's own files, beside the lead agent and possibly other children.
-const generalSystem = `You are a subagent working for a coding agent, on the user's real working directory: your edits are the user's files, not a copy. You get a brief and nothing else: no conversation history.
-- Do exactly what the brief asks, completely: read what you need, edit and write files, run the build and the tests with bash, and fix what fails. Keep to the brief; don't refactor or touch files it doesn't need.
+const generalSystem = `You are a subagent working for an agent, on the user's real working directory: your edits are the user's files, not a copy. You get a brief and nothing else: no conversation history.
+- Do exactly what the brief asks, completely: read what you need, edit and write files, run commands with bash, and fix what fails. Keep to the brief; don't touch files it doesn't need.
 - Other agents may be working in the same directory. If an edit is refused because another agent holds the file, don't work around it: finish what you can and report it.
 - Don't commit, push, or rewrite git history, and don't delete files the brief didn't ask you to, unless the brief says so.
-- When done, check your work (build, tests, or a command that shows it works) and leave the tree in the state you'd ship.
+- When done, check your work against the brief: run it, or its build and tests if it has them; otherwise re-read what you wrote. Leave the files in the state you'd hand over.
 Finish with exactly this format and nothing after it:
 STATUS: done | partial | failed | blocked
 CONFIDENCE: high | medium | low
@@ -66,17 +66,31 @@ func ExploreSystemPrompt(cwd string) string {
 	return exploreSystem + "\nWorking directory: " + cwd
 }
 
-// systemPrompt is the child's system prompt for the task type.
-func systemPrompt(taskType, cwd string) string {
+// PersonaHost is a Host whose session runs a saved system prompt other
+// than the default; Persona returns its text, or "" for the default.
+type PersonaHost interface {
+	Persona() string
+}
+
+// systemPrompt is the child's system prompt for the task type. A persona,
+// the system prompt the lead agent runs with, follows as context: the
+// child's role, tools, and result format above still govern.
+func systemPrompt(taskType, cwd, persona string) string {
+	var out string
 	switch taskType {
 	case TypePropose:
-		return proposeSystem + "\nWorking directory: " + cwd
+		out = proposeSystem + "\nWorking directory: " + cwd
 	case TypeBuild:
-		return buildSystem + "\nWorking directory: " + cwd
+		out = buildSystem + "\nWorking directory: " + cwd
 	case TypeGeneral:
-		return generalSystem + "\nWorking directory: " + cwd
+		out = generalSystem + "\nWorking directory: " + cwd
+	default:
+		out = ExploreSystemPrompt(cwd)
 	}
-	return ExploreSystemPrompt(cwd)
+	if persona = strings.TrimSpace(persona); persona != "" {
+		out += "\n\nThe agent you work for runs with this system prompt. Follow its guidance where it applies to your brief; your role, tools, and result format above still hold.\n<lead_system_prompt>\n" + persona + "\n</lead_system_prompt>"
+	}
+	return out
 }
 
 // BriefPrompt is the child's only user message: the brief, its anchors,

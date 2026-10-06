@@ -82,6 +82,7 @@ The default system prompt is written for coding: it opens as a coding assistant 
 - `/prompt <name>` switches the current session; it keeps the prompt when resumed. `/prompt` alone lists them.
 - Make the default (`systemPrompt` in settings) sets the prompt new sessions start with.
 - The built-in prompt is `coding`. Editing it saves an override you can reset to the built-in.
+- Subagents keep their own role prompts (what they may touch and how they report), and a session on a saved prompt passes it to them as context, so a writing session's subagents work as writers.
 
 Prompts are files in `~/.wopr/agent/system-prompts/<name>.md`. `SYSTEM.md` and `--system-prompt` still replace the opening of whichever prompt is in use.
 

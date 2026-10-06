@@ -79,6 +79,9 @@ func (m *InteractiveMode) rebuildSystemPromptFromResources() {
 	name := m.systemPromptName()
 	systemPrompt := m.opts.RebuildSystemPrompt(m.opts.Skills, m.opts.ContextFiles, name)
 	m.builtSystemPrompt = name
+	if p, ok := m.opts.SessionHandle.(interface{ SetPersona(string) }); ok {
+		p.SetPersona(SystemPromptPersona(m.opts.AgentDir, name))
+	}
 	m.opts.SystemPrompt = systemPrompt
 	if m.agent != nil {
 		m.agent.SetSystemPrompt(systemPrompt)

@@ -216,6 +216,14 @@ var taskLogMu sync.Mutex
 
 func (h taskHost) Cwd() string { return h.s.services.CWD() }
 
+// Persona is the saved system prompt the session runs with, for subagents.
+func (h taskHost) Persona() string {
+	if p := h.s.persona.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
 // Route picks the child's model: the router's brief decision while
 // subagents are routed (an error with the reason when no model is
 // eligible), else the model chosen for subagents or the orchestrator's,
