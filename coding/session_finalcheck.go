@@ -3,7 +3,9 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -15,14 +17,21 @@ import (
 
 // Final check: the first time a run that changed something would end, the
 // model is asked once to check its work against the request before it
-// finishes. Runs that only read and answer are left alone.
+// finishes. Runs that only read and answer, or only changed prose files
+// (notes, docs), are left alone. The transcript shows it as one line, and
+// the reply after it is the model's usual answer, not a list of what it
+// checked.
 
-const finalCheckText = `Before you finish, check your work against the request:
-1. Re-read the original request and list each explicit requirement: outputs, file names, paths, formats, numeric limits.
-2. Verify each one now with a command or tool, not from memory. Run the tests or the program if there are any.
-3. Leave margin on numeric thresholds instead of landing on the edge, and match the exact names, paths, and output format asked for.
-4. If you renamed or patched an API across the code, search every source type the build uses (e.g. .pyx, .pxd, .c, .h, .ts, not just .py) for what's left.
-5. Fix anything that fails, then finish with a one-line confirmation per requirement.`
+const finalCheckText = `Before you finish, check the result against the request:
+1. Re-read the request and list what it asked for: the outputs, and any names, paths, formats, or limits it gave.
+2. Check each against what exists now, not from memory: open what you wrote, and run the program or its tests if the work has any.
+3. Where the request gives a numeric limit, leave margin instead of landing on the edge. If you renamed or patched an API across code, search every source type the build uses (e.g. .pyx, .pxd, .c, .h, .ts, not just .py) for what's left.
+4. Fix anything that falls short.
+Then end with your reply to the user as you would have: what you did and what they need to know. Don't list the checks; mention one only if it found and fixed something.`
+
+// proseExts are files whose changes need no final check: there is nothing
+// to run, and the reply already says what was written.
+var proseExts = map[string]bool{".md": true, ".markdown": true, ".txt": true, ".rst": true, ".adoc": true}
 
 // finalCheckState is one prompt's bookkeeping: whether the run did work,
 // and whether it was already checked.
@@ -36,7 +45,11 @@ type finalCheckState struct {
 func (s *Session) finalCheckAfterToolCall(_ context.Context, _, toolName string, args json.RawMessage, result agent.AgentToolResult) agent.AfterToolCallResult {
 	switch {
 	case fileChangingTools[toolName] && !result.IsError:
-		s.final.worked.Store(true)
+		if slices.ContainsFunc(toolPaths("", toolName, args), func(path string) bool {
+			return !proseExts[strings.ToLower(filepath.Ext(path))]
+		}) {
+			s.final.worked.Store(true)
+		}
 	case toolName == "bash":
 		var in struct {
 			Command string `json:"command"`

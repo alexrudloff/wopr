@@ -166,11 +166,13 @@ More keys in `efficiency.json`, each on by default:
   is treated as context overflow and compacted.
 - `finalCheck`: the first time a run that changed something (a file tool,
   or a shell command that isn't read-only) would end, the model gets one
-  message asking it to re-read the request, list each requirement, verify
-  each with a command, leave margin on numeric limits, match exact names
-  and formats, and fix what fails before finishing. Once per prompt; a turn
-  that only reads and answers is never checked. The transcript shows it as
-  one muted line.
+  message asking it to re-read the request, check each thing it asked for
+  against what exists now (running the program or tests only if the work
+  has any), leave margin on numeric limits, and fix what falls short, then
+  give its usual reply rather than a list of checks. Once per prompt; a turn
+  that only reads and answers, or only changed prose files (`.md`, `.txt`,
+  `.rst`, `.adoc`), is never checked. The transcript shows it as one muted
+  line.
 - `safetyBackup`: before a shell command that rewrites or discards git
   history or work (`filter-branch`, `filter-repo`, `rebase`, `reset --hard`,
   force `push`, `clean -f`, `checkout -- <path>`, `restore`, `branch -D`,

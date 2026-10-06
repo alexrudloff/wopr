@@ -14,7 +14,7 @@ const (
 
 var noteLabels = map[string]string{
 	StallNudgeMessageType:     "Nudged the model to change approach",
-	FinalCheckMessageType:     "Final check: verifying each requirement before finishing",
+	FinalCheckMessageType:     "Final check: comparing the result with the request",
 	DeadlineMessageType:       "Time note",
 	BackgroundExitMessageType: "Background job finished",
 }
