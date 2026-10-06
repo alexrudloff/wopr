@@ -18,7 +18,7 @@ The dispatcher is exhaustive: every built-in command is listed here. Prompt temp
 | `/clone` | Duplicate session at the current position. |
 | `/tree` | Navigate session tree. |
 | `/undo` | Undo the last file change a tool made. `/undo <path>` undoes the latest change to that file; `/undo prompt` undoes every change since your last prompt. See [undoing file changes](sessions.md#undoing-file-changes). |
-| `/compact` | Manually compact the context. |
+| `/compact [note]` | Manually compact the context. A note (`/compact keep the API decisions, drop the debugging`) steers the summary and is kept in it word for word, so the agent reads it too. |
 | `/reload` | Reload keybindings, skills, prompts, themes, and context files. |
 | `/reload --explain` | Same plus resource counts. |
 | `/export [path]` | Export session (default HTML; specify `.jsonl`). |

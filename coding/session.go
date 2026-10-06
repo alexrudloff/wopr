@@ -1942,6 +1942,11 @@ func (s *Session) compact(ctx context.Context, customInstructions string) (*Comp
 		var generated compaction.CompactionResult
 		generated, err = compaction.Compact(compactCtx, *prep, model, s.resolveCompleter(), s.streamFn, customInstructions, s.ThinkingLevel(), s.summarizationRetryOptions("compaction", "manual"), "")
 		if err == nil {
+			// The note steers the summary and is kept word for word, so the
+			// model reads what the user said about this compaction.
+			if note := strings.TrimSpace(customInstructions); note != "" {
+				generated.Summary += "\n\n## User's Note on This Compaction\n\n" + note
+			}
 			result = &generated
 		}
 	}

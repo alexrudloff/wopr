@@ -67,6 +67,8 @@ Use `/compact` to compact now, before the window fills. This is useful when you
 finish one task and start another in the same session: the summary keeps the
 outcome and drops the intermediate steps.
 
+Add a note to say what matters: `/compact keep the API decisions; next we write the migration`. The summary is written with the note in mind, and the note is kept in it word for word, so the agent reads it when it continues.
+
 ## Context pruning
 
 Before a compaction is needed, WOPR removes what the model no longer needs.
