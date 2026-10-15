@@ -226,6 +226,21 @@ func New(cfg Config, host Host) *Router {
 	return r
 }
 
+// SetClockForTest replaces the router's clock. Test-only. It exists so callers
+// outside this package can control time in tests; production uses time.Now.
+// A nil function restores time.Now. The mutex does not by itself make
+// concurrent use safe: r.now is also read without r.mu (basic.go:170,
+// brief.go:183, fit.go:56), so the contract is "call before the router serves
+// a request" — the test installs it before Send, which is synchronous.
+func (r *Router) SetClockForTest(now func() time.Time) {
+	if now == nil {
+		now = time.Now
+	}
+	r.mu.Lock()
+	r.now = now
+	r.mu.Unlock()
+}
+
 // Config returns the active configuration.
 func (r *Router) Config() Config { return r.cfg }
 

@@ -23,6 +23,7 @@ Read the one row that matches the task, then follow only its direct links.
 | change how WOPR runs shell commands | [Shell commands](shell-aliases.md) | [Settings](settings.md) |
 | build WOPR on Android (experimental) | [Termux](termux.md) | [Terminal setup](terminal-setup.md) |
 | run WOPR in CI or a container | [Environment variables](environment-variables.md) | [Isolate WOPR](containerization.md) |
+| serve WOPR to a phone | [Server](server.md) | [Settings](settings.md) |
 | change a setting | [Settings](settings.md) | [Security](security.md#project-trust) |
 | resume, branch, or export work | [Sessions](sessions.md) | [Compaction](compaction.md) |
 | change or look up a key | [Keybindings](keybindings.md) | [Terminal setup](terminal-setup.md) |

@@ -105,6 +105,28 @@ const TestFauxToolStartedMarker = ".wopr-faux-tool-started"
 
 var testFauxRetryState sync.Map
 
+var (
+	testFauxCaptureMu  sync.Mutex
+	testFauxLastSystem string
+)
+
+// recordTestFauxSystemPrompt records the effective system prompt of a test-faux
+// request. It runs at the top of TestFauxProvider.Stream, before the goroutine,
+// from the messages the transcript already computed.
+func recordTestFauxSystemPrompt(prompt string) {
+	testFauxCaptureMu.Lock()
+	testFauxLastSystem = prompt
+	testFauxCaptureMu.Unlock()
+}
+
+// LastTestFauxSystemPrompt returns the effective system prompt of the last
+// test-faux request, or "" before the first one.
+func LastTestFauxSystemPrompt() string {
+	testFauxCaptureMu.Lock()
+	defer testFauxCaptureMu.Unlock()
+	return testFauxLastSystem
+}
+
 type testFauxToolCall struct {
 	Name string
 	Args map[string]any
@@ -119,6 +141,7 @@ func (p *TestFauxProvider) Stream(ctx context.Context, transcript TranscriptCont
 	}
 	builder := newAssistantStreamBuilder(ctx, "faux", p.ID(), "faux-1", ModelCost{})
 	messages := transcript.Messages()
+	recordTestFauxSystemPrompt(GetCurrentSystemPrompt(messages))
 	go func() {
 		if err := ctx.Err(); err != nil {
 			builder.fail(StopReasonAborted, err)
@@ -150,6 +173,15 @@ func (p *TestFauxProvider) Stream(ctx context.Context, transcript TranscriptCont
 				return
 			}
 			builder.textDelta("retry-ok")
+			builder.done(StopReasonStop, nil, "")
+			return
+		}
+		if strings.Contains(lastText, "Trigger: free tier limit") {
+			if _, loaded := testFauxRetryState.LoadOrStore("free-tier-limit:"+options.SessionID, true); !loaded {
+				builder.fail(StopReasonError, errors.New("free_tier_limit"))
+				return
+			}
+			builder.textDelta("failover-ok")
 			builder.done(StopReasonStop, nil, "")
 			return
 		}
@@ -453,6 +485,60 @@ func classifyTestFauxRequest(msgs []Message) (kind, text string, toolCalls []tes
 		}}
 	}
 
+	// Todo list parity: the tool the client's todo panel reads.
+	if strings.Contains(lastText, "Run: write todos") {
+		return "tool", "", []testFauxToolCall{{
+			Name: "todowrite",
+			Args: map[string]any{"todos": []map[string]any{
+				{"id": "todo-1", "content": "read the spec", "status": "completed", "priority": "high"},
+				{"id": "todo-2", "content": "write the code", "status": "in_progress", "priority": "medium"},
+				{"id": "todo-3", "content": "cut the changelog", "status": "pending", "priority": "low"},
+			}},
+		}}
+	}
+
+	// A second todo write with a longer list, so a reader can tell the newest
+	// result from the first one it finds.
+	if strings.Contains(lastText, "Run: rewrite todos") {
+		return "tool", "", []testFauxToolCall{{
+			Name: "todowrite",
+			Args: map[string]any{"todos": []map[string]any{
+				{"id": "todo-1", "content": "read the spec", "status": "completed", "priority": "high"},
+				{"id": "todo-2", "content": "write the code", "status": "in_progress", "priority": "medium"},
+				{"id": "todo-3", "content": "cut the changelog", "status": "completed", "priority": "low"},
+				{"id": "todo-4", "content": "ship the fix round", "status": "pending", "priority": "high"},
+			}},
+		}}
+	}
+
+	// A todowrite whose args pass the JSON schema but fail Parse: two items share
+	// an id, which the schema cannot express. The agent turns the Parse error into
+	// an error tool result with nil Details — the serve mapper must not broadcast
+	// an empty todo.updated for it.
+	if strings.Contains(lastText, "Run: failed todowrite") {
+		return "tool", "", []testFauxToolCall{{
+			Name: "todowrite",
+			Args: map[string]any{"todos": []map[string]any{
+				{"id": "dup", "content": "first", "status": "pending", "priority": "high"},
+				{"id": "dup", "content": "second", "status": "pending", "priority": "high"},
+			}},
+		}}
+	}
+
+	// Ask-the-user parity: the tool that blocks until a client answers.
+	if strings.Contains(lastText, "Run: ask a question") {
+		return "tool", "", []testFauxToolCall{{
+			Name: "ask_user",
+			Args: map[string]any{
+				"question": "Which store should the service use?",
+				"options": []map[string]any{
+					{"label": "Postgres", "description": "already deployed"},
+					{"label": "SQLite", "description": "simplest on one host"},
+				},
+			},
+		}}
+	}
+
 	// Long-output bash tool (exercises the bash collapse hint).
 	if strings.Contains(lastText, "Run: bash long output") {
 		return "tool", "", []testFauxToolCall{{
@@ -533,6 +619,13 @@ func classifyTestFauxRequest(msgs []Message) (kind, text string, toolCalls []tes
 		}
 		if strings.Contains(currentUserText, "Run: bash with invalid args") {
 			return "text", "validation-handled", nil
+		}
+		if strings.Contains(currentUserText, "Run: write todos") ||
+			strings.Contains(currentUserText, "Run: rewrite todos") {
+			return "text", "todos-written", nil
+		}
+		if strings.Contains(currentUserText, "Run: ask a question") {
+			return "text", "question-answered", nil
 		}
 	}
 

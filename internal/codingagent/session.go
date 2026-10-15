@@ -586,17 +586,17 @@ func (s *Session) AppendEntry(entry any) error {
 }
 
 // appendSessionLine appends a single JSONL record, creating the file if
-// it does not exist (a resumed session always already exists).
+// it does not exist (a resumed session always already exists). O_RDWR is
+// required, not optional: appendJSONLine reads the file's last byte to
+// terminate an unterminated final line, and without read access the new
+// record would be glued onto a truncated one, destroying both.
 func appendSessionLine(path string, raw []byte) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		return fmt.Errorf("session: open for append: %w", err)
+		return err
 	}
 	defer func() { _ = f.Close() }()
-	if _, err := fmt.Fprintf(f, "%s\n", sessionblob.Externalize(path, raw)); err != nil {
-		return fmt.Errorf("session: append write: %w", err)
-	}
-	return nil
+	return appendJSONLine(f, sessionblob.Externalize(path, raw))
 }
 
 // writeSessionLines writes header + all buffered entries as a fresh file,
@@ -615,8 +615,10 @@ func writeSessionLines(path string, lines [][]byte) error {
 	return nil
 }
 
-// AppendMessage persists one AgentMessage, generating a fresh entry id
-// and timestamp and linking it to the current leaf.
+// AppendMessage persists one AgentMessage, linking it to the current leaf. An
+// assistant message that carries a pre-minted EntryID persists under it, so the
+// streamed id and the transcript entry id match; any other message gets a fresh
+// entry id.
 func (s *Session) AppendMessage(msg agent.AgentMessage) (string, error) {
 	// Custom messages round-trip as "custom_message" entries, not generic
 	// "message" entries: messagesFromSession only reconstructs them from that
@@ -633,6 +635,15 @@ func (s *Session) AppendMessage(msg agent.AgentMessage) (string, error) {
 		return "", fmt.Errorf("session: AppendMessage: %w", err)
 	}
 	e, err := appendOnLeaf(s, "message", func(base SessionEntryBase) MessageEntry {
+		// The Session minted this id at message start so the stream and the
+		// transcript agree; honor it over the fresh one appendOnLeaf generated.
+		// A client-minted user id is honored the same way.
+		switch {
+		case msg.Assistant != nil && msg.Assistant.EntryID != "":
+			base.ID = msg.Assistant.EntryID
+		case msg.User != nil && msg.User.EntryID != "":
+			base.ID = msg.User.EntryID
+		}
 		return MessageEntry{SessionEntryBase: base, Message: msg}
 	})
 	return e.ID, err

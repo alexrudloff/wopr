@@ -52,7 +52,14 @@ func (s *Session) initEfficiency() {
 		state.loadError = err.Error()
 		state.cfg = efficiency.DefaultConfig()
 	}
-	state.learner = efficiency.LoadLearner(s.services.AgentDir(), state.cfg.Learn)
+	var lo efficiency.LearnerOptions
+	if v := s.services.learnMaxModels; v > 0 {
+		lo.MaxModels = v
+	}
+	if v := s.services.learnTTLDays; v > 0 {
+		lo.TTL = time.Duration(v) * 24 * time.Hour
+	}
+	state.learner = efficiency.LoadLearner(s.services.AgentDir(), state.cfg.Learn, lo)
 	s.efficiency = state
 	if state.learner.On() {
 		s.agent.AddAfterToolCallHook(s.learnAfterToolCall)
@@ -485,6 +492,22 @@ func (s *Session) effectiveWindow(model *ai.Model) int {
 		return 0
 	}
 	return s.learner().EffectiveWindow(modelSpec(model), model.Capabilities.ContextWindow)
+}
+
+// maxHistoryTokensFor is the per-request context budget for model: the explicit
+// override, or 80% of its effective window. 0 means no cap.
+func (s *Session) maxHistoryTokensFor(model *ai.Model) int {
+	if s.services != nil && s.services.maxHistoryTokens != nil {
+		return *s.services.maxHistoryTokens
+	}
+	if model == nil {
+		return 0
+	}
+	window := s.effectiveWindow(model) // learner-adjusted
+	if window <= 0 {
+		return 0
+	}
+	return window * 4 / 5 // 80%, integer
 }
 
 // learnRequest records a provider request for the learner.

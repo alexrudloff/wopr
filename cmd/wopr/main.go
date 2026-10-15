@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"runtime/debug"
@@ -120,11 +121,12 @@ var stdinWait = 3 * time.Second
 // otherwise only if it starts within stdinWait. Cancelling ctx (SIGTERM)
 // stops the read.
 func readPipedStdin(ctx context.Context, args []string) (string, []string) {
+	stdin := os.Stdin
 	dash := slices.Index(args, "-")
 	if dash >= 0 {
 		args = slices.Delete(slices.Clone(args), dash, dash+1)
 	}
-	if term.IsTerminal(int(os.Stdin.Fd())) {
+	if term.IsTerminal(int(stdin.Fd())) {
 		return "", args
 	}
 	type chunk struct {
@@ -135,10 +137,10 @@ func readPipedStdin(ctx context.Context, args []string) (string, []string) {
 	rest := make(chan chunk, 1)
 	go func() {
 		buf := make([]byte, 64<<10)
-		n, err := os.Stdin.Read(buf)
+		n, err := stdin.Read(buf)
 		first <- chunk{buf[:n], err}
 		if err == nil {
-			data, err := io.ReadAll(os.Stdin)
+			data, err := io.ReadAll(stdin)
 			rest <- chunk{data, err}
 		}
 	}()
@@ -224,6 +226,7 @@ func main() {
 			func(args []string) int { return runVerifyCommand(args, os.Stdout, os.Stderr) },
 			runUpdateCommand,
 			func(args []string) int { return woprdocs.RunCommand(args, os.Stdout, os.Stderr) },
+			runServeCommand,
 		} {
 			if code := run(args); code >= 0 {
 				exitProcess(code)
@@ -343,9 +346,13 @@ func main() {
 	// timeout and ResponseHeaderTimeout explicitly disabled for long-lived SSE
 	// streams; provider-specific deadlines still come from context cancellation.
 
-	// Resolve directories.
-	// Working directory comes from os.Getwd() (no CLI override).
-	cwd := initialCWD
+	// Resolve the session directory. --dir picks it; otherwise the
+	// invocation cwd. A non-empty --dir must resolve to an existing
+	// directory; a bad value is a startup error, not a fallback.
+	cwd, err := resolveWorkingDir(flags.Dir)
+	if err != nil {
+		fatalf("error: %v", err)
+	}
 	agentDir := codingagent.AgentDir()
 
 	// Resolve the selected Session and its runtime cwd before constructing any
@@ -366,7 +373,7 @@ func main() {
 		if !term.IsTerminal(int(os.Stdin.Fd())) || !term.IsTerminal(int(os.Stdout.Fd())) {
 			exitProcess(0)
 		}
-		manager := newSessionManagerWithDir(initialCWD, sessionDir)
+		manager := newSessionManagerWithDir(cwd, sessionDir)
 		selected, ok, selectErr := codingagent.SelectStartupSession(
 			manager.ListCurrentSessions,
 			manager.ListAllSessions,
@@ -387,7 +394,7 @@ func main() {
 		flags.ResumeAny = false
 		flags.Session = selected
 	}
-	startupSession, err := resolveStartupSessionSelection(flags, initialCWD, sessionDir)
+	startupSession, err := resolveStartupSessionSelection(flags, cwd, sessionDir)
 	if err != nil {
 		fatalf("error: %v", err)
 	}
@@ -427,7 +434,7 @@ func main() {
 		startupSession.missingCWD = nil
 	}
 	if flags.Continue && startupSession.resumePath == "" {
-		manager := newSessionManagerWithDir(initialCWD, sessionDir)
+		manager := newSessionManagerWithDir(cwd, sessionDir)
 		fmt.Fprintf(os.Stderr, "warning: no prior session in %s; starting fresh\n", manager.SessionDir())
 	}
 	cwd = startupSession.runtimeCWD
@@ -561,7 +568,7 @@ func main() {
 	// configured provider, the model provider's own search, or DuckDuckGo)
 	// and installs mcp only when a server is configured.
 	registryToolNames := tools.BuiltinToolNames()
-	agentToolNames := []string{"read", "bash", "edit", "write", "task", "web_fetch", "web_search", "mcp"}
+	agentToolNames := []string{"read", "bash", "edit", "write", "task", "web_fetch", "web_search", "mcp", "todowrite"}
 	// The defaultTools setting replaces the default active set.
 	if settings.DefaultTools != nil {
 		agentToolNames = append([]string(nil), settings.DefaultTools...)
@@ -867,6 +874,41 @@ func resolveSessionDir(flagValue string, sm *codingagent.SettingsManager) (strin
 		return sm.GetSessionDir()
 	}
 	return "", nil
+}
+
+// resolveWorkingDir returns the session working directory: flagValue when
+// --dir was given, else the invocation cwd. A non-empty value resolves
+// against the invocation cwd, follows symlinks, and must be an existing
+// directory. Relative CLI paths (@file, --skill) deliberately still resolve
+// against the invocation cwd, not this directory.
+func resolveWorkingDir(flagValue string) (string, error) {
+	if flagValue == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("get cwd: %w", err)
+		}
+		abs, err := filepath.Abs(cwd)
+		if err != nil {
+			return "", fmt.Errorf("resolve cwd: %w", err)
+		}
+		return abs, nil
+	}
+	abs, err := filepath.Abs(flagValue)
+	if err != nil {
+		return "", fmt.Errorf("--dir %q: %w", flagValue, err)
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("--dir %q: %w", flagValue, err)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return "", fmt.Errorf("--dir %q: %w", flagValue, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("--dir %q is not a directory", flagValue)
+	}
+	return resolved, nil
 }
 
 // configureHTTPTransportFromSettings applies the resolved provider request

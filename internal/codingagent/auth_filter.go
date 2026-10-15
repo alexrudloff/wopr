@@ -14,6 +14,7 @@
 package codingagent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
@@ -39,6 +40,8 @@ func ReachableProviders() map[string]bool {
 		"groq":           true, // GROQ_API_KEY
 		"ollama":         true, // OLLAMA_HOST or http://localhost:11434/v1
 		"amazon-bedrock": true, // AWS default credentials chain or AWS_BEARER_TOKEN_BEDROCK
+		"opencode-go":    true, // opencode.ai/go API key (auth.json or OPENCODE_API_KEY)
+		"opencode":       true, // OpenCode Zen API key (auth.json or OPENCODE_API_KEY)
 	}
 }
 
@@ -74,6 +77,23 @@ func AuthenticatedProviders(agentDir string) map[string]bool {
 			if cred, ok, _ := auth.Get(providerID); ok {
 				if cred.Type == ai.CredentialOAuth && cred.Refresh != "" {
 					out[providerID] = true
+				}
+			}
+		}
+		// Any stored API-key credential is auth the runtime will resolve, so a
+		// provider the allow-lists above never named — opencode-go, opencode, a
+		// custom id — must appear too, or its models are invisible in the
+		// picker and in GET /config/providers. OAuth stays out of this loop:
+		// an OAuth entry without a refresh token is not usable offline. A
+		// credential shared with another provider id (opencode Zen and Go are
+		// one account) authenticates both.
+		if infos, err := auth.List(context.Background()); err == nil {
+			for _, info := range infos {
+				if info.ProviderID != "" && info.Type != ai.CredentialOAuth {
+					out[info.ProviderID] = true
+					for _, shared := range ai.SharedCredentialProviders(info.ProviderID) {
+						out[shared] = true
+					}
 				}
 			}
 		}

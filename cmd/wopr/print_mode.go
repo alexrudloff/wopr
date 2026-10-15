@@ -17,6 +17,7 @@ import (
 	"github.com/alexrudloff/wopr/agent"
 	"github.com/alexrudloff/wopr/ai"
 	"github.com/alexrudloff/wopr/coding"
+	codinghost "github.com/alexrudloff/wopr/coding/host"
 	"github.com/alexrudloff/wopr/internal/codingagent"
 	"github.com/alexrudloff/wopr/internal/codingagent/goal"
 
@@ -84,7 +85,7 @@ type printModeOptions struct {
 	// stdout and stderr default to the process's raw stdout and stderr.
 	stdout io.Writer
 	stderr io.Writer
-	// convertEvent defaults to rpcAgentEvent.
+	// convertEvent defaults to codinghost.WireAgentEvent.
 	convertEvent func(agent.AgentEvent) ([]any, error)
 }
 
@@ -110,7 +111,7 @@ func runPrintMode(ctx context.Context, host printModeRuntime, opts printModeOpti
 		opts.stderr = os.Stderr
 	}
 	if opts.convertEvent == nil {
-		opts.convertEvent = rpcAgentEvent
+		opts.convertEvent = codinghost.WireAgentEvent
 	}
 	// Print mode owns SIGINT: there's no interactive editor to deliver
 	// Ctrl+C as a byte, so the signal is the only abort path. SIGTERM and

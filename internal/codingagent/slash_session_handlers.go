@@ -237,9 +237,9 @@ func (m *InteractiveMode) hotkeysCommand(string) error {
 // trustCommand saves a project-trust decision to <agentDir>/trust.json; it
 // takes effect on the next start.
 func (m *InteractiveMode) trustCommand(string) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		cwd = "."
+	cwd := m.opts.CWD
+	if cwd == "" {
+		cwd, _ = os.Getwd()
 	}
 	options := GetProjectTrustOptions(cwd, false)
 	labels := make([]string, len(options))

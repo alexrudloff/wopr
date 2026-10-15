@@ -18,7 +18,13 @@ import (
 // consecutive placeholders collapse to one, and the setting is read per
 // request so a mid-session change applies.
 func TestSessionBlockImagesReplacesImagesInProviderRequest(t *testing.T) {
-	svcs := newTestServices(t)
+	// This test targets image blocking, not history trimming: disable the
+	// history cap so the global 80% default does not perturb its assertion.
+	t.Setenv("WOPR_HOME", t.TempDir())
+	svcs, err := NewServices(ServicesOptions{CWD: t.TempDir(), MaxHistoryTokens: new(0)})
+	if err != nil {
+		t.Fatal(err)
+	}
 	provider := &transcriptCaptureProvider{}
 	sess, err := NewSession(svcs, SessionOptions{Model: fakeModelWithProvider(provider)})
 	if err != nil {

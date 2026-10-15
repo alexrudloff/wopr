@@ -113,7 +113,10 @@ func (m *InteractiveMode) buildAutocompleteProvider() tui.AutocompleteProvider {
 	// <agentDir>/bin/fd when needed; LookupToolPath prefers that over PATH.
 	fdPath := tools.LookupToolPath("fd", filepath.Join(m.opts.AgentDir, "bin"))
 
-	cwd, _ := os.Getwd()
+	cwd := m.opts.CWD
+	if cwd == "" {
+		cwd, _ = os.Getwd()
+	}
 	prov := tui.NewCombinedProvider(cmds, cwd, fdPath)
 	// Defer the fd subprocess off the keystroke path; only meaningful when
 	// fd is present.

@@ -154,14 +154,31 @@ func TestEveryPageIsReachableFromTheIndex(t *testing.T) {
 	}
 }
 
-var docLink = regexp.MustCompile(`\]\(([A-Za-z0-9_.-]+\.md)(?:#[^)]*)?\)`)
+// docLink captures a Markdown inline-link destination ending in a .md
+// reference. It accepts the CommonMark destinations the bundle may use: a
+// destination in angle brackets, a title after the destination, literal
+// spaces, percent-encoded characters, and an upper-case extension. The
+// destination must end in .md so arbitrary ](...) text is not a link.
+// Group 1 is the raw destination, without fragment or angle brackets.
+var docLink = regexp.MustCompile(`\]\([ \t]*<?([A-Za-z0-9_.% -]+(?:/[A-Za-z0-9_.% -]+)*\.(?i:md))(?:#[^)]*)?>?(?:[ \t]+"[^"\n]*")?[ \t]*\)`)
 
 func TestInternalLinksResolve(t *testing.T) {
 	files := docFiles(t)
 	for name, body := range files {
 		for _, match := range docLink.FindAllStringSubmatch(body, -1) {
-			if _, ok := files[match[1]]; !ok {
-				t.Errorf("%s links %s, which is not in the bundle", name, match[1])
+			target := match[1]
+			if _, ok := files[target]; ok {
+				continue
+			}
+			if !strings.Contains(target, "/") {
+				t.Errorf("%s links %s, which is not in the bundle", name, target)
+				continue
+			}
+			// A relative link is resolved from the page that contains it, so
+			// ../../ reaches files outside the bundle; a missing target fails the gate.
+			resolved := filepath.Join(contentDir, filepath.Dir(name), target)
+			if _, err := os.Stat(resolved); err != nil {
+				t.Errorf("%s links %s, which does not resolve to a file: %v", name, target, err)
 			}
 		}
 	}

@@ -24,6 +24,9 @@ type CLIFlags struct {
 	Continue  bool // --continue: load most recent session non-interactively
 	// Remaining args (the prompt in interactive mode)
 	Args []string
+	// Dir is the session working directory (--dir). Empty means the
+	// invocation cwd.
+	Dir string
 	// Mode selects the output mode: text (default), json, or rpc.
 	Mode string
 	// Verbose forces verbose startup output (overrides quietStartup setting).
@@ -156,6 +159,7 @@ func parseFlags(args []string) CLIFlags {
 		"--model": &flags.Model, "--provider": &flags.Provider, "--api-key": &flags.APIKey,
 		"--system-prompt": &flags.SystemPrompt, "--session": &flags.Session, "--fork": &flags.Fork,
 		"--session-dir": &flags.SessionDir, "--session-id": &flags.SessionID, "--export": &flags.Export,
+		"--dir": &flags.Dir,
 	}
 	listFlags := map[string]*[]string{
 		"--append-system-prompt": &flags.AppendSystemPrompt, "--skill": &flags.Skills,
@@ -296,6 +300,7 @@ const woprCommands = `WOPR Commands:
   wopr status [--json]           Show Resources
   wopr docs [show <topic>]       Read the local WOPR documentation
   wopr version                   Show WOPR, Go, and platform versions
+  wopr serve [--port N] [--hostname H] [--dir PATH]  Start the wopr serve daemon
 
 WOPR keeps its configuration in ~/.wopr.
 

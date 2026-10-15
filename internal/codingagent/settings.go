@@ -11,12 +11,14 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/gofrs/flock"
 
@@ -103,6 +105,11 @@ type Settings struct {
 
 	Terminal *TerminalSettings `json:"terminal,omitempty"`
 	Images   *ImageSettings    `json:"images,omitempty"`
+	Server   *ServerSettings   `json:"server,omitempty"`
+	// serverUnknownKeys holds the unrecognized settings.server keys the layer
+	// carried, for a serve-time warning. Unexported so it is never marshaled;
+	// clone copies it by hand.
+	serverUnknownKeys []string
 
 	// DefaultTools is the initial built-in tool selection; nil means the
 	// default read, bash, edit and write.
@@ -167,6 +174,17 @@ type ImageSettings struct {
 	AutoResize *bool `json:"autoResize,omitempty"`
 	// BlockImages hides images in the transcript. Default: false.
 	BlockImages *bool `json:"blockImages,omitempty"`
+}
+
+// ServerSettings is settings.server.
+type ServerSettings struct {
+	// Port is the TCP port wopr serve listens on. 0 means the default.
+	Port int `json:"port,omitempty"`
+	// Hostname is the address wopr serve binds. "" means the default.
+	Hostname string `json:"hostname,omitempty"`
+	// AllowedRoots restricts which directories wopr serve may serve. Empty
+	// means unrestricted. Read from the global settings layer only.
+	AllowedRoots []string `json:"allowedRoots,omitempty"`
 }
 
 // CompactionSettingsJSON is settings.compaction.
@@ -251,12 +269,19 @@ const defaultCacheWarmingMode CacheWarmingMode = "streaming"
 
 const defaultHTTPIdleTimeoutMs = 300_000
 
+const defaultServerPort = 4096
+const defaultServerHostname = "127.0.0.1"
+
 // UnmarshalJSON decodes a settings file. A value whose JSON type does not
 // match its key is dropped and the rest of the file still loads. The older
 // object form of "skills" and retry.maxDelayMs are still read.
 func (s *Settings) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	unknown, err := checkServerRaw(raw)
+	if err != nil {
 		return err
 	}
 	if skills, ok := raw["skills"].(map[string]any); ok {
@@ -289,8 +314,158 @@ func (s *Settings) UnmarshalJSON(data []byte) error {
 	if err := decodeTolerant(raw, &decoded); err != nil {
 		return err
 	}
-	*s = Settings(decoded)
+	d := Settings(decoded)
+	d.serverUnknownKeys = unknown
+	*s = d
 	return nil
+}
+
+// checkServerRaw rejects a server/allowedRoots value that decodeTolerant would
+// otherwise silently drop, which would leave the serve allowlist guardrail off.
+// Keys are matched case-insensitively to mirror encoding/json, which resolves
+// the "server"/"allowedRoots" struct tags regardless of case; an exact lookup
+// would let a case-variant key bypass the check. Scoped to the server key only;
+// every other setting stays tolerant. It also reports the unrecognized
+// settings.server keys it saw, so serve can warn and keep going; a near-miss
+// allowedRoots key with no valid allowedRoots present fails closed instead.
+func checkServerRaw(raw map[string]any) ([]string, error) {
+	var unknown []string
+	validRootsSeen := false
+	serverNearMiss := ""
+	for key, v := range raw {
+		if v == nil { // absent or null: treated as absent
+			continue
+		}
+		if serverKeyIsServerNearMiss(key) {
+			if serverNearMiss == "" { // several near-miss keys: which is recorded is map-order dependent
+				serverNearMiss = key
+			}
+			continue
+		}
+		if !strings.EqualFold(key, "server") {
+			continue
+		}
+		obj, ok := v.(map[string]any)
+		if !ok {
+			return nil, errors.New("server must be a JSON object")
+		}
+		hasValidRoots := false
+		nearMiss := ""
+		for innerKey, roots := range obj {
+			if roots == nil {
+				continue
+			}
+			switch {
+			case strings.EqualFold(innerKey, "allowedRoots"):
+				items, ok := roots.([]any)
+				if !ok {
+					return nil, errors.New("server.allowedRoots must be an array of strings")
+				}
+				for _, item := range items {
+					if _, ok := item.(string); !ok {
+						return nil, errors.New("server.allowedRoots must be an array of strings")
+					}
+				}
+				hasValidRoots = true
+			case isServerSettingKey(innerKey):
+				// Known key declared by ServerSettings; tolerated, not warned about.
+			default:
+				if nearMiss == "" && serverKeyIsAllowedRootsNearMiss(innerKey) {
+					nearMiss = innerKey
+				}
+				unknown = append(unknown, innerKey)
+			}
+		}
+		if nearMiss != "" && !hasValidRoots {
+			return nil, fmt.Errorf("server.%s is not a known key; did you mean server.allowedRoots?", nearMiss)
+		}
+		validRootsSeen = validRootsSeen || hasValidRoots
+	}
+	if serverNearMiss != "" {
+		if !validRootsSeen {
+			return nil, fmt.Errorf("%q is not a known key; did you mean server?", serverNearMiss)
+		}
+		unknown = append(unknown, serverNearMiss)
+	}
+	return unknown, nil
+}
+
+// isServerSettingKey reports whether key names a ServerSettings field, matched
+// case-insensitively the way encoding/json resolves a field: a tagged field by
+// its JSON name, an untagged or `json:",opt"` field by its Go field name, and
+// unexported or `json:"-"` fields not at all. The set is derived, so adding a
+// ServerSettings field cannot leave it in checkServerRaw's unknown-key set or
+// trip the allowedRoots near-miss guard.
+// ponytail: top-level fields only; ServerSettings does not embed, so promoted
+// tags are not walked — extend this if an embedded struct is ever added.
+func isServerSettingKey(key string) bool {
+	t := reflect.TypeFor[ServerSettings]()
+	for f := range t.Fields() {
+		if f.PkgPath != "" { // unexported: encoding/json ignores it
+			continue
+		}
+		tag := f.Tag.Get("json")
+		if tag == "-" { // json:"-": never decoded
+			continue
+		}
+		name, _, _ := strings.Cut(tag, ",")
+		if name == "" { // no tag, or json:",opt": encoding/json uses the Go name
+			name = f.Name
+		}
+		if strings.EqualFold(key, name) {
+			return true
+		}
+	}
+	return false
+}
+
+// serverKeyIsServerNearMiss reports whether a top-level settings key looks like a
+// misspelling of "server", so a likely-typo'd server block fails closed instead of
+// being dropped by encoding/json with the serve allowlist inside it. encoding/json
+// folds case but does not normalize, so only the exact case-folded key reaches the
+// Settings.Server field. It is the outer-key twin of serverKeyIsAllowedRootsNearMiss
+// and is intentionally narrow on name, broad only on noise: ASCII letters are folded
+// to lower case and every other rune — non-ASCII regardless of category (whitespace,
+// control, format, combining, symbol, letter filler, or a case-folding letter such as
+// KELVIN SIGN) — is discarded. The normalized key fails closed when it CONTAINS the
+// "server" stem, so a pad or stray letter before, inside, or after the stem is caught.
+// The container is deliberately containment rather than prefix: no other top-level
+// settings tag contains "server", so the stem cannot collide with a legitimate key.
+func serverKeyIsServerNearMiss(key string) bool {
+	if strings.EqualFold(key, "server") { // exactly what encoding/json matches
+		return false
+	}
+	k := strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			return r + ('a' - 'A')
+		case r >= 'a' && r <= 'z':
+			return r
+		default:
+			return -1
+		}
+	}, key)
+	return strings.Contains(k, "server")
+}
+
+// serverKeyIsAllowedRootsNearMiss reports whether a server key looks like a
+// misspelling of the allowedRoots stem, so a likely typo fails closed rather
+// than silently disabling the serve allowlist. It is intentionally narrow: it
+// catches keys on the "allow…root" stem, not every edit of allowedRoots.
+// encoding/json folds case but does not trim, so an exactly-matching key is the
+// only form that populates Server.AllowedRoots; a padded or mutated key is a
+// near-miss. Padding includes whitespace and invisible format runes (a
+// zero-width space pasted before the key), which TrimSpace alone would miss.
+// The stem tolerates the unrelated keys allowedHosts/allowedOrigins/allowedRoutes
+// (none contains "root").
+func serverKeyIsAllowedRootsNearMiss(key string) bool {
+	if strings.EqualFold(key, "allowedRoots") { // exactly what encoding/json matches
+		return false
+	}
+	k := strings.ToLower(strings.TrimFunc(key, func(r rune) bool {
+		return unicode.IsSpace(r) || unicode.Is(unicode.Cf, r)
+	}))
+	return strings.HasPrefix(k, "allow") && strings.Contains(k, "root")
 }
 
 // decodeTolerant decodes raw into out. A field whose JSON type does not
@@ -377,6 +552,7 @@ func (s Settings) clone() Settings {
 	if err := json.Unmarshal(data, &out); err != nil {
 		return s
 	}
+	out.serverUnknownKeys = append([]string(nil), s.serverUnknownKeys...)
 	return out
 }
 
@@ -716,6 +892,40 @@ func parseHTTPIdleTimeoutMs(value any) (int, bool) {
 	return 0, false
 }
 
+// GetServerPort returns the TCP port wopr serve listens on. Default: 4096.
+func (s Settings) GetServerPort() int {
+	if s.Server == nil || s.Server.Port <= 0 {
+		return defaultServerPort
+	}
+	return s.Server.Port
+}
+
+// GetServerHostname returns the address wopr serve binds. Default: 127.0.0.1.
+func (s Settings) GetServerHostname() string {
+	if s.Server == nil || s.Server.Hostname == "" {
+		return defaultServerHostname
+	}
+	return s.Server.Hostname
+}
+
+// GetServerAllowedRoots returns the configured serve roots with ~ and file://
+// forms expanded. An invalid file URL is an error. It does not make paths
+// absolute or resolve symlinks; resolveServeRoot does that.
+func (s Settings) GetServerAllowedRoots() ([]string, error) {
+	if s.Server == nil || len(s.Server.AllowedRoots) == 0 {
+		return nil, nil
+	}
+	roots := make([]string, 0, len(s.Server.AllowedRoots))
+	for _, root := range s.Server.AllowedRoots {
+		expanded, err := normalizeSettingsPath(root)
+		if err != nil {
+			return nil, err
+		}
+		roots = append(roots, expanded)
+	}
+	return roots, nil
+}
+
 // CompactionConfig is the resolved compaction settings (compaction imports
 // codingagent, so its own type cannot be used here). Zero token settings
 // scale with the model's window (compaction.CompactionSettings.ForModel).
@@ -966,6 +1176,25 @@ func (sm *SettingsManager) GetGlobalSettings() Settings {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 	return sm.global.clone()
+}
+
+// GlobalLoadError returns the error from the last global settings load; nil
+// when the global layer is absent or parsed. A configured-but-unparsable layer
+// reports an error here so callers can fail closed instead of reading the
+// zero layer that loadLayer leaves behind.
+func (sm *SettingsManager) GlobalLoadError() error {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return sm.globalLoadErr
+}
+
+// GlobalUnknownServerKeys returns the unrecognized settings.server keys in the
+// global layer, for a serve-time warning. Read before any merge, which drops
+// the field by design (it is not JSON).
+func (sm *SettingsManager) GlobalUnknownServerKeys() []string {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return append([]string(nil), sm.global.serverUnknownKeys...)
 }
 
 // GetProjectSettings returns the persisted project settings layer.

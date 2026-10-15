@@ -308,10 +308,15 @@ as instant so they get measured once.
 
 When the routed model returns an error, the router marks it down and moves to
 the next candidate: connection or server errors rest the model for a minute,
-rate-limit and quota errors rest it for `quotaBackoffMinutes`, and a context
-overflow moves to the next larger window without resting anything. The failed
-attempt is omitted from the transcript the way an automatic retry omits it,
-and the replacement becomes the sticky orchestrator.
+and a context overflow moves to the next larger window without resting
+anything. The free-tier, quota, and rate-limit family is recognized by one
+classifier: such an error advances to the next configured candidate in the
+same turn and rests the failed model for `quotaBackoffMinutes`, so it is not
+immediately re-picked. The ladder is the configured tier chain plus the paid
+last resort; with routing off or a single configured model there is no ladder,
+and the error is terminal rather than a hang. The failed attempt is omitted
+from the transcript the way an automatic retry omits it, and the replacement
+becomes the sticky orchestrator.
 
 ## Decision and outcome log
 

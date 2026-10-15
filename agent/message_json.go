@@ -73,7 +73,8 @@ func (m AgentMessage) MarshalJSON() ([]byte, error) {
 			Role      string `json:"role"`
 			Content   []any  `json:"content"`
 			Timestamp int64  `json:"timestamp"`
-		}{Role: RoleUser, Content: content, Timestamp: m.User.Timestamp})
+			System    string `json:"system,omitempty"`
+		}{Role: RoleUser, Content: content, Timestamp: m.User.Timestamp, System: m.User.System})
 	case m.Assistant != nil:
 		content, err := marshalAgentContent(m.Assistant.Content)
 		if err != nil {
@@ -159,7 +160,7 @@ func (m *AgentMessage) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
-		m.User = &UserMessage{Role: wire.Role, Content: content, Timestamp: wire.Timestamp}
+		m.User = &UserMessage{Role: wire.Role, Content: content, Timestamp: wire.Timestamp, System: wire.System}
 	case RoleAssistant:
 		content, err := unmarshalContentAs[ai.AssistantContentBlock](wire.Content, "assistant")
 		if err != nil {
@@ -197,6 +198,7 @@ type agentMessageWire struct {
 	Role                  string                          `json:"role"`
 	Content               json.RawMessage                 `json:"content"`
 	Timestamp             int64                           `json:"timestamp"`
+	System                string                          `json:"system"`
 	API                   ai.API                          `json:"api"`
 	Provider              string                          `json:"provider"`
 	Model                 string                          `json:"model"`

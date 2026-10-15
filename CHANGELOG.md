@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+- **`wopr serve`**: the session in the working directory is exposed over a local HTTP and SSE API that speaks the opencode client contract, so a phone or another machine can drive the same session — prompt, watch the stream, answer a question, read and write project files. 34 routes, 30 implemented; the rest answer `501`. **There is no authentication and no TLS**: anyone who can reach the port can run tools and read files as this user, so keep it on loopback unless the path between you and the machine is one you trust. File access is confined to the served root. See [the server docs](docs/site/docs/server.md).
+- **`todowrite`**: the model can now keep a task list for a request — plan, work through it, and mark items done as it goes. It is active by default in every mode.
+- **Session directory**: `wopr --dir <path>` and `wopr serve --dir <path>` choose the session or served directory at launch (default: the current directory). `server.allowedRoots` — a global-only launcher guardrail against misconfiguration, not a network boundary — refuses a served root outside its entries. `GET /file?directory=<foreign>` now answers 400 like its siblings, validating the query against the launch-time root instead of selecting a directory.
+
 ## [0.2.3] - 2026-10-05
 
 - **Compaction at 200k**: a large window no longer fills to 98% before compacting; the context compacts past 200k tokens, so each turn re-reads far less. `/settings` → Compact at picks 100k, 200k, 400k, or the window (`compaction.maxContextTokens`).

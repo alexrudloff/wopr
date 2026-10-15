@@ -24,7 +24,11 @@ func (m *InteractiveMode) undoCommand(args string) error {
 	}
 	changes, err := session.Undo(args)
 	if len(changes) > 0 {
-		m.showFlash(undoSummary(changes))
+		cwd := m.opts.CWD
+		if cwd == "" {
+			cwd, _ = os.Getwd()
+		}
+		m.showFlash(undoSummary(changes, cwd))
 	}
 	if err != nil {
 		m.showError("Undo: " + err.Error())
@@ -33,9 +37,9 @@ func (m *InteractiveMode) undoCommand(args string) error {
 }
 
 // undoSummary names what an undo reverted, and where a version the user or a
-// shell command made in between was kept.
-func undoSummary(changes []UndoChange) string {
-	cwd, _ := os.Getwd()
+// shell command made in between was kept. Paths are relativized against the
+// session cwd for display only.
+func undoSummary(changes []UndoChange, cwd string) string {
 	name := func(path string) string {
 		if rel, err := filepath.Rel(cwd, path); err == nil && !strings.HasPrefix(rel, "..") {
 			return rel

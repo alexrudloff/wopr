@@ -171,6 +171,10 @@ type Session struct {
 	// publish at the matching message_end and agent_end.
 	assistantEndsMu sync.Mutex
 	assistantEnds   []assistantEndNote
+	// pendingAssistantID is the entry id minted at an assistant message start
+	// and applied to its message_end before persistence, so the streamed id and
+	// the transcript entry id are the same. Only the agent goroutine touches it.
+	pendingAssistantID string
 	// lastAssistantEnd is the note of the last assistant message_end
 	// forwardAgentEvents published. Only that goroutine touches it.
 	lastAssistantEnd assistantEndNote
@@ -431,6 +435,7 @@ func NewSession(svcs *Services, opts SessionOptions) (*Session, error) {
 			if end, ok := ev.(agent.TurnEndEvent); ok {
 				ev = sess.turnEndWithEntryIDs(end)
 			}
+			sess.tagAssistantEntryID(ev)
 			sess.observeRouteTiming(ev)
 		},
 		OnMessagePersist: func(msg agent.AgentMessage) error {
@@ -578,6 +583,30 @@ func (s *Session) persistMessage(msg agent.AgentMessage) error {
 	return err
 }
 
+// tagAssistantEntryID mints the entry id at an assistant message start and
+// applies it at message end, before the agent persists that message and before
+// the SSE mapper reads it. Both run synchronously after OnEvent on the agent
+// goroutine, so the id the stream announces is the id the transcript stores.
+// A MessageUpdateEvent is not handled: each update carries a fresh clone, so an
+// id set there would reach neither persistence nor the mapper.
+func (s *Session) tagAssistantEntryID(ev agent.AgentEvent) {
+	switch e := ev.(type) {
+	case agent.MessageStartEvent:
+		if e.Message.Assistant == nil {
+			return
+		}
+		id, _ := icodingagent.GenerateEntryID()
+		e.Message.Assistant.EntryID = id
+		s.pendingAssistantID = id
+	case agent.MessageEndEvent:
+		if e.Message.Assistant == nil {
+			return
+		}
+		e.Message.Assistant.EntryID = s.pendingAssistantID
+		s.pendingAssistantID = ""
+	}
+}
+
 // turnEndWithEntryIDs resolves the entries already persisted by message_end
 // before turn_end is delivered.
 func (s *Session) turnEndWithEntryIDs(event agent.TurnEndEvent) agent.TurnEndEvent {
@@ -646,19 +675,20 @@ func (s *Session) Send(ctx context.Context, prompt string) ([]agent.AgentMessage
 // SendContent is the structured-content variant of Send. It persists the full
 // user content (text and/or images), then runs the agent loop.
 func (s *Session) SendContent(ctx context.Context, content []ai.UserContentBlock) ([]agent.AgentMessage, error) {
-	return s.SendContentWithPreflight(ctx, content, nil)
+	return s.SendContentWithPreflight(ctx, content, "", nil)
 }
 
 // SendContentWithPreflight calls preflight after prompt validation completes,
 // immediately before the agent run starts. The run is active (IsStreaming)
-// from then until agent_settled, and Abort cancels it.
-func (s *Session) SendContentWithPreflight(ctx context.Context, content []ai.UserContentBlock, preflight func()) ([]agent.AgentMessage, error) {
-	msgs, err := s.sendContent(ctx, content, preflight)
+// from then until agent_settled, and Abort cancels it. entryID, when non-empty,
+// is the transcript entry id the user message persists under.
+func (s *Session) SendContentWithPreflight(ctx context.Context, content []ai.UserContentBlock, entryID string, preflight func()) ([]agent.AgentMessage, error) {
+	msgs, err := s.sendContent(ctx, content, entryID, preflight)
 	s.notifyIdleWaiters()
 	return msgs, err
 }
 
-func (s *Session) sendContent(ctx context.Context, content []ai.UserContentBlock, preflight func()) ([]agent.AgentMessage, error) {
+func (s *Session) sendContent(ctx context.Context, content []ai.UserContentBlock, entryID string, preflight func()) ([]agent.AgentMessage, error) {
 	s.mu.Lock()
 	select {
 	case <-s.closeDone:
@@ -690,7 +720,7 @@ func (s *Session) sendContent(ctx context.Context, content []ai.UserContentBlock
 	content = icodingagent.NormalizePromptContent(content, s.services.SettingsManager().GetImageAutoResize(), s.agent.Model())
 	runCtx, cancelRun := s.beginAgentRun(ctx)
 	defer cancelRun()
-	msgs, sendErr := s.agent.SendContent(runCtx, content)
+	msgs, sendErr := s.agent.SendContent(runCtx, content, entryID)
 	// Retries, overflow and length recovery, and threshold compaction finish
 	// before the run settles.
 	msgs, sendErr = s.runPostAgentRuns(runCtx, msgs, sendErr)

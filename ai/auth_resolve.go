@@ -10,6 +10,7 @@ import (
 	"maps"
 	"math"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -303,12 +304,39 @@ func resolveAPIKey(ctx context.Context, authContext AuthContext, apiKey *APIKeyA
 	return result, nil
 }
 
+// sharedCredentialProviders maps a provider id to the ids whose stored
+// credential also authenticates it. opencode's Zen and Go gateways are one
+// account with one key, so a key stored under either id works for both.
+var sharedCredentialProviders = map[string][]string{
+	"opencode":    {"opencode-go"},
+	"opencode-go": {"opencode"},
+}
+
+// SharedCredentialProviders returns the provider ids whose stored credential
+// also authenticates providerID. Empty for a provider that shares nothing.
+// Callers must not mutate the returned slice.
+func SharedCredentialProviders(providerID string) []string {
+	return slices.Clone(sharedCredentialProviders[providerID])
+}
+
 func readProviderCredential(ctx context.Context, credentials CredentialStore, providerID string) (*Credential, error) {
 	credential, err := credentials.Read(ctx, providerID)
 	if err != nil {
 		return nil, NewModelsError(ModelsErrorAuth, fmt.Sprintf("Credential store read failed for %s", providerID), err)
 	}
-	return credential, nil
+	if credential != nil {
+		return credential, nil
+	}
+	for _, shared := range sharedCredentialProviders[providerID] {
+		fallback, err := credentials.Read(ctx, shared)
+		if err != nil {
+			return nil, NewModelsError(ModelsErrorAuth, fmt.Sprintf("Credential store read failed for %s", shared), err)
+		}
+		if fallback != nil {
+			return fallback, nil
+		}
+	}
+	return nil, nil
 }
 
 // MergeProviderHeaders overlays override onto base, replacing headers

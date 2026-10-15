@@ -35,6 +35,7 @@ wopr [options] [prompt]
 | `wopr config [--local]` | Open the Resource filter TUI. Press Tab to switch global and project scope. |
 | `wopr verify [--json] [--checksums <file>] [--provenance] [path...]` | Verify this binary or downloaded files by SHA-256 digest, optionally against a SHA256SUMS file and GitHub build provenance. |
 | `wopr docs [sync\|path\|list\|show <name>]` | Materialize and read the documentation bundled with WOPR. |
+| `wopr serve [--port N] [--hostname H] [--dir PATH]` | Start the HTTP/SSE server for the launch directory (`--dir`, default the current directory). `--port` overrides `server.port` (default `4096`); `--hostname` overrides `server.hostname` (default `127.0.0.1`). Unauthenticated and no TLS; see [server](server.md). |
 
 ## Options
 
@@ -51,6 +52,7 @@ These options apply to `wopr [options] [prompt]`. Run `wopr --help` for the full
 | `--session <path\|id>` | Use a session file or a partial session UUID. |
 | `--fork <path\|id>` | Fork a session file or partial UUID into a new session. |
 | `--session-dir <dir>` | Directory for session storage and lookup. |
+| `--dir <path>` | Start the session in this directory instead of the current directory. Relative `@file`, `--skill`, `--prompt-template`, and `--theme` paths still resolve against the current directory. |
 | `--no-session` | Do not save the session. |
 | `--name`, `-n <name>` | Set the session display name. |
 | `--no-skills`, `-ns` | Turn off skill discovery and loading. |

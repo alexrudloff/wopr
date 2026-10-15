@@ -149,7 +149,7 @@ func (m *InteractiveMode) runPromptTurnWithImages(ctx context.Context, prompt st
 			autoResize = m.opts.SettingsManager.GetImageAutoResize()
 		}
 		content = NormalizePromptContent(content, autoResize, m.agent.Model())
-		return m.agent.SendContent(runCtx, content)
+		return m.agent.SendContent(runCtx, content, "")
 	})
 }
 

@@ -141,7 +141,7 @@ func (s *Session) prepareRequest(ctx context.Context, _ agent.PrepareRequestCont
 	s.learnRequest(model, projected)
 	thinking = s.boostedThinking(model, thinking)
 	s.requestModel.Store(model)
-	return &agent.AgentRequestUpdate{Context: projected, Model: model, ThinkingLevel: &thinking}
+	return &agent.AgentRequestUpdate{Context: compaction.TrimMessages(projected, s.maxHistoryTokensFor(model)), Model: model, ThinkingLevel: &thinking}
 }
 
 // prepareNextTurn compacts before the next assistant response of a run when

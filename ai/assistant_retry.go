@@ -17,11 +17,42 @@ var nonRetryableProviderLimitErrorPattern = buildProviderErrorPattern([]string{
 	"Monthly usage limit reached",
 	"available balance",
 	// Generic quota/budget/billing exhaustion.
+	"free_tier_limit",
 	"insufficient_quota",
 	"out of budget",
 	"quota exceeded",
 	"billing",
 })
+
+// providerRateLimitPattern is the quota/rate-limit vocabulary that decides
+// whether a failed model is rested for the long quota backoff and advanced
+// past, rather than being retried on the same model. It is deliberately not
+// part of nonRetryableProviderLimitErrorPattern: a transient 429 or rate
+// limit stays retryable same-model (see IsRetryableAssistantError). The
+// numeric branches are anchored here because buildProviderErrorPattern joins
+// alternatives without adding word boundaries, so a bare 429 would match any
+// number containing it.
+var providerRateLimitPattern = buildProviderErrorPattern([]string{
+	`\b429\b`,
+	`rate[ _-]?limit`,
+	`quota`,
+	`usage limit`,
+	`too many requests`,
+	`overloaded`,
+	`capacity`,
+	`\b529\b`,
+})
+
+// IsProviderLimitError reports whether a provider error message is a quota,
+// rate-limit, or capacity failure that should rest the failed model and
+// advance to the next configured candidate. An empty message is not one.
+func IsProviderLimitError(message string) bool {
+	if message == "" {
+		return false
+	}
+	return nonRetryableProviderLimitErrorPattern.MatchString(message) ||
+		providerRateLimitPattern.MatchString(message)
+}
 
 var retryableProviderErrorPattern = buildProviderErrorPattern([]string{
 	// Generic provider load, HTTP status, and server-side transient failures.

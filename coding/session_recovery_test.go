@@ -3,10 +3,12 @@ package coding
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -72,10 +74,15 @@ func fauxError(message string) scriptedResponse {
 
 type harnessOptions struct {
 	settings      string
+	router        string
 	contextWindow int
 	maxTokens     int
 	tools         []agent.AgentTool
 }
+
+// harnessSessionSeq gives every harness instance a fresh SessionOptions.SessionID,
+// so a session-scoped scripted trigger repeats under -count=N.
+var harnessSessionSeq atomic.Uint64
 
 type recoveryHarness struct {
 	session  *Session
@@ -100,6 +107,11 @@ func newRecoveryHarness(t *testing.T, opts harnessOptions, responses ...scripted
 	if err := os.WriteFile(filepath.Join(agentDir, "settings.json"), []byte(settings), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if opts.router != "" {
+		if err := os.WriteFile(filepath.Join(agentDir, "router.json"), []byte(opts.router), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	services, err := NewServices(ServicesOptions{CWD: t.TempDir(), AgentDir: agentDir})
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +122,10 @@ func newRecoveryHarness(t *testing.T, opts harnessOptions, responses ...scripted
 		contextWindow = 128_000
 	}
 	model := &ai.Model{ID: "faux-1", DisplayName: "faux-1", Provider: provider, Capabilities: ai.ModelCapabilities{ContextWindow: contextWindow, MaxOutputTokens: opts.maxTokens}}
-	session, err := NewSession(services, SessionOptions{Model: model, SkipBuiltinTools: true, Tools: opts.tools})
+	session, err := NewSession(services, SessionOptions{
+		Model: model, SkipBuiltinTools: true, Tools: opts.tools,
+		SessionID: fmt.Sprintf("recovery-%d", harnessSessionSeq.Add(1)),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -26,9 +26,13 @@ wopr binary
 | `agent` | Agent loop, messages, tools, and Session primitives |
 | `ai` | Models, providers, authentication, and stream types |
 | `coding` | Session core: Services, Sessions, and resource discovery |
+| `coding/host` | Served-session host: owns each session's single run, the event bus, and the translator call site |
 | `cmd/wopr` | Command-line application and RPC surface |
 | `tui` | Terminal UI components and renderer |
 | `internal/codingagent` | Private command-line implementation, including the router and the system prompt |
+| `internal/codingagent/serve` | HTTP + SSE transport for `wopr serve`: opencode-compatible routes and the agent→client event mapper |
+
+`internal/codingagent/serve` does not import `coding`; `coding/host` re-exports `coding.Services` to keep that seam.
 
 `cmd/wopr-eval` and `internal/evals` are the development-only eval harness (`evals/README.md`); they are not part of the shipped binary.
 

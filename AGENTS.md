@@ -37,6 +37,19 @@ Configuration lives under `~/.wopr` (`WOPR_HOME`); project configuration under
 
 - Fix the root cause. When a function is wrong, fix it once where every caller
   routes through.
+- **opencode is the specification for `wopr serve`.** Where `wopr serve`'s
+  behavior, a DTO, a route, or any document in `docs/` disagrees with opencode
+  `v1.18.34` (`anomalyco/opencode`, commit `aec0b9a`), opencode wins and the
+  document is wrong. This includes `docs/site/docs/server.md` and the captured
+  KKCode shapes sidecar: a recorded "captured client behavior" is evidence about
+  the client, not a reason to keep diverging from the server it talks to. A
+  divergence survives only as a recorded product decision with a stated reason —
+  the ratified ones are the SSE user two-phase and duplicate-`messageID` items in
+  `BACKLOG.md`. Archive-on-delete was ratified here once and is now **superseded**:
+  `serve-delete-hard-delete` reinstates opencode's behavior. This rule covers
+  `wopr serve` only; the TUI and everything else have no upstream. The pin, the
+  extraction, and the generated inventory live in
+  `docs/plans/2026-10-09-serve-v1-conformance-and-parity.md`.
 - Do not add tests by default. Add one small behavioral test only when a
   regression would cost money, lose data, or weaken safety, or when fixing a real
   bug likely to recur. Never write snapshot/golden, change-detector,

@@ -50,7 +50,10 @@ differently, change the source.
   routing, live agents, subscription usage, and speed per model; command
   palette on `ctrl+p`; opencode-compatible themes; MCP servers; web fetch and
   search with no setup (your search key, else the model provider's own
-  search, else DuckDuckGo). Signed releases and `/upgrade`.
+  search, else DuckDuckGo). Signed releases and `/upgrade`. `wopr serve`
+  exposes the same session over a local HTTP + SSE API (opencode-compatible)
+  so a phone client can attach; see
+  [docs/site/docs/server.md](docs/site/docs/server.md).
 
 ## Efficiency
 

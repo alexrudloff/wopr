@@ -1,4 +1,4 @@
-package main
+package host
 
 import (
 	"encoding/json"
@@ -8,8 +8,8 @@ import (
 	"github.com/alexrudloff/wopr/ai"
 )
 
-// rpcAgentEvent converts an internal agent event to JSON/RPC event shapes. Conversion errors are returned so writer paths can terminate loudly.
-func rpcAgentEvent(event agent.AgentEvent) ([]any, error) {
+// WireAgentEvent converts an internal agent event to JSON/RPC event shapes. Conversion errors are returned so writer paths can terminate loudly.
+func WireAgentEvent(event agent.AgentEvent) ([]any, error) {
 	switch event := event.(type) {
 	case agent.AgentStartEvent:
 		return []any{map[string]any{"type": "agent_start"}}, nil
@@ -356,37 +356,4 @@ func rpcContentBlock(block ai.ContentBlock) (any, error) {
 	default:
 		return nil, fmt.Errorf("unsupported content block %T", block)
 	}
-}
-
-func rpcUsage(usage *ai.Usage) map[string]any {
-	if usage == nil {
-		usage = &ai.Usage{}
-	}
-	out := map[string]any{
-		"input": usage.Input, "output": usage.Output, "cacheRead": usage.CacheRead,
-		"cacheWrite": usage.CacheWrite, "totalTokens": usage.TotalTokens,
-		"cost": map[string]any{
-			"input": usage.Cost.Input, "output": usage.Cost.Output,
-			"cacheRead": usage.Cost.CacheRead, "cacheWrite": usage.Cost.CacheWrite,
-			"total": usage.Cost.Total,
-		},
-	}
-	if usage.CacheWrite1h != nil {
-		out["cacheWrite1h"] = *usage.CacheWrite1h
-	}
-	if usage.Reasoning != nil {
-		out["reasoning"] = *usage.Reasoning
-	}
-	return out
-}
-
-func tryDecodeJSON(text string) (any, bool) {
-	if text == "" {
-		return nil, false
-	}
-	var value any
-	if err := json.Unmarshal([]byte(text), &value); err != nil {
-		return nil, false
-	}
-	return value, true
 }

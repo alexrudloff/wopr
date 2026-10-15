@@ -37,6 +37,9 @@ Thumbs.db
 *~
 *.swp
 *.swo
+# Local tooling state; .tokensave/ carries an index database that runs to
+# tens of megabytes.
+/.tokensave/
 
 # Common local credential files. Committed non-secret fixtures require an
 # explicit exception next to the owning fixture below.
@@ -68,3 +71,4 @@ auth.json
 
 # Agent worktrees.
 .claude/worktrees/
+.worktrees/

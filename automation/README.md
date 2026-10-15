@@ -45,7 +45,7 @@ The automation writes only where the environment allows. Set these when the defa
 | Script | Purpose |
 |---|---|
 | `test-grouped.sh` | The `make test` scheduler: runs Go packages in groups sized for the machine. |
-| `test-race.sh` | Race and goroutine-leak gate for the TUI concurrency model. |
+| `test-race.sh` | Race gate for the TUI, serve, and host concurrency models, plus the TUI goroutine-leak profile. |
 | `integration-tests.sh` | The tmux integration tier, split by category. |
 | `hygiene/`, `check-scratch-paths.sh` | Rejects private coordination paths (lane reports, `.env` files, handoff folders) and private infrastructure or operator paths in tracked files; `-ref REF` scans the committed tree at `REF` instead, for publication review. |
 

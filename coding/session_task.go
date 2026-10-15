@@ -321,6 +321,18 @@ func (h taskHost) Escalate(req subagent.Request, prev subagent.Route) (subagent.
 	return subagent.Route{}, false
 }
 
+// providerFailure is the one place a provider error becomes a router
+// failure. RateLimited is set by the shared classifier so both failover
+// call sites choose the same cooldown and advance decision.
+func providerFailure(message string, contextTokens int, overflow bool) router.Failure {
+	return router.Failure{
+		Message:       message,
+		RateLimited:   ai.IsProviderLimitError(message),
+		ContextTokens: contextTokens,
+		Overflow:      overflow,
+	}
+}
+
 // Failover replaces a route whose provider failed, as the orchestrator's
 // failover does; it does not count as an escalation.
 func (h taskHost) Failover(prev subagent.Route, message string) (subagent.Route, bool) {
@@ -328,7 +340,7 @@ func (h taskHost) Failover(prev subagent.Route, message string) (subagent.Route,
 	if !ok {
 		return subagent.Route{}, false
 	}
-	failure := router.Failure{Message: message, RateLimited: rateLimitPattern.MatchString(message), ContextTokens: d.ContextTokens}
+	failure := providerFailure(message, d.ContextTokens, false)
 	for next := h.s.router.Next(d, failure); next != nil; next = h.s.router.Next(next, failure) {
 		next.Brief = d.Brief
 		if route, err := h.routeFor(next); err == nil {

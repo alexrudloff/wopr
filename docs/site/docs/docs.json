@@ -27,6 +27,7 @@
     "rpc-commands.md": "adapted",
     "rpc.md": "adapted",
     "security.md": "wopr-authored",
+    "server.md": "wopr-authored",
     "session-format.md": "adapted",
     "sessions.md": "adapted",
     "settings.md": "adapted",
@@ -85,6 +86,10 @@
             {
               "title": "Run WOPR Safely",
               "path": "security.md"
+            },
+            {
+              "title": "Run the WOPR Server",
+              "path": "server.md"
             },
             {
               "title": "Isolate WOPR",

@@ -326,7 +326,7 @@ func (sm *SessionManager) DeleteSession(path string) error {
 
 // RenameSession updates the session name by appending a session_info entry.
 func (sm *SessionManager) RenameSession(path, newName string) error {
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR, 0o644)
 	if err != nil {
 		return fmt.Errorf("sessionmanager: rename open: %w", err)
 	}
@@ -342,6 +342,57 @@ func (sm *SessionManager) RenameSession(path, newName string) error {
 	data, err := json.Marshal(entry)
 	if err != nil {
 		return err
+	}
+	return appendJSONLine(f, data)
+}
+
+// AppendCustomEntry appends a custom entry to the session file.
+// It is the file-level sibling of RenameSession, used for session_archive
+// and other custom entry types. Opens the file with O_APPEND|O_RDWR
+// (no O_CREATE), so it fails on a session with no file. O_RDWR because
+// appendJSONLine reads the last byte to decide whether a separator is needed.
+func (sm *SessionManager) AppendCustomEntry(path, customType string, data any) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_RDWR, 0o644)
+	if err != nil {
+		return fmt.Errorf("sessionmanager: append custom open: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	id := generateSessionID()
+	entry := CustomEntry{
+		Type:       "custom",
+		ID:         id,
+		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
+		CustomType: customType,
+		Data:       data,
+	}
+	entryData, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return appendJSONLine(f, entryData)
+}
+
+// appendJSONLine writes data as one line at the end of f. It first terminates
+// the file's last line when the file does not end in a newline: an imported or
+// interrupted session would otherwise have the new record glued onto the
+// truncated one, destroying both. f must be opened O_APPEND|O_RDWR; O_APPEND
+// still forces every write to end-of-file, so the write stays atomic.
+func appendJSONLine(f *os.File, data []byte) error {
+	st, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	if st.Size() > 0 {
+		var last [1]byte
+		if _, err := f.ReadAt(last[:], st.Size()-1); err != nil {
+			return err
+		}
+		if last[0] != '\n' {
+			if _, err := f.Write([]byte{'\n'}); err != nil {
+				return err
+			}
+		}
 	}
 	_, err = fmt.Fprintf(f, "%s\n", data)
 	return err

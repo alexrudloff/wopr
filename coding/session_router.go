@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -557,8 +556,6 @@ func (s *Session) emitRoute(rs *routeState) {
 	})
 }
 
-var rateLimitPattern = regexp.MustCompile(`(?i)(\b429\b|rate[ _-]?limit|quota|usage limit|too many requests|overloaded|capacity|\b529\b)`)
-
 // routeFailover replaces the routed model after a failed response and
 // reports whether the run should continue on the replacement. The failed
 // attempt is omitted from the transcript the way an automatic retry omits it.
@@ -575,12 +572,7 @@ func (s *Session) routeFailover(message *agent.AssistantMessage, toolResults []a
 	}
 	tokens := compaction.EstimateContextTokens(s.agent.Messages()).Tokens
 	llm := message.LLMMessage()
-	failure := router.Failure{
-		Message:       message.ErrorMessage,
-		Overflow:      ai.IsContextOverflow(llm, rs.model.Capabilities.ContextWindow),
-		RateLimited:   rateLimitPattern.MatchString(message.ErrorMessage),
-		ContextTokens: tokens,
-	}
+	failure := providerFailure(message.ErrorMessage, tokens, ai.IsContextOverflow(llm, rs.model.Capabilities.ContextWindow))
 	next := s.router.Next(rs.decision, failure)
 	for attempts := 0; next != nil && attempts < 8; attempts++ {
 		m, err := s.routeModel(next.Provider, next.Model)

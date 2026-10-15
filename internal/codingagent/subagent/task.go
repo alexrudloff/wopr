@@ -37,6 +37,12 @@ const TypePropose = "propose"
 // pick from or merge. Only the council runs it.
 const TypeBuild = "build"
 
+// writesFiles reports whether a child of this type may have changed files
+// by the time it returns: general writes in the session's directory, build
+// in its own worktree. A writer is never rerun over its own edits, by
+// failover or escalation.
+func writesFiles(typ string) bool { return typ == TypeGeneral || typ == TypeBuild }
+
 // LevelMechanical is the router's difficulty level for lookups.
 const LevelMechanical = "mechanical"
 
@@ -434,7 +440,10 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 			details.Transcript = transcript
 		}
 		rec := t.record(req, attempt, route, out)
-		if out.ProviderError != "" && out.ToolCalls == 0 && ctx.Err() == nil && failovers < maxFailovers {
+		// A read-only child advances past a provider error even after tool
+		// calls; a writer may already have changed files and is never rerun
+		// over them (mirrors the escalation guard below).
+		if out.ProviderError != "" && ctx.Err() == nil && failovers < maxFailovers && (out.ToolCalls == 0 || !writesFiles(req.Type)) {
 			if next, ok := t.Host.Failover(route, out.ProviderError); ok {
 				failovers++
 				rec.Outcome, rec.Trigger, rec.EscalatedTo = "failover", out.ProviderError, next.Spec
@@ -458,9 +467,9 @@ func (t *Tool) execute(ctx context.Context, req Request, route Route, progress f
 		}
 		rec.Status, rec.Confidence, rec.Verified, rec.Quotes, rec.Trigger = res.Status, res.Confidence, verified, quotes, trigger
 		rec.Outcome = "accepted"
-		// A general child's changes are already in the working directory,
-		// so it is never rerun on top of them.
-		if trigger != "" && attempt < maxAttempts && ctx.Err() == nil && req.Type != TypeGeneral {
+		// A writer may already have changed files — general in the session's
+		// directory, build in its worktree — and is never rerun over them.
+		if trigger != "" && attempt < maxAttempts && ctx.Err() == nil && !writesFiles(req.Type) {
 			if next, ok := t.Host.Escalate(req, route); ok {
 				rec.Outcome, rec.EscalatedTo = "escalated", next.Spec
 				t.Host.Log(rec)

@@ -43,3 +43,16 @@ func TestIsRetryableAssistantErrorClassification(t *testing.T) {
 		t.Error("successful message classified retryable")
 	}
 }
+
+func TestIsProviderLimitErrorClassification(t *testing.T) {
+	for _, message := range []string{"free_tier_limit", "FreeUsageLimitError", "429 Too Many Requests"} {
+		if !IsProviderLimitError(message) {
+			t.Errorf("expected provider limit: %q", message)
+		}
+	}
+	for _, message := range []string{"connection refused", ""} {
+		if IsProviderLimitError(message) {
+			t.Errorf("not a provider limit: %q", message)
+		}
+	}
+}

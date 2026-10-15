@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // Learned values stay inside their bounds however one-sided the signals
@@ -61,6 +62,49 @@ func TestLearnedValuesStayInBounds(t *testing.T) {
 	}
 	if got := LoadLearner(dir, true).EffectiveWindow("m/x", 32768); got != 32768 {
 		t.Fatalf("damaged file: effective window %d, want the configured 32768", got)
+	}
+}
+
+// The learned map keeps only the newest entries once it passes MaxModels.
+func TestLearnerCapEvictsOldest(t *testing.T) {
+	l := LoadLearner(t.TempDir(), true, LearnerOptions{MaxModels: 3})
+	tick := int64(1000)
+	l.now = func() int64 { tick++; return tick }
+	l.mu.Lock()
+	for _, spec := range []string{"spec0", "spec1", "spec2", "spec3"} {
+		l.model(spec)
+	}
+	l.mu.Unlock()
+	if len(l.models) != 3 {
+		t.Fatalf("kept %d entries, want 3", len(l.models))
+	}
+	if l.models["spec0"] != nil {
+		t.Errorf("spec0 (oldest) survived eviction")
+	}
+	if l.models["spec3"] == nil {
+		t.Errorf("spec3 (newest) was evicted")
+	}
+}
+
+// Entries not updated within the TTL are dropped.
+func TestLearnerTTLDropsStale(t *testing.T) {
+	l := LoadLearner(t.TempDir(), true, LearnerOptions{MaxModels: 100})
+	t0 := int64(1_000_000)
+	now := t0
+	l.now = func() int64 { return now }
+	l.mu.Lock()
+	l.model("specA")
+	l.mu.Unlock()
+	now = t0 + int64(91*24*time.Hour/time.Second)
+	l.mu.Lock()
+	l.model("specB")
+	l.evict(l.models, l.now())
+	l.mu.Unlock()
+	if l.models["specA"] != nil {
+		t.Errorf("specA (stale) survived the TTL")
+	}
+	if l.models["specB"] == nil {
+		t.Errorf("specB (fresh) was dropped")
 	}
 }
 

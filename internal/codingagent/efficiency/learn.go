@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Learning: every model starts from the global numbers (the SoL-Pi
@@ -57,6 +58,10 @@ const (
 // ModelLearning is one model's learned values and the counts since each
 // last moved. A zero value means the global default.
 type ModelLearning struct {
+	// UpdatedAt is the Unix second of this model's last outcome update; it
+	// bounds the entry's age. Zero means unknown, and is stamped on load.
+	UpdatedAt int64 `json:"updatedAt,omitempty"`
+
 	PackThreshold     int     `json:"packThreshold,omitempty"`
 	PackExcerpt       int     `json:"packExcerpt,omitempty"`
 	HalfLifeKeepDelta int     `json:"halfLifeKeepDelta,omitempty"`
@@ -173,17 +178,20 @@ type pendingReread struct {
 
 // Learner observes one session and updates the shared learned values.
 type Learner struct {
-	mu      sync.Mutex
-	dir     string
-	on      bool
-	models  map[string]*ModelLearning
-	touched map[string]bool
-	request int
-	saved   int
-	seen    map[string]bool
-	recalls map[string]pendingRecall
-	reads   []pendingReadback
-	rereads []pendingReread
+	mu        sync.Mutex
+	dir       string
+	on        bool
+	models    map[string]*ModelLearning
+	touched   map[string]bool
+	request   int
+	saved     int
+	seen      map[string]bool
+	recalls   map[string]pendingRecall
+	reads     []pendingReadback
+	rereads   []pendingReread
+	maxModels int
+	ttl       time.Duration
+	now       func() int64
 	// readFiles are the files read since the last compaction.
 	readFiles map[string]bool
 }
@@ -194,8 +202,10 @@ type learnedFile struct {
 }
 
 // readLearned reads the file; a missing, damaged, or other-version file
-// reads as empty.
-func readLearned(dir string) map[string]*ModelLearning {
+// reads as empty. Entries without a timestamp are stamped with now, so a
+// file written before timestamps existed ages from this load instead of
+// reading as unknown age.
+func readLearned(dir string, now int64) map[string]*ModelLearning {
 	data, err := os.ReadFile(filepath.Join(dir, LearnedFileName))
 	if err != nil {
 		return map[string]*ModelLearning{}
@@ -210,29 +220,89 @@ func readLearned(dir string) map[string]*ModelLearning {
 			continue
 		}
 		m.sanitize()
+		if m.UpdatedAt == 0 {
+			m.UpdatedAt = now
+		}
 	}
 	return f.Models
 }
 
+// LearnerOptions bounds the learned model map. A zero field takes the
+// package default.
+type LearnerOptions struct {
+	// MaxModels is the most entries kept; the least recently updated are
+	// evicted first. ≤0 takes DefaultMaxModels.
+	MaxModels int
+	// TTL drops entries not updated within it. ≤0 takes DefaultLearnerTTL.
+	TTL time.Duration
+}
+
+const (
+	// DefaultMaxModels is the most learned model entries kept.
+	DefaultMaxModels = 500
+	// DefaultLearnerTTL is how long an un-updated entry is kept.
+	DefaultLearnerTTL = 90 * 24 * time.Hour
+)
+
 // LoadLearner loads the learned values under dir. With on false it neither
 // learns nor applies what was learned.
-func LoadLearner(dir string, on bool) *Learner {
-	l := &Learner{dir: dir, on: on, models: map[string]*ModelLearning{}, touched: map[string]bool{}, seen: map[string]bool{}, recalls: map[string]pendingRecall{}, readFiles: map[string]bool{}}
+func LoadLearner(dir string, on bool, opts ...LearnerOptions) *Learner {
+	var o LearnerOptions
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	if o.MaxModels <= 0 {
+		o.MaxModels = DefaultMaxModels
+	}
+	if o.TTL <= 0 {
+		o.TTL = DefaultLearnerTTL
+	}
+	l := &Learner{dir: dir, on: on, maxModels: o.MaxModels, ttl: o.TTL, now: time.Now().Unix, models: map[string]*ModelLearning{}, touched: map[string]bool{}, seen: map[string]bool{}, recalls: map[string]pendingRecall{}, readFiles: map[string]bool{}}
 	if on && dir != "" {
-		l.models = readLearned(dir)
+		l.models = readLearned(dir, l.now())
+		l.evict(l.models, l.now())
 	}
 	return l
+}
+
+// evict drops entries stale past the TTL and cuts the map down to maxModels,
+// least recently updated first; the caller holds mu when models is l.models.
+func (l *Learner) evict(models map[string]*ModelLearning, now int64) {
+	cutoff := now - int64(l.ttl/time.Second)
+	for spec, m := range models {
+		if m.UpdatedAt != 0 && m.UpdatedAt < cutoff {
+			delete(models, spec)
+		}
+	}
+	if len(models) <= l.maxModels {
+		return
+	}
+	byAge := slices.SortedFunc(maps.Keys(models), func(a, b string) int {
+		if c := cmp.Compare(models[a].UpdatedAt, models[b].UpdatedAt); c != 0 {
+			return c
+		}
+		return cmp.Compare(a, b)
+	})
+	for _, spec := range byAge[:len(models)-l.maxModels] {
+		delete(models, spec)
+	}
 }
 
 // On reports whether the learner is learning.
 func (l *Learner) On() bool { return l != nil && l.on }
 
-// model returns spec's entry, creating it; the caller holds mu.
+// model returns spec's entry, creating it, and stamps it as just updated; the
+// caller holds mu.
 func (l *Learner) model(spec string) *ModelLearning {
+	now := l.now()
 	m := l.models[spec]
 	if m == nil {
 		m = &ModelLearning{}
 		l.models[spec] = m
+	}
+	m.UpdatedAt = now
+	if len(l.models) > l.maxModels {
+		l.evict(l.models, now)
 	}
 	return m
 }
@@ -365,7 +435,9 @@ func (l *Learner) settle(final bool) {
 		return true
 	})
 	for spec := range l.touched {
-		l.model(spec).adjust()
+		if m := l.models[spec]; m != nil {
+			m.adjust()
+		}
 	}
 }
 
@@ -595,16 +667,19 @@ func (l *Learner) Save() {
 	l.saved = l.request
 	touched := map[string]ModelLearning{}
 	for spec := range l.touched {
-		touched[spec] = *l.model(spec)
+		if m := l.models[spec]; m != nil {
+			touched[spec] = *m
+		}
 	}
 	l.mu.Unlock()
 	if len(touched) == 0 {
 		return
 	}
-	models := readLearned(l.dir)
+	models := readLearned(l.dir, l.now())
 	for spec, m := range touched {
 		models[spec] = &m
 	}
+	l.evict(models, l.now())
 	data, err := json.MarshalIndent(learnedFile{Version: learnedVersion, Models: models}, "", "  ")
 	if err != nil {
 		return

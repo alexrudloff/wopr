@@ -71,6 +71,42 @@ func TestResolveProviderAuthStoredCredentialOwnsProvider(t *testing.T) {
 	}
 }
 
+// TestResolveProviderAuthSharesOpenCodeCredential covers the one account-key
+// pair: a credential stored under opencode Zen or opencode Go resolves for
+// both, and the provider's own entry wins when both are stored.
+func TestResolveProviderAuthSharesOpenCodeCredential(t *testing.T) {
+	ctx := context.Background()
+	auth := ProviderAuth{APIKey: EnvAPIKeyAuth("OpenCode API key", "OPENCODE_API_KEY")}
+	env := testAuthContext(nil)
+
+	for _, stored := range []string{"opencode", "opencode-go"} {
+		other := "opencode-go"
+		if stored == "opencode-go" {
+			other = "opencode"
+		}
+		store := NewInMemoryAuthStorage(map[string]Credential{stored: {Type: CredentialAPIKey, Key: "zen-key"}})
+		result, err := ResolveProviderAuth(ctx, other, auth, store, env, AuthResolutionOverrides{})
+		if err != nil || result == nil || result.Auth.APIKey != "zen-key" || result.Source != "stored credential" {
+			t.Fatalf("%s key for %s = %+v, %v", stored, other, result, err)
+		}
+	}
+
+	both := NewInMemoryAuthStorage(map[string]Credential{
+		"opencode":    {Type: CredentialAPIKey, Key: "zen-key"},
+		"opencode-go": {Type: CredentialAPIKey, Key: "go-key"},
+	})
+	result, err := ResolveProviderAuth(ctx, "opencode", auth, both, env, AuthResolutionOverrides{})
+	if err != nil || result.Auth.APIKey != "zen-key" {
+		t.Fatalf("own entry = %+v, %v; want the opencode key", result, err)
+	}
+
+	// No credential anywhere resolves nothing; the shared id is not an
+	// ambient fallback for a provider that has no key.
+	if result, err := ResolveProviderAuth(ctx, "opencode", auth, NewInMemoryAuthStorage(nil), env, AuthResolutionOverrides{}); err != nil || result != nil {
+		t.Fatalf("no credential = %+v, %v; want nil", result, err)
+	}
+}
+
 func TestResolveProviderAuthRefreshesExpiringOAuthOnceAndPersists(t *testing.T) {
 	ctx := context.Background()
 	var refreshes atomic.Int32

@@ -394,6 +394,16 @@ func (r *loopRun) streamAssistantResponse() (*AssistantMessage, []pendingToolCal
 	if a.forcedSystemPrompt != nil {
 		llmMsgs = projectSystemPrompt(llmMsgs, *a.forcedSystemPrompt)
 	}
+	// A per-prompt system text appends to the turn's system prompt; it never
+	// substitutes it. The append lands last, after the base, and is empty when
+	// the turn staged none, so a later turn cannot inherit the previous one.
+	if sys := lastUserSystem(contextMsgs); sys != "" {
+		prompt := sys
+		if base := ai.GetCurrentSystemPrompt(llmMsgs); base != "" {
+			prompt = base + "\n" + sys
+		}
+		llmMsgs = projectSystemPrompt(llmMsgs, prompt)
+	}
 
 	transcript := ai.NormalizeContext(ai.Context{Messages: llmMsgs})
 	streamOpts := ai.StreamOptions{
@@ -430,6 +440,22 @@ func (r *loopRun) streamAssistantResponse() (*AssistantMessage, []pendingToolCal
 		return errorAssistant, nil, nil
 	}
 	return a.consumeStream(r.ctx, stream, r.model)
+}
+
+// lastUserSystem returns the newest user message's per-prompt system text. It is
+// defined beside its only caller, streamAssistantResponse. Within a serve turn
+// the newest user message is the turn's prompt, because the serve surface never
+// steers and the inner tool loop appends only assistant/toolResult messages.
+// This is not a general invariant: loop() appends steering user messages, so if
+// steering is ever surfaced through serve this must become an explicit per-turn
+// field rather than "newest user message".
+func lastUserSystem(messages []AgentMessage) string {
+	for _, message := range slices.Backward(messages) {
+		if message.User != nil {
+			return message.User.System
+		}
+	}
+	return ""
 }
 
 func (r *loopRun) requestError(err error) *AssistantMessage {

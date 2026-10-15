@@ -26,3 +26,22 @@ func TestSessionRetriesProviderReturnedError400(t *testing.T) {
 		t.Fatalf("last assistant text = %v, want the retried response", text)
 	}
 }
+
+// providerFailure is the classification choke point both failover call sites
+// use. It pins RateLimited to the shared classifier and passes the rest of the
+// router failure through unchanged.
+func TestProviderFailureClassifiesRateLimits(t *testing.T) {
+	limited := providerFailure("free_tier_limit", 100, false)
+	if !limited.RateLimited {
+		t.Errorf("free_tier_limit not classified rate-limited: %+v", limited)
+	}
+	if limited.Message != "free_tier_limit" || limited.ContextTokens != 100 || limited.Overflow {
+		t.Errorf("failure fields not passed through: %+v", limited)
+	}
+	if providerFailure("connection refused", 100, false).RateLimited {
+		t.Error("connection refused classified rate-limited")
+	}
+	if overflow := providerFailure("connection refused", 200, true); overflow.RateLimited || !overflow.Overflow {
+		t.Errorf("overflow pass-through: %+v", overflow)
+	}
+}

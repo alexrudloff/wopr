@@ -73,7 +73,7 @@ Every prompt and tool result costs tokens. When a change adds text that reaches 
 
 ## User documentation
 
-User documentation is authored as Markdown under `docs/site/docs/` and read on GitHub; pages link each other with relative `.md` links. `docs/site/docs/docs.json` classifies and orders every page, and `make docs-drift` checks it. The installer is `install.sh` at the repository root, and releases are cut as described in `docs/project/RELEASING.md`.
+User documentation is authored as Markdown under `docs/site/docs/` and read on GitHub; pages link each other with relative `.md` links. `docs/site/docs/docs.json` classifies and orders every page. The installer is `install.sh` at the repository root, and releases are cut as described in `docs/project/RELEASING.md`.
 
 The same pages ship in the executable: `docs/site/docs/embed.go` embeds them, and `internal/woprdocs` writes them to `~/.wopr/docs` for `wopr docs` and the coding agent. Keep every page reachable by links from `index.md`; the offline copy has no site navigation.
 

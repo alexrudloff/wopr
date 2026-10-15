@@ -79,7 +79,7 @@ func lookupToolPath(tool, agentBinDir string, exe bool) string {
 // abortedResult is the result of a tool call whose context was cancelled.
 var abortedResult = agent.ErrorResult("Operation aborted")
 
-var builtinToolNames = [...]string{"read", "bash", "powershell", "edit", "write", "grep", "find", "ls"}
+var builtinToolNames = [...]string{"read", "bash", "powershell", "edit", "write", "grep", "find", "ls", "todowrite"}
 
 // optInBuiltinToolNames are registered built-ins outside every WOPR default
 // active set. powershell is registered on every platform, but no default
@@ -157,15 +157,19 @@ func CreateCodingTools(cwd string, settings BashSettingsView, agentBinDir string
 	}
 }
 
-// CreateAllTools returns every registered built-in tool: CreateCodingTools
-// plus the opt-in powershell tool, in registry order. Callers select the active
-// subset with SelectBuiltinTools.
+// CreateAllTools returns every registered built-in tool: CreateCodingTools plus
+// the opt-in powershell tool and todowrite, in registry order. Callers select
+// the active subset with SelectBuiltinTools.
+//
+// todowrite is a main-session tool, not a shared one: a subagent writing todos
+// produces a list nothing reads.
 func CreateAllTools(cwd string, settings BashSettingsView, agentBinDir string) []agent.AgentTool {
 	coding := CreateCodingTools(cwd, settings, agentBinDir)
-	all := make([]agent.AgentTool, 0, len(coding)+1)
+	all := make([]agent.AgentTool, 0, len(coding)+2)
 	all = append(all, coding[:2]...) // read, bash
 	all = append(all, &PowerShellTool{CWD: cwd, BinDir: agentBinDir})
-	return append(all, coding[2:]...)
+	all = append(all, coding[2:]...)
+	return append(all, &TodoTool{})
 }
 
 // DefaultToolGuidelines returns the prompt guidelines from each built-in
@@ -272,3 +276,4 @@ var _ agent.AgentTool = (*EditTool)(nil)
 var _ agent.AgentTool = (*GrepTool)(nil)
 var _ agent.AgentTool = (*FindTool)(nil)
 var _ agent.AgentTool = (*LsTool)(nil)
+var _ agent.AgentTool = (*TodoTool)(nil)

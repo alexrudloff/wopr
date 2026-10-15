@@ -24,6 +24,7 @@ Options:
   --session-id <id>              Use exact project session ID, creating it if missing
   --fork <path|id>               Fork specific session file or partial UUID into a new session
   --session-dir <dir>            Directory for session storage and lookup
+  --dir <path>                   Working directory for the session (default: current directory)
   --no-session                   Don't save session (ephemeral)
   --name, -n <name>              Set session display name
   --no-tools, -nt                Disable all tools by default (built-in and custom)

@@ -129,10 +129,11 @@ test-stress: ## Stress the grouped Go test scheduler under higher contention
 test-integration: ## Deterministic tmux tier: real wopr, faux provider, no network
 	@./automation/ci/integration-tests.sh fast
 
-# Race + goroutineleak gate for the interactive TUI concurrency model. Locks in
-# the single-main-loop ownership invariant: a future off-loop UI touch fails
-# here instead of shipping a latent data race. See automation/ci/test-race.sh.
-test-race: ## Race and goroutine-leak gate for the TUI concurrency model
+# Race gate for the interactive TUI, serve, and host concurrency models, plus a
+# TUI-only goroutine-leak profile. For the TUI, this locks in the single-main-loop
+# ownership invariant: a future off-loop UI touch fails here instead of shipping a
+# latent data race. See automation/ci/test-race.sh.
+test-race: ## Race gate for the TUI, serve, and host models, plus the TUI goroutine-leak profile
 	@./automation/ci/test-race.sh
 
 # go-fix-clean enforces AGENTS.md rule #3 (Go 1.27 idiom compliance).

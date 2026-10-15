@@ -4,8 +4,36 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 )
+
+func TestGetServerAllowedRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	s := Settings{Server: &ServerSettings{AllowedRoots: []string{"~/root", "file:///srv/data"}}}
+	got, err := s.GetServerAllowedRoots()
+	if err != nil {
+		t.Fatalf("GetServerAllowedRoots: %v", err)
+	}
+	want := []string{filepath.Join(home, "root"), "/srv/data"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("roots = %q, want %q", got, want)
+	}
+
+	// No server settings, or an empty list, is unrestricted.
+	if got, err := (Settings{}).GetServerAllowedRoots(); err != nil || got != nil {
+		t.Fatalf("empty = %q, %v; want nil, nil", got, err)
+	}
+
+	// An invalid file URL is an error.
+	s = Settings{Server: &ServerSettings{AllowedRoots: []string{"file://\x7f"}}}
+	if _, err := s.GetServerAllowedRoots(); err == nil {
+		t.Fatal("invalid file URL succeeded, want error")
+	}
+}
 
 func TestSettingsManagerUntrustedProjectIgnoresAndCannotWriteProjectSettings(t *testing.T) {
 	cwd := t.TempDir()
@@ -256,5 +284,190 @@ func TestSettingsDefaults(t *testing.T) {
 	sm = &SettingsManager{global: Settings{DefaultProjectTrust: "always"}, merged: Settings{DefaultProjectTrust: "never"}}
 	if got := sm.GetDefaultProjectTrust(); got != "always" {
 		t.Fatalf("project trust override leaked: got %q, want global always", got)
+	}
+}
+
+// TestUnmarshalJSONRejectsUndecodableServerGuardrail covers a server value that
+// decodeTolerant would silently drop, which would leave the serve allowlist
+// guardrail off. Every other setting stays tolerant.
+func TestUnmarshalJSONRejectsUndecodableServerGuardrail(t *testing.T) {
+	reject := []string{
+		`{"server":5}`,
+		`{"server":{"allowedRoots":"x"}}`,
+		`{"server":{"allowedRoots":[5]}}`,
+		`{"server":{"allowedRoots":{}}}`,
+		`{"server":{"allowedRoots":["/a",5]}}`,
+		// encoding/json matches struct keys case-insensitively, so these must
+		// be classified the same as their lowercase forms.
+		`{"Server":{"allowedRoots":"x"}}`,
+		`{"SERVER":{"allowedRoots":[5]}}`,
+		`{"server":{"AllowedRoots":"x"}}`,
+		`{"Server":{"AllowedRoots":{}}}`,
+	}
+	for _, body := range reject {
+		var s Settings
+		err := json.Unmarshal([]byte(body), &s)
+		if err == nil || !strings.Contains(err.Error(), "server") {
+			t.Fatalf("Unmarshal(%s) error = %v, want it to name server", body, err)
+		}
+	}
+
+	// A wrong-typed port next to a valid list drops only port; the guardrail
+	// survives. This guards the decodeTolerant interaction.
+	var s Settings
+	if err := json.Unmarshal([]byte(`{"server":{"port":"x","allowedRoots":["/a"]}}`), &s); err != nil {
+		t.Fatalf("Unmarshal dropped only the bad port: %v", err)
+	}
+	if s.Server == nil || !slices.Equal(s.Server.AllowedRoots, []string{"/a"}) {
+		t.Fatalf("server = %+v, want allowedRoots [/a]", s.Server)
+	}
+
+	// encoding/json resolves the case variants, so the guard must not
+	// over-reject a valid case-variant list.
+	var caseVariant Settings
+	if err := json.Unmarshal([]byte(`{"Server":{"AllowedRoots":["/a"]}}`), &caseVariant); err != nil {
+		t.Fatalf("Unmarshal case-variant list = %v, want nil", err)
+	}
+	if caseVariant.Server == nil || !slices.Equal(caseVariant.Server.AllowedRoots, []string{"/a"}) {
+		t.Fatalf("server = %+v, want allowedRoots [/a]", caseVariant.Server)
+	}
+
+	if err := json.Unmarshal([]byte(`{"server":null}`), &s); err != nil {
+		t.Fatalf("Unmarshal(server:null) = %v, want nil", err)
+	}
+	if s.Server != nil {
+		t.Fatalf("server = %+v, want nil", s.Server)
+	}
+}
+
+// TestUnmarshalJSONRejectsNearMissAllowedRootsKey covers the fail-closed
+// guardrail: a settings.server key that looks like a misspelled allowedRoots
+// and no valid allowedRoots present is an error, while an unrelated unknown key
+// and a near-miss beside a valid allowedRoots stay tolerated.
+func TestUnmarshalJSONRejectsNearMissAllowedRootsKey(t *testing.T) {
+	reject := []string{
+		`{"server":{"allowedRoot":"/srv"}}`,
+		`{"server":{"allowedRoots ":["/srv"]}}`,
+		`{"server":{" allowedRoots":["/srv"]}}`,
+		// A leading zero-width space (U+200B) is padding TrimSpace would miss.
+		"{\"server\":{\"\u200ballowedRoots\":[\"/srv\"]}}",
+	}
+	for _, body := range reject {
+		var s Settings
+		err := json.Unmarshal([]byte(body), &s)
+		if err == nil || !strings.Contains(err.Error(), "did you mean server.allowedRoots") {
+			t.Fatalf("Unmarshal(%s) error = %v, want a near-miss allowedRoots error", body, err)
+		}
+	}
+
+	// An unrelated unknown server key is tolerated, not a near-miss.
+	var tolerant Settings
+	if err := json.Unmarshal([]byte(`{"server":{"allowedHosts":["x"]}}`), &tolerant); err != nil {
+		t.Fatalf("Unmarshal(allowedHosts) = %v, want nil", err)
+	}
+	if tolerant.Server == nil || len(tolerant.Server.AllowedRoots) != 0 {
+		t.Fatalf("server = %+v, want empty allowedRoots", tolerant.Server)
+	}
+
+	// A valid allowedRoots wins over a near-miss key beside it.
+	var validWins Settings
+	if err := json.Unmarshal([]byte(`{"server":{"allowedRoots":["/a"],"allowedRoot":["/b"]}}`), &validWins); err != nil {
+		t.Fatalf("Unmarshal(valid beside near-miss) = %v, want nil", err)
+	}
+	if validWins.Server == nil || !slices.Equal(validWins.Server.AllowedRoots, []string{"/a"}) {
+		t.Fatalf("server = %+v, want allowedRoots [/a]", validWins.Server)
+	}
+
+	// An empty array is present-and-valid (unrestricted), so it wins too.
+	var emptyValid Settings
+	if err := json.Unmarshal([]byte(`{"server":{"allowedRoots":[],"allowedRoot":["/b"]}}`), &emptyValid); err != nil {
+		t.Fatalf("Unmarshal(empty allowedRoots beside near-miss) = %v, want nil", err)
+	}
+}
+
+// TestUnmarshalJSONRejectsNearMissServerKey covers the outer-key fail-closed
+// guardrail: a top-level key that looks like a misspelled server and no valid
+// server.allowedRoots present is an error, while unrelated top-level keys and a
+// near-miss beside a valid server stay tolerated. The padded object's inner keys
+// are never inspected, so these fixtures exercise the outer path only.
+func TestUnmarshalJSONRejectsNearMissServerKey(t *testing.T) {
+	reject := []string{
+		`{"server ":{"allowedRoots":["/srv"]}}`,
+		// A leading zero-width space (U+200B) is padding TrimSpace would miss.
+		"{\"\u200bserver\":{\"allowedRoots\":[\"/srv\"]}}",
+		`{"servers":{"allowedRoots":["/srv"]}}`,
+		// An extra ASCII letter before the stem: prefix-only would miss it, the
+		// containment rule catches it.
+		`{"aserver":{"allowedRoots":["/srv"]}}`,
+		// Interior padding defeats a leading/trailing-only trim: a zero-width
+		// space (U+200B, Cf) and a plain space between the stem and the tail.
+		"{\"serv\u200ber\":{\"allowedRoots\":[\"/srv\"]}}",
+		`{"ser ver":{"allowedRoots":["/srv"]}}`,
+		// Invisible runes outside a drop-list category still pad the stem:
+		// BRAILLE PATTERN BLANK (U+2800, So) leading, HANGUL CHOSEONG FILLER
+		// (U+115F, Lo) interior. The keep-only-a-z rule is category-independent.
+		"{\"\\u2800server\":{\"allowedRoots\":[\"/srv\"]}}",
+		"{\"serv\\u115fer\":{\"allowedRoots\":[\"/srv\"]}}",
+		// A port-only near-miss still refuses rather than dropping port silently.
+		`{"server ":{"port":8080}}`,
+		// Non-ASCII runes are dropped, not case-folded: KELVIN SIGN (U+212A) and
+		// I WITH DOT ABOVE (U+0130) must not survive as k/i inside the stem.
+		`{"serv\u212Aer":{"allowedRoots":["/srv"]}}`,
+		`{"serv\u0130er":{"allowedRoots":["/srv"]}}`,
+	}
+	for _, body := range reject {
+		var s Settings
+		err := json.Unmarshal([]byte(body), &s)
+		if err == nil || !strings.Contains(err.Error(), "did you mean server?") {
+			t.Fatalf("Unmarshal(%s) error = %v, want an outer near-miss server error", body, err)
+		}
+	}
+
+	// Unrelated top-level keys stay tolerant.
+	var tolerant Settings
+	if err := json.Unmarshal([]byte(`{"theme":"dark"}`), &tolerant); err != nil {
+		t.Fatalf("Unmarshal(theme) = %v, want nil", err)
+	}
+	var unrelated Settings
+	if err := json.Unmarshal([]byte(`{"defaultProvider":"x","server":{"allowedRoots":["/a"]}}`), &unrelated); err != nil {
+		t.Fatalf("Unmarshal(defaultProvider beside server) = %v, want nil", err)
+	}
+	if unrelated.Server == nil || !slices.Equal(unrelated.Server.AllowedRoots, []string{"/a"}) {
+		t.Fatalf("server = %+v, want allowedRoots [/a]", unrelated.Server)
+	}
+
+	// A valid exact server wins over a near-miss beside it, and the near-miss
+	// key reaches the unknown-key warning path.
+	var validWins Settings
+	if err := json.Unmarshal([]byte(`{"server":{"allowedRoots":["/a"]},"server ":{"allowedRoots":["/b"]}}`), &validWins); err != nil {
+		t.Fatalf("Unmarshal(valid beside near-miss) = %v, want nil", err)
+	}
+	if validWins.Server == nil || !slices.Equal(validWins.Server.AllowedRoots, []string{"/a"}) {
+		t.Fatalf("server = %+v, want allowedRoots [/a]", validWins.Server)
+	}
+	if !slices.Contains(validWins.serverUnknownKeys, "server ") {
+		t.Fatalf("serverUnknownKeys = %v, want it to contain \"server \"", validWins.serverUnknownKeys)
+	}
+}
+
+// TestLoadWarnsOnUnknownServerKey checks an unrelated unknown settings.server
+// key and a near-miss outer server key beside a valid one neither fail the load
+// nor hide: both reach the warning accessor.
+func TestLoadWarnsOnUnknownServerKey(t *testing.T) {
+	agentDir := t.TempDir()
+	body := `{"server":{"allowedRoots":["/a"],"allowedHosts":["x"]},"server ":{"allowedRoots":["/b"]}}`
+	if err := os.WriteFile(filepath.Join(agentDir, "settings.json"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sm := NewSettingsManagerWithProjectTrust(t.TempDir(), agentDir, false)
+	if err := sm.GlobalLoadError(); err != nil {
+		t.Fatalf("GlobalLoadError() = %v, want nil", err)
+	}
+	keys := sm.GlobalUnknownServerKeys()
+	if !slices.Contains(keys, "allowedHosts") {
+		t.Fatalf("GlobalUnknownServerKeys() = %v, want it to contain allowedHosts", keys)
+	}
+	if !slices.Contains(keys, "server ") {
+		t.Fatalf("GlobalUnknownServerKeys() = %v, want it to contain \"server \"", keys)
 	}
 }

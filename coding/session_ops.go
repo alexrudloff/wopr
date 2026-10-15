@@ -154,6 +154,12 @@ func (s *Session) Entries() []icodingagent.SessionEntry {
 	return s.inner.Entries()
 }
 
+// EntryByID looks up a session entry by id. It is the read-surface delegate for
+// serve's duplicate-messageID check and forwards to the inner session's byID map.
+func (s *Session) EntryByID(id string) (icodingagent.SessionEntry, bool) {
+	return s.inner.EntryByID(id)
+}
+
 // Tree returns the session's branch tree as a SessionTreeNode. The
 // returned structure is a defensive copy; mutating it does not affect
 // the session's state. The node uses the internal codingagent tree type.
